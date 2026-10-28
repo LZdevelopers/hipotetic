@@ -1,0 +1,306 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   DESIGN TOKENS — herdados do site da LZdev (lzdev-website/src/styles)
+
+   Mesma base: preto puro, neutros de grafite com leve viés frio, branco como
+   cor de ação (CTA invertido) e cor semântica só onde significa algo:
+     --success · download disponível, ação concluída
+     --danger  · erro, link recusado
+     --info    · prévia, métrica, progresso
+   As categóricas (cat-1..3) seguem só para os halos do fundo e os acentos de
+   lista, nunca para estado.
+   ========================================================================== */
+@theme {
+  /* — neutros de grafite — */
+  --color-bg: #000000;
+  --color-bg-soft: #08090c;
+  --color-surface: #0e1014;
+  --color-surface-2: #15181e;
+  --color-ink: #ffffff;
+  --color-muted: #a2a8b4;
+  --color-faint: #767d8b;
+
+  /* — ação — */
+  --color-brand: #ffffff;
+  --color-brand-hover: #e2e5ea;
+  --color-brand-soft: #9aa0ac;
+  --color-accent: #d4d8de;
+
+  /* — semânticas — */
+  --color-success: #34d399;
+  --color-danger: #fb7185;
+  --color-info: #60a5fa;
+
+  /* — categóricas — */
+  --color-cat-1: #60a5fa;
+  --color-cat-2: #22d3ee;
+  --color-cat-3: #a78bfa;
+
+  --font-display: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-xl2: 1.75rem;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 40px -20px rgb(0 0 0 / 0.7);
+  --shadow-glow: 0 0 0 1px rgb(255 255 255 / 0.18), 0 18px 60px -24px rgb(255 255 255 / 0.16);
+
+  --animate-drift: drift 28s ease-in-out infinite alternate;
+  --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+  --animate-sheen: sheen 1.1s var(--ease-out-soft);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-spin-slow: spin 0.9s linear infinite;
+  --animate-swap: swap 0.6s var(--ease-out-soft) both;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, -3%, 0) scale(1.12);
+  }
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(96 165 250 / 0.55);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 0 5px rgb(96 165 250 / 0);
+  }
+}
+@keyframes sheen {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(320%) skewX(-18deg);
+  }
+}
+/* Troca de rede no Hero: o texto novo sobe e ganha foco. */
+@keyframes swap {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+/* Esqueleto de carregamento: uma faixa clara atravessando o bloco. */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    /* Controles nativos (player, scrollbar do input) no tema escuro */
+    color-scheme: dark;
+    scroll-behavior: smooth;
+    scroll-padding-top: 6rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  p {
+    text-wrap: pretty;
+    margin: 0;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 3px;
+    border-radius: 0.5rem;
+  }
+
+  ::selection {
+    background: rgb(255 255 255 / 0.88);
+    color: var(--color-bg);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #000000;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #242832;
+      border-radius: 99px;
+      border: 2px solid #000000;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #363c49;
+    }
+  }
+}
+
+/* ==========================================================================
+   UTILITIES
+   ========================================================================== */
+@utility container-page {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (min-width: 640px) {
+    padding-inline: 2rem;
+  }
+  @media (min-width: 1280px) {
+    padding-inline: 2.5rem;
+  }
+}
+
+/* Borda de 1px com gradiente — assinatura visual dos cards e botões */
+@utility border-gradient {
+  position: relative;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(140deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.02) 42%, rgb(255 255 255 / 0.14));
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+}
+
+/* Prata: branco puro caindo para cinza, como a queda de luz do símbolo. */
+@utility text-gradient {
+  background: linear-gradient(100deg, #ffffff 8%, #d4d4d4 48%, #8f8f8f 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility card-base {
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, rgb(21 24 30 / 0.9), rgb(4 5 7 / 0.75));
+  border: 1px solid rgb(255 255 255 / 0.07);
+  box-shadow: var(--shadow-card);
+}
+
+/* Brilho de hover acompanhando o cursor (--mx/--my vêm do Card). */
+@utility card-glow {
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: radial-gradient(16rem circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / 0.1), transparent 68%);
+    opacity: 0;
+    transition: opacity 0.45s var(--ease-out-soft);
+    pointer-events: none;
+  }
+  &:hover::before,
+  &:focus-within::before {
+    opacity: 1;
+  }
+}
+
+@custom-variant desktop (@media (hover: hover) and (pointer: fine));
+
+/* Bloco de esqueleto enquanto a fonte responde. */
+@utility skeleton {
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.04) 25%, rgb(255 255 255 / 0.1) 50%, rgb(255 255 255 / 0.04) 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* ==========================================================================
+   SCROLL REVEAL — controlado por useReveal via [data-reveal]
+   ========================================================================== */
+@layer components {
+  [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0);
+    transition:
+      opacity 0.75s var(--ease-out-soft),
+      transform 0.75s var(--ease-out-soft);
+    transition-delay: calc(var(--reveal-delay, 0) * 1ms);
+    will-change: opacity, transform;
+  }
+  [data-reveal='scale'] {
+    transform: scale(0.965);
+  }
+  [data-reveal].is-visible {
+    opacity: 1;
+    transform: none;
+    will-change: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
