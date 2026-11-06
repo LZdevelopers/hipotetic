@@ -137,6 +137,9 @@ export default defineConfig({
     // O manifesto diz qual arquivo é o código de cada ferramenta: a
     // pré-renderização usa para adiantar o download (modulepreload).
     manifest: true,
+    // Mediabunny, pdf-lib e pdf.js passam de 500 KB, mas só carregam quando a
+    // ferramenta que os usa é aberta (import dinâmico). O aviso não se aplica.
+    chunkSizeWarningLimit: 800,
   },
   // O ffmpeg.wasm cria o próprio worker a partir do pacote; pré-empacotado
   // pelo Vite, o caminho do worker se perde (recomendação da documentação dele).

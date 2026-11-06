@@ -124,6 +124,58 @@ window.__t = {
     const a = document.querySelectorAll('section[aria-label=Resultado] a[download]')[indice]
     return await (await fetch(a.href)).text()
   },
+  /** WAV 16 bits mono: trechos [{ s: segundos, hz: frequência (0 = silêncio) }]. */
+  wav(trechos = [{ s: 2, hz: 440 }], taxa = 22050) {
+    const total = trechos.reduce((a, t) => a + Math.round(t.s * taxa), 0)
+    const buf = new ArrayBuffer(44 + total * 2)
+    const v = new DataView(buf)
+    const txt = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)))
+    txt(0, 'RIFF'); v.setUint32(4, 36 + total * 2, true); txt(8, 'WAVE'); txt(12, 'fmt ')
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, taxa, true)
+    v.setUint32(28, taxa * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); txt(36, 'data'); v.setUint32(40, total * 2, true)
+    let p = 44
+    for (const t of trechos) for (let i = 0; i < Math.round(t.s * taxa); i += 1, p += 2) v.setInt16(p, t.hz ? Math.round(Math.sin((2 * Math.PI * t.hz * i) / taxa) * 12000) : 0, true)
+    return new Blob([buf], { type: 'audio/wav' })
+  },
+  /** Grava um vídeo WebM (canvas animado + tom de 440 Hz) com o MediaRecorder. */
+  async gravarVideo(segundos = 3, largura = 640, altura = 360) {
+    const c = document.createElement('canvas'); c.width = largura; c.height = altura
+    const ctx = c.getContext('2d')
+    const ac = new AudioContext(); await ac.resume()
+    const osc = ac.createOscillator(); const dest = ac.createMediaStreamDestination(); osc.connect(dest); osc.start()
+    const stream = new MediaStream([...c.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()])
+    const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus', videoBitsPerSecond: 1_500_000 })
+    const partes = []; rec.ondataavailable = (e) => partes.push(e.data)
+    const inicio = performance.now(); let quadro = 0
+    const desenhar = () => {
+      const t = (performance.now() - inicio) / 1000
+      ctx.fillStyle = 'hsl(' + ((t * 90) % 360) + ' 70% 45%)'; ctx.fillRect(0, 0, largura, altura)
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('Quadro ' + (quadro += 1), 30, altura / 2)
+      ctx.fillRect((t / segundos) * largura, altura - 30, 30, 30)
+    }
+    const timer = setInterval(desenhar, 33); desenhar()
+    rec.start(250)
+    await new Promise((ok) => setTimeout(ok, segundos * 1000))
+    await new Promise((ok) => { rec.onstop = ok; rec.stop() })
+    clearInterval(timer); osc.stop(); ac.close()
+    return new Blob(partes, { type: 'video/webm' })
+  },
+  /** Duração e dimensões de um resultado de mídia (pelo próprio navegador). */
+  async midia(indice = 0) {
+    const a = document.querySelectorAll('section[aria-label=Resultado] a[download]')[indice]
+    const el = document.createElement('video'); el.preload = 'metadata'; el.muted = true; el.src = a.href
+    await new Promise((ok, falha) => { el.onloadedmetadata = ok; el.onerror = () => falha(new Error('o navegador não abriu o resultado')) })
+    if (el.duration === Infinity) { el.currentTime = 1e9; await new Promise((ok) => (el.ontimeupdate = ok)) }
+    return { duracao: el.duration, largura: el.videoWidth, altura: el.videoHeight }
+  },
+  /** Guarda um resultado para usar em outro cenário (sem passar pelo Node). */
+  async guardar(chave, indice = 0) {
+    const a = document.querySelectorAll('section[aria-label=Resultado] a[download]')[indice]
+    const blob = await (await fetch(a.href)).blob()
+    const b = new Uint8Array(await blob.arrayBuffer()); let s = ''
+    for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000))
+    return { chave, nome: a.getAttribute('download'), base64: btoa(s), tipo: blob.type }
+  },
 }`
 
 const servidor = spawn(process.execPath, [join(RAIZ, 'node_modules/vite/bin/vite.js'), 'preview', '--port', String(PORTA), '--strictPort'], { cwd: RAIZ })
@@ -140,7 +192,7 @@ s.em('Runtime.consoleAPICalled', (p) => p.type === 'error' && consoleErros.push(
 s.em('Runtime.exceptionThrown', (p) => errosJs.push(p.exceptionDetails.exception?.description?.split('\n')[0] ?? p.exceptionDetails.text))
 
 const filtro = process.env.SO
-const lista = CENARIOS.filter((c) => !filtro || c.nome.includes(filtro))
+const lista = CENARIOS.filter((c) => !filtro || filtro.split(',').some((f) => c.nome.includes(f)))
 let falhas = 0
 
 for (const cenario of lista) {

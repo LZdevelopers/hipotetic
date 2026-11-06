@@ -75,6 +75,7 @@ export async function abrirNavegador() {
     '--no-default-browser-check',
     '--disable-extensions',
     '--hide-scrollbars',
+    '--autoplay-policy=no-user-gesture-required', // gravar áudio de teste sem clique
     'about:blank',
   ])
   let alvo
