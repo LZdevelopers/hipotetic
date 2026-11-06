@@ -157,10 +157,12 @@ export async function obterInfo(id, itags = [PROGRESSIVO_360]) {
       }
       // LOGIN_REQUIRED: restrição de idade, vídeo privado ou o YouTube pedindo
       // "confirme que não é um robô" ao IP do servidor.
+      console.error(`youtube ${id} ${client}${comToken ? "+token" : ""}: ${status} ${info.playability_status?.reason ?? ""}`);
       if (status === "OK") motivo = "indisponivel-youtube";
       else if (status === "LOGIN_REQUIRED") motivo = "youtube-bloqueado";
       else if (status === "UNPLAYABLE" || status === "LIVE_STREAM_OFFLINE") motivo = "indisponivel-youtube";
     } catch (erro) {
+      console.error(`youtube ${id} ${client}: erro ${erro?.message ?? erro}`);
       if (!/unavailable/i.test(erro?.message ?? "")) motivo = "youtube-bloqueado";
     }
   }
