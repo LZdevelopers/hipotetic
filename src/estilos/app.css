@@ -1,0 +1,313 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   TOKENS — mesma base do Global-Time (tema claro/escuro) com a tipografia da
+   LZdev. O tema vem de [data-theme] na <html>, aplicado antes da primeira
+   pintura por public/tema-inicial.js.
+
+   Regras de cor:
+   - marca (preto no claro, branco no escuro) é a cor de AÇÃO principal;
+   - acento (azul) só para foco, links e progresso;
+   - sucesso/alerta/perigo só para estado;
+   - cat-* identificam a categoria da ferramenta (o ícone), nunca estado.
+   ========================================================================== */
+@theme static {
+  --color-fundo: #ffffff;
+  --color-fundo-suave: #f7f7f8;
+  --color-superficie: #ffffff;
+  --color-superficie-2: #f2f2f4;
+  --color-superficie-3: #e8e8eb;
+  --color-borda: #e7e7ea;
+  --color-borda-forte: #d2d2d8;
+  --color-tinta: #0b0b0d;
+  --color-texto: #2a2b30;
+  --color-suave: #5a5e68;
+  --color-fraca: #6b6f79;
+
+  --color-marca: #0b0b0d;
+  --color-marca-hover: #2a2b30;
+  --color-sobre-marca: #ffffff;
+
+  --color-acento: #1d5bd8;
+  --color-acento-hover: #1747ad;
+  --color-acento-suave: #eef3fd;
+
+  --color-sucesso: #08754f;
+  --color-sucesso-suave: #e9f5ef;
+  --color-alerta: #95570a;
+  --color-alerta-suave: #fcf4e6;
+  --color-perigo: #c8242b;
+  --color-perigo-suave: #fdeeee;
+
+  --color-cat-video: #7c3aed;
+  --color-cat-audio: #db2777;
+  --color-cat-imagem: #0e7490;
+  --color-cat-pdf: #c8242b;
+  --color-cat-documentos: #1d5bd8;
+  --color-cat-compactados: #b45309;
+  --color-cat-utilitarios: #08754f;
+
+  --color-sobreposicao: rgb(11 11 13 / 0.4);
+
+  --font-display: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --radius-cartao: 1rem;
+  --radius-controle: 0.625rem;
+
+  --ease-suave: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --shadow-cartao: 0 1px 2px rgb(11 11 13 / 0.04), 0 8px 24px -16px rgb(11 11 13 / 0.12);
+  --shadow-flutuante: 0 1px 2px rgb(11 11 13 / 0.06), 0 24px 64px -24px rgb(11 11 13 / 0.28);
+
+  --animate-girar: girar 0.8s linear infinite;
+  --animate-surgir: surgir 0.35s var(--ease-suave) both;
+  --animate-brilho: brilho 1.6s linear infinite;
+}
+
+:root[data-theme='dark'] {
+  --color-fundo: #0b0b0d;
+  --color-fundo-suave: #0f1013;
+  --color-superficie: #111215;
+  --color-superficie-2: #18191e;
+  --color-superficie-3: #212329;
+  --color-borda: #222429;
+  --color-borda-forte: #33363e;
+  --color-tinta: #f4f5f6;
+  --color-texto: #dfe1e5;
+  --color-suave: #a3a8b3;
+  --color-fraca: #8b909b;
+
+  --color-marca: #f4f5f6;
+  --color-marca-hover: #d3d6dc;
+  --color-sobre-marca: #0b0b0d;
+
+  --color-acento: #6ea8ff;
+  --color-acento-hover: #93bdff;
+  --color-acento-suave: #142039;
+
+  --color-sucesso: #34d399;
+  --color-sucesso-suave: #0f2a20;
+  --color-alerta: #fbbf24;
+  --color-alerta-suave: #2b220c;
+  --color-perigo: #fb7185;
+  --color-perigo-suave: #2f1418;
+
+  --color-cat-video: #a78bfa;
+  --color-cat-audio: #f472b6;
+  --color-cat-imagem: #22d3ee;
+  --color-cat-pdf: #fb7185;
+  --color-cat-documentos: #6ea8ff;
+  --color-cat-compactados: #fbbf24;
+  --color-cat-utilitarios: #34d399;
+
+  --color-sobreposicao: rgb(0 0 0 / 0.62);
+
+  --shadow-cartao: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+  --shadow-flutuante: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 64px -24px rgb(0 0 0 / 0.8);
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes brilho {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5rem;
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+  /* Troca de tema suave, só quando o usuário clica (classe posta pelo botão). */
+  :root.trocando-tema,
+  :root.trocando-tema * {
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.25s ease !important;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-fundo);
+    color: var(--color-texto);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-synthesis-weight: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    color: var(--color-tinta);
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  p {
+    text-wrap: pretty;
+    margin: 0;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-acento);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  ::selection {
+    background: var(--color-acento-suave);
+    color: var(--color-tinta);
+  }
+}
+
+/* ==========================================================================
+   UTILITÁRIOS
+   ========================================================================== */
+@utility container-pagina {
+  width: 100%;
+  max-width: 76rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (min-width: 640px) {
+    padding-inline: 1.5rem;
+  }
+  @media (min-width: 1024px) {
+    padding-inline: 2rem;
+  }
+}
+
+@utility cartao {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borda);
+  border-radius: var(--radius-cartao);
+}
+
+@utility esqueleto {
+  background: linear-gradient(
+    90deg,
+    var(--color-superficie-2) 25%,
+    var(--color-superficie-3) 50%,
+    var(--color-superficie-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-brilho);
+}
+
+/* Fundo quadriculado (transparência de imagens). */
+@utility xadrez {
+  background-color: var(--color-superficie);
+  background-image:
+    linear-gradient(45deg, var(--color-superficie-3) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-superficie-3) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-superficie-3) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-superficie-3) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+@custom-variant escuro (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Controle deslizante com as cores do tema. */
+@layer components {
+  input[type='range'].deslizante {
+    appearance: none;
+    width: 100%;
+    height: 1.25rem;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type='range'].deslizante::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 99px;
+    background: linear-gradient(
+      to right,
+      var(--color-marca) var(--preenchido, 50%),
+      var(--color-superficie-3) var(--preenchido, 50%)
+    );
+  }
+  input[type='range'].deslizante::-moz-range-track {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--color-superficie-3);
+  }
+  input[type='range'].deslizante::-moz-range-progress {
+    height: 4px;
+    border-radius: 99px;
+    background: var(--color-marca);
+  }
+  input[type='range'].deslizante::-webkit-slider-thumb {
+    appearance: none;
+    margin-top: -6px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-fundo);
+    border: 2px solid var(--color-marca);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+  input[type='range'].deslizante::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-fundo);
+    border: 2px solid var(--color-marca);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

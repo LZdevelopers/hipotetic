@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const API = fileURLToPath(new URL('./api', import.meta.url))
+const DIST = fileURLToPath(new URL('./dist', import.meta.url))
+
 const rotaDaApi = (url) => {
   const match = /^\/api\/([a-z0-9-]+)(?:\?|$)/.exec(url ?? '')
   const file = match && `${API}/${match[1]}.js`
@@ -17,8 +19,9 @@ const rotaDaApi = (url) => {
  * em api/_lib não viram rota, igual à Vercel.
  *
  * - `npm run dev`: carrega pelo Vite (recarrega ao editar).
- * - `npm run preview`: serve o build com as funções E os cabeçalhos do
- *   vercel.json (CSP incluída) — o ensaio mais próximo da produção.
+ * - `npm run preview`: serve o build com as funções, os cabeçalhos do
+ *   vercel.json (CSP incluída) e as URLs limpas (/pdf/unir → pdf/unir.html)
+ *   — o ensaio mais próximo da produção.
  */
 function vercelFunctions() {
   return {
@@ -45,13 +48,29 @@ function vercelFunctions() {
           res.setHeader(key, value.replace('; upgrade-insecure-requests', ''))
         }
         const file = rotaDaApi(req.url)
-        if (!file) return next()
-        try {
-          const { default: handler } = await import(pathToFileURL(file).href)
-          await handler(req, res)
-        } catch (error) {
-          next(error)
+        if (file) {
+          try {
+            const { default: handler } = await import(pathToFileURL(file).href)
+            await handler(req, res)
+          } catch (error) {
+            next(error)
+          }
+          return
         }
+        // URLs limpas, como a Vercel (cleanUrls): /pdf/unir → /pdf/unir.html.
+        const [caminho, busca = ''] = (req.url ?? '/').split('?')
+        const limpo = caminho.replace(/\/+$/, '')
+        if (limpo && !/\.[a-z0-9]+$/i.test(limpo)) {
+          if (existsSync(`${DIST}${limpo}.html`)) {
+            req.url = `${limpo}.html${busca ? `?${busca}` : ''}`
+          } else {
+            res.statusCode = 404
+            res.setHeader('Content-Type', 'text/html; charset=utf-8')
+            res.end(readFileSync(`${DIST}/404.html`))
+            return
+          }
+        }
+        next()
       })
     },
   }
@@ -59,7 +78,13 @@ function vercelFunctions() {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), vercelFunctions()],
+  build: {
+    // O manifesto diz qual arquivo é o código de cada ferramenta: a
+    // pré-renderização usa para adiantar o download (modulepreload).
+    manifest: true,
+  },
   // O ffmpeg.wasm cria o próprio worker a partir do pacote; pré-empacotado
   // pelo Vite, o caminho do worker se perde (recomendação da documentação dele).
   optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'] },
+  worker: { format: 'es' },
 })
