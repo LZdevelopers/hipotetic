@@ -24,6 +24,7 @@ export function ModeloConversao({
   maximo,
   ordenavel,
   aceitarColar,
+  pastas,
   minimoArquivos = 1,
   opcoesIniciais = {},
   Configuracoes,
@@ -76,6 +77,7 @@ export function ModeloConversao({
           maximo={maximo}
           ordenavel={ordenavel}
           aceitarColar={aceitarColar}
+          pastas={pastas}
         />
       </div>
 

@@ -51,6 +51,25 @@ async function validar(arquivo, extensoes, limiteBytes) {
 
 let proximoId = 0
 
+/** Arquivos de uma pasta arrastada, com o caminho relativo (recursivo). */
+async function lerEntrada(entrada, prefixo = '') {
+  if (entrada.isFile) {
+    const arquivo = await new Promise((ok, falha) => entrada.file(ok, falha))
+    return [{ arquivo, caminho: prefixo + arquivo.name }]
+  }
+  const leitor = entrada.createReader()
+  const filhos = []
+  // readEntries devolve em lotes: lê até vir vazio.
+  for (;;) {
+    const lote = await new Promise((ok, falha) => leitor.readEntries(ok, falha))
+    if (!lote.length) break
+    filhos.push(...lote)
+  }
+  const saida = []
+  for (const filho of filhos) saida.push(...(await lerEntrada(filho, `${prefixo}${entrada.name}/`)))
+  return saida
+}
+
 /**
  * Área para soltar/escolher arquivos + lista dos escolhidos.
  *
@@ -69,9 +88,11 @@ export function SeletorArquivos({
   ordenavel = false,
   aceitarColar = false,
   compacto = false,
+  pastas = false,
 }) {
   const id = useId()
   const entrada = useRef(null)
+  const entradaPasta = useRef(null)
   const [arrastando, setArrastando] = useState(false)
   const [validando, setValidando] = useState(false)
   const [rejeitados, setRejeitados] = useState([])
@@ -82,10 +103,12 @@ export function SeletorArquivos({
     setValidando(true)
     const aceitos = []
     const recusados = []
-    for (const arquivo of novos) {
+    for (const novo of novos) {
+      const arquivo = novo instanceof File ? novo : novo.arquivo
+      const caminho = novo instanceof File ? novo.webkitRelativePath || novo.name : novo.caminho
       const motivo = await validar(arquivo, extensoes, limiteBytes)
-      if (motivo) recusados.push({ nome: arquivo.name, motivo })
-      else aceitos.push({ id: `a${(proximoId += 1)}`, arquivo })
+      if (motivo) recusados.push({ nome: caminho, motivo })
+      else aceitos.push({ id: `a${(proximoId += 1)}`, arquivo, caminho })
     }
     setValidando(false)
     setRejeitados(recusados)
@@ -141,10 +164,15 @@ export function SeletorArquivos({
         onDragLeave={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget)) setArrastando(false)
         }}
-        onDrop={(e) => {
+        onDrop={async (e) => {
           e.preventDefault()
           setArrastando(false)
-          adicionar(e.dataTransfer.files)
+          const entradas = pastas ? [...(e.dataTransfer.items ?? [])].map((i) => i.webkitGetAsEntry?.()).filter(Boolean) : []
+          if (entradas.some((x) => x.isDirectory)) {
+            const lista = []
+            for (const x of entradas) lista.push(...(await lerEntrada(x)))
+            adicionar(lista)
+          } else adicionar(e.dataTransfer.files)
         }}
         className={`relative flex flex-col items-center justify-center rounded-[var(--radius-cartao)] border-2 border-dashed text-center transition-colors ${
           arrastando ? 'border-acento bg-acento-suave' : 'border-borda-forte bg-fundo-suave hover:border-fraca/50'
@@ -162,6 +190,20 @@ export function SeletorArquivos({
             e.target.value = ''
           }}
         />
+        {pastas ? (
+          <input
+            ref={entradaPasta}
+            type="file"
+            webkitdirectory=""
+            multiple
+            className="sr-only"
+            tabIndex={-1}
+            onChange={(e) => {
+              adicionar(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        ) : null}
         {vazio && !compacto ? (
           <>
             <span className="grid size-12 place-items-center rounded-xl border border-borda bg-superficie text-suave shadow-[var(--shadow-cartao)]">
@@ -171,9 +213,16 @@ export function SeletorArquivos({
               {arrastando ? 'Solte para adicionar' : multiplos ? 'Arraste os arquivos para cá' : 'Arraste o arquivo para cá'}
             </p>
             <p className="mt-1 text-sm text-suave">ou</p>
-            <Botao className="mt-3" icone="arquivoMais" onClick={() => entrada.current?.click()} disabled={validando}>
-              {multiplos ? 'Escolher arquivos' : 'Escolher arquivo'}
-            </Botao>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <Botao icone="arquivoMais" onClick={() => entrada.current?.click()} disabled={validando}>
+                {multiplos ? 'Escolher arquivos' : 'Escolher arquivo'}
+              </Botao>
+              {pastas ? (
+                <Botao variante="secundario" icone="pastaCompactada" onClick={() => entradaPasta.current?.click()} disabled={validando}>
+                  Escolher pasta
+                </Botao>
+              ) : null}
+            </div>
             <p className="mt-4 text-xs text-fraca">
               {descricaoFormatos}
               {limiteBytes ? ` · até ${formatarBytes(limiteBytes)}${multiplos ? ' cada' : ''}` : ''}
@@ -185,6 +234,11 @@ export function SeletorArquivos({
             <Botao variante="secundario" tamanho="p" icone={validando ? undefined : 'arquivoMais'} carregando={validando} onClick={() => entrada.current?.click()}>
               {vazio ? (multiplos ? 'Escolher arquivos' : 'Escolher arquivo') : multiplos ? 'Adicionar mais' : 'Trocar arquivo'}
             </Botao>
+            {pastas ? (
+              <Botao variante="secundario" tamanho="p" icone="pastaCompactada" onClick={() => entradaPasta.current?.click()}>
+                Adicionar pasta
+              </Botao>
+            ) : null}
             <span className="text-xs text-fraca">{arrastando ? 'Solte para adicionar' : `ou arraste para cá · ${descricaoFormatos}`}</span>
           </div>
         )}
@@ -220,8 +274,8 @@ export function SeletorArquivos({
                 {ordenavel ? <span className="w-5 shrink-0 text-center text-xs font-semibold text-fraca tabular-nums">{i + 1}</span> : null}
                 <Icone nome={iconeDoArquivo(item.arquivo.name)} tamanho={18} className="text-fraca" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-tinta" title={item.arquivo.name}>
-                    {item.arquivo.name}
+                  <p className="truncate text-sm font-medium text-tinta" title={item.caminho ?? item.arquivo.name}>
+                    {item.caminho ?? item.arquivo.name}
                   </p>
                   <p className="text-xs text-fraca tabular-nums">{formatarBytes(item.arquivo.size)}</p>
                 </div>

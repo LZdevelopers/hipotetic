@@ -145,8 +145,12 @@ export async function zipar(arquivos, aoProgredir) {
   const usados = new Set()
   for (let i = 0; i < arquivos.length; i += 1) {
     const { nome, blob } = arquivos[i]
-    let final = nomeSeguro(nome)
-    for (let n = 2; usados.has(final.toLowerCase()); n += 1) final = trocarExtensao(nome, extensaoDe(nome), ` (${n})`)
+    // Mantém subpastas ("fotos/2024/a.jpg"), com cada parte do caminho sanitizada.
+    const partes = String(nome).replace(/\\/g, '/').split('/').filter((p) => p && p !== '.' && p !== '..').map((p) => nomeSeguro(p))
+    const pasta = partes.slice(0, -1).join('/')
+    const arquivo = partes[partes.length - 1] ?? 'arquivo'
+    let final = pasta ? `${pasta}/${arquivo}` : arquivo
+    for (let n = 2; usados.has(final.toLowerCase()); n += 1) final = `${pasta ? `${pasta}/` : ''}${trocarExtensao(arquivo, extensaoDe(arquivo), ` (${n})`)}`
     usados.add(final.toLowerCase())
     const jaComprimido = /^(jpe?g|png|webp|avif|gif|mp[34]|m4a|webm|mkv|mov|zip|7z|gz|pdf|docx|odt|ogg|opus|flac)$/.test(extensaoDe(final))
     entradas[final] = [new Uint8Array(await blob.arrayBuffer()), { level: jaComprimido ? 0 : 6 }]

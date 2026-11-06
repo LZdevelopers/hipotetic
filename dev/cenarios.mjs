@@ -3,7 +3,8 @@
 // `t.js(código)` roda na página, onde window.__t tem os ajudantes.
 
 import imagem from './cenarios/imagem.mjs'
+import arquivos from './cenarios/arquivos.mjs'
 import midia from './cenarios/midia.mjs'
 import pdf from './cenarios/pdf.mjs'
 
-export const CENARIOS = [...imagem, ...pdf, ...midia]
+export const CENARIOS = [...imagem, ...pdf, ...midia, ...arquivos]
