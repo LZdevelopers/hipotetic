@@ -85,6 +85,7 @@ export default defineConfig({
   },
   // O ffmpeg.wasm cria o próprio worker a partir do pacote; pré-empacotado
   // pelo Vite, o caminho do worker se perde (recomendação da documentação dele).
-  optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'] },
+  // O mesmo vale para os codecs do jSquash: pré-empacotados, perdem o caminho do .wasm.
+  optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@jsquash/jpeg', '@jsquash/webp', '@jsquash/avif', '@jsquash/oxipng'] },
   worker: { format: 'es' },
 })

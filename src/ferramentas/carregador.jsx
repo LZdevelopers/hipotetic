@@ -10,7 +10,7 @@
  * e `ComponenteFerramenta` desenha sem suspender (HTML idêntico nos dois
  * lados). Na navegação interna, ele suspende até o chunk chegar.
  */
-const modulos = import.meta.glob('./*/*.jsx')
+const modulos = import.meta.glob(['./*/*.jsx', '!./*/_*.jsx'])
 
 const prontos = new Map()
 const pendentes = new Map()

@@ -55,7 +55,7 @@ class Sessao {
   async aguardar(expressao, limite = 20000) {
     const inicio = Date.now()
     while (Date.now() - inicio < limite) {
-      if (await this.avaliar(expressao).catch(() => false)) return true
+      if (await this.avaliar(`Boolean(${expressao})`).catch(() => false)) return true
       await esperar(100)
     }
     throw new Error(`Tempo esgotado esperando: ${expressao}`)
