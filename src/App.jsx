@@ -42,6 +42,11 @@ function Conteudo() {
 }
 
 export default function App({ caminho }) {
+  // Marca que a página hidratou (os testes esperam por isso antes de interagir).
+  useEffect(() => {
+    document.documentElement.dataset.pronto = 'sim'
+  }, [])
+
   return (
     <Roteador caminhoInicial={caminho}>
       <a

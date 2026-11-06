@@ -39,7 +39,7 @@ export const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="
 export async function enviar(t, codigoArquivos) {
   await t.js(`__t.enviar(${codigoArquivos})`)
   // A lista mostra "N arquivo(s) · tamanho" depois da validação do tipo real.
-  await t.aguardar(`/\\d+ arquivos? ·/.test(document.querySelector('main').textContent)`)
+  await t.aguardar(`/\\d+ arquivos? ·/.test(document.querySelector('main').textContent)`, 40000)
 }
 
 export const png = (w = 640, h = 480, alfa = true, nome = 'teste.png') => `[__t.arquivo(await __t.imagem(${w}, ${h}, 'image/png', { alfa: ${alfa} }), '${nome}')]`

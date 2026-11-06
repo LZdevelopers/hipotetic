@@ -147,7 +147,7 @@ export function Inicio() {
         <h2 id="titulo-populares" className="mb-4 text-lg">
           {textos.maisUsadas}
         </h2>
-        <GradeFerramentas lista={populares()} mostrarCategoria />
+        <GradeFerramentas lista={populares().slice(0, 12)} mostrarCategoria />
       </section>
 
       <section aria-labelledby="titulo-como" className="mt-20 grid gap-10 border-y border-borda py-14 lg:grid-cols-[18rem_minmax(0,1fr)]">

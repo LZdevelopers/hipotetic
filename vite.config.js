@@ -1,4 +1,5 @@
 import { cpSync, existsSync, readFileSync } from 'node:fs'
+import { request as httpRequest } from 'node:http'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -6,6 +7,25 @@ import { defineConfig } from 'vite'
 
 const API = fileURLToPath(new URL('./api', import.meta.url))
 const DIST = fileURLToPath(new URL('./dist', import.meta.url))
+
+/**
+ * /api/documentos/* vai para o serviço LibreOffice (contêiner). Local:
+ * DOCUMENTOS_URL=http://localhost:8090 npm run dev (com o contêiner rodando).
+ */
+function repassarDocumentos(req, res) {
+  if (!req.url?.startsWith('/api/documentos/') || !process.env.DOCUMENTOS_URL) return false
+  const destino = new URL(req.url, process.env.DOCUMENTOS_URL)
+  const pedido = httpRequest(destino, { method: req.method, headers: { ...req.headers, host: destino.host } }, (resposta) => {
+    res.writeHead(resposta.statusCode, resposta.headers)
+    resposta.pipe(res)
+  })
+  pedido.on('error', () => {
+    res.statusCode = 502
+    res.end('{"erro":"indisponivel"}')
+  })
+  req.pipe(pedido)
+  return true
+}
 
 const rotaDaApi = (url) => {
   const match = /^\/api\/([a-z0-9-]+)(?:\?|$)/.exec(url ?? '')
@@ -28,6 +48,7 @@ function vercelFunctions() {
     name: 'vercel-functions',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        if (repassarDocumentos(req, res)) return
         const file = rotaDaApi(req.url)
         if (!file) return next()
         try {
@@ -47,6 +68,7 @@ function vercelFunctions() {
           // upgrade-insecure-requests quebraria o http://localhost.
           res.setHeader(key, value.replace('; upgrade-insecure-requests', ''))
         }
+        if (repassarDocumentos(req, res)) return
         const file = rotaDaApi(req.url)
         if (file) {
           try {

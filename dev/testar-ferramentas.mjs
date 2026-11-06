@@ -201,7 +201,8 @@ for (const cenario of lista) {
   consoleErros.length = 0
   try {
     await navegar(s, BASE + cenario.pagina)
-    await s.aguardar('document.querySelector("input[type=file], input[type=url], textarea, input[type=text], canvas, button")')
+    // Espera a hidratação: antes dela, o HTML pré-renderizado ignora eventos.
+    await s.aguardar('document.documentElement.dataset.pronto === "sim"')
     await s.avaliar(AJUDANTES)
     const t = {
       js: (codigo) => s.avaliar(`(async () => { ${codigo} })()`),
@@ -214,7 +215,7 @@ for (const cenario of lista) {
       /** Vai para outra página no meio do cenário (reinjeta os ajudantes). */
       async navegar(caminho) {
         await navegar(s, BASE + caminho)
-        await s.aguardar('document.querySelector("main button, main input")')
+        await s.aguardar('document.documentElement.dataset.pronto === "sim"')
         await s.avaliar(AJUDANTES)
       },
       esperar,

@@ -4,7 +4,8 @@
 
 import imagem from './cenarios/imagem.mjs'
 import arquivos from './cenarios/arquivos.mjs'
+import documentos from './cenarios/documentos.mjs'
 import midia from './cenarios/midia.mjs'
 import pdf from './cenarios/pdf.mjs'
 
-export const CENARIOS = [...imagem, ...pdf, ...midia, ...arquivos]
+export const CENARIOS = [...imagem, ...pdf, ...midia, ...arquivos, ...documentos]

@@ -1,0 +1,29 @@
+{
+  "//": "PROPOSTA (ainda não ativa). Para publicar o serviço de documentos, este arquivo vira o vercel.json: o site e o contêiner LibreOffice como Services. Copie 'headers' do vercel.json atual. Exige confirmar o custo do registro de imagens (US$ 0,10/GB/mês).",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "services": {
+    "site": {
+      "root": ".",
+      "framework": null,
+      "buildCommand": "VITE_DOCUMENTOS=1 npm run build",
+      "outputDirectory": "dist",
+      "functions": {
+        "api/midia.js": { "maxDuration": 20 },
+        "api/miniatura.js": { "maxDuration": 20 },
+        "api/youtube.js": { "maxDuration": 300, "supportsCancellation": true },
+        "api/tiktok.js": { "maxDuration": 300, "supportsCancellation": true }
+      }
+    },
+    "documentos": {
+      "runtime": "container",
+      "root": "servicos/documentos",
+      "entrypoint": "Dockerfile.vercel"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/documentos/(.*)", "destination": { "service": "documentos" } },
+    { "source": "/(.*)", "destination": { "service": "site" } }
+  ]
+}

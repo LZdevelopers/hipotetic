@@ -22,7 +22,14 @@
  *   popular    aparece em "Mais usadas" na página inicial
  *   passos     "Como usar" da página (3 passos curtos)
  *   perguntas  perguntas frequentes da página [{ p, r }]
+ *   requer     recurso de infraestrutura necessário (ex.: 'documentos' = serviço
+ *              LibreOffice). Sem o recurso ativo no build, a ferramenta NÃO aparece.
  */
+
+/** Recursos ativos neste build (variáveis VITE_*). */
+const RECURSOS = {
+  documentos: import.meta.env?.VITE_DOCUMENTOS === '1',
+}
 
 export const categorias = [
   {
@@ -76,7 +83,7 @@ export const categorias = [
   },
 ]
 
-export const ferramentas = [
+const TODAS = [
   // ─── Vídeo ────────────────────────────────────────────────────────────────
   {
     slug: 'video/baixar',
@@ -1436,7 +1443,218 @@ export const ferramentas = [
     icone: 'arquivoMais',
     passos: ['Escreva ou cole o texto.', 'Escolha o nome e o tipo.', 'Baixe o arquivo.'],
   },
+  // ─── Documentos ────────────────────────────────────────────────────────────
+  {
+    slug: 'documentos/converter',
+    modulo: 'documentos/converter',
+    requer: 'documentos',
+    nome: 'Converter documento',
+    titulo: 'Converter documentos: DOCX, DOC, ODT, RTF e PDF',
+    resumo: 'DOCX, DOC, ODT, RTF, TXT e HTML, mantendo a formatação.',
+    descricao: 'Converta documentos entre DOCX, DOC, ODT, RTF, TXT, HTML e PDF com o LibreOffice, mantendo a formatação. O arquivo é apagado na hora.',
+    termos: ['converter', 'documento', 'word', 'docx', 'doc', 'odt', 'rtf', 'pdf', 'libreoffice'],
+    icone: 'substituir',
+    servidor: true,
+    popular: true,
+    passos: ['Escolha os documentos (até 4,5 MB cada).', 'Escolha o formato de saída.', 'Converta e baixe.'],
+    perguntas: [
+      {
+        p: 'Por que este conversor usa o servidor?',
+        r: 'Para manter a formatação (fontes, tabelas, quebras de página) é preciso um processador de texto completo: usamos o LibreOffice no nosso servidor. O arquivo é processado e apagado imediatamente.',
+      },
+      {
+        p: 'A formatação fica idêntica?',
+        r: 'Quase sempre muito próxima. Documentos com fontes que não estão instaladas, macros ou recursos muito específicos do Word podem ter pequenas diferenças: confira antes de enviar.',
+      },
+    ],
+  },
+  {
+    slug: 'documentos/docx-para-pdf',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'docx', saida: 'pdf' },
+    requer: 'documentos',
+    nome: 'DOCX para PDF',
+    titulo: 'Converter DOCX para PDF',
+    resumo: 'Word em PDF, com a formatação.',
+    descricao: 'Converta DOCX do Word para PDF mantendo fontes, tabelas e quebras de página, com o LibreOffice. Grátis; o arquivo é apagado na hora.',
+    termos: ['docx', 'pdf', 'docx para pdf', 'word para pdf', 'word', 'salvar como pdf'],
+    icone: 'pdfBaixar',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo DOCX (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/doc-para-pdf',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'doc', saida: 'pdf' },
+    requer: 'documentos',
+    nome: 'DOC para PDF',
+    titulo: 'Converter DOC para PDF',
+    resumo: 'Word antigo (.doc) em PDF.',
+    descricao: 'Converta documentos .doc do Word 97-2003 para PDF, mantendo a formatação. Grátis, sem instalar nada; o arquivo é apagado na hora.',
+    termos: ['doc', 'pdf', 'doc para pdf', 'word antigo', 'word 97', 'doc'],
+    icone: 'pdfBaixar',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo DOC (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/odt-para-pdf',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'odt', saida: 'pdf' },
+    requer: 'documentos',
+    nome: 'ODT para PDF',
+    titulo: 'Converter ODT para PDF',
+    resumo: 'LibreOffice e Google Docs em PDF.',
+    descricao: 'Converta documentos ODT (LibreOffice, OpenOffice, Google Docs) para PDF mantendo a formatação. Grátis; o arquivo é apagado na hora.',
+    termos: ['odt', 'pdf', 'odt para pdf', 'libreoffice', 'openoffice', 'writer'],
+    icone: 'pdfBaixar',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo ODT (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/docx-para-odt',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'docx', saida: 'odt' },
+    requer: 'documentos',
+    nome: 'DOCX para ODT',
+    titulo: 'Converter DOCX para ODT',
+    resumo: 'Do Word para o LibreOffice.',
+    descricao: 'Converta DOCX do Word para ODT, o formato aberto do LibreOffice, mantendo a formatação. Grátis; o arquivo é apagado na hora.',
+    termos: ['docx', 'odt', 'docx para odt', 'word para libreoffice', 'formato aberto'],
+    icone: 'substituir',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo DOCX (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/odt-para-docx',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'odt', saida: 'docx' },
+    requer: 'documentos',
+    nome: 'ODT para DOCX',
+    titulo: 'Converter ODT para DOCX',
+    resumo: 'Do LibreOffice para o Word.',
+    descricao: 'Converta ODT do LibreOffice para DOCX e abra no Microsoft Word sem perder a formatação. Grátis; o arquivo é apagado na hora.',
+    termos: ['odt', 'docx', 'odt para docx', 'libreoffice para word', 'abrir no word'],
+    icone: 'substituir',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo ODT (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/doc-para-docx',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'doc', saida: 'docx' },
+    requer: 'documentos',
+    nome: 'DOC para DOCX',
+    titulo: 'Converter DOC para DOCX',
+    resumo: 'Atualize documentos antigos do Word.',
+    descricao: 'Converta .doc antigos do Word para DOCX, o formato atual, menor e mais compatível. Grátis; o arquivo é apagado na hora.',
+    termos: ['doc', 'docx', 'doc para docx', 'atualizar', 'word antigo', 'word 97'],
+    icone: 'substituir',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo DOC (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/html-para-pdf',
+    modulo: 'documentos/converter',
+    predef: { entrada: 'html', saida: 'pdf' },
+    requer: 'documentos',
+    nome: 'HTML para PDF',
+    titulo: 'Converter HTML para PDF',
+    resumo: 'Página HTML em PDF.',
+    descricao: 'Converta arquivos HTML em PDF com o LibreOffice. Para Markdown, use o conversor de Markdown para HTML e salve como PDF.',
+    termos: ['html', 'pdf', 'html para pdf', 'página', 'web', 'html em pdf'],
+    icone: 'pdfBaixar',
+    servidor: true,
+    passos: [
+      'Escolha o arquivo HTML (até 4,5 MB).',
+      'Converta: o LibreOffice mantém a formatação.',
+      'Baixe o resultado. O arquivo é apagado do servidor na hora.',
+    ],
+  },
+  {
+    slug: 'documentos/markdown-para-html',
+    modulo: 'documentos/markdown',
+    nome: 'Markdown para HTML',
+    titulo: 'Converter Markdown para HTML (e PDF)',
+    resumo: 'Prévia ao vivo, HTML completo e PDF.',
+    descricao: 'Escreva ou abra Markdown e gere HTML limpo, com prévia ao vivo, tabelas e estilo opcional. Salve também como PDF. Tudo no navegador.',
+    termos: ['markdown', 'md', 'html', 'readme', 'converter markdown', 'md para html', 'md para pdf'],
+    icone: 'arquivoCodigo',
+    passos: ['Escreva ou abra um arquivo .md.', 'Confira a prévia ao lado.', 'Baixe o HTML ou salve como PDF.'],
+  },
+  {
+    slug: 'documentos/visualizar',
+    modulo: 'documentos/visualizar',
+    nome: 'Visualizar documento',
+    titulo: 'Abrir DOCX e outros documentos sem o Word',
+    resumo: 'Leia DOCX, ODT, RTF e TXT no navegador.',
+    descricao: 'Abra e leia documentos DOCX com a formatação, além de ODT, RTF, HTML e TXT, sem instalar o Word nem enviar o arquivo para servidores.',
+    termos: ['abrir', 'visualizar', 'ler', 'docx', 'word', 'sem word', 'odt', 'rtf', 'visualizador'],
+    icone: 'ver',
+    passos: ['Escolha o documento.', 'Leia direto na página.', 'Abra outro quando quiser.'],
+  },
+  {
+    slug: 'documentos/extrair-texto',
+    modulo: 'documentos/texto',
+    predef: { modo: 'extrair' },
+    nome: 'Extrair texto',
+    titulo: 'Extrair texto de DOCX, ODT, RTF e PDF',
+    resumo: 'Todo o texto de um documento, em .txt.',
+    descricao: 'Extraia o texto puro de documentos DOCX, ODT, RTF, PDF e HTML para copiar ou baixar como .txt. Grátis e sem enviar o arquivo.',
+    termos: ['extrair', 'texto', 'txt', 'copiar texto', 'docx para txt', 'odt para txt', 'rtf para txt'],
+    icone: 'texto',
+    passos: ['Escolha o documento.', 'Extraia.', 'Copie ou baixe o .txt.'],
+  },
+  {
+    slug: 'documentos/contar-palavras',
+    modulo: 'documentos/texto',
+    predef: { modo: 'contar' },
+    nome: 'Contar palavras',
+    titulo: 'Contador de palavras e caracteres',
+    resumo: 'Palavras, caracteres, frases e tempo de leitura.',
+    descricao: 'Conte palavras, caracteres (com e sem espaços), frases e parágrafos de um texto ou documento DOCX, ODT, PDF, e veja o tempo de leitura.',
+    termos: ['contar', 'palavras', 'caracteres', 'contador', 'tcc', 'redação', 'limite de caracteres', 'tempo de leitura'],
+    icone: 'calculadora',
+    popular: true,
+    passos: ['Cole o texto ou escolha um documento.', 'Veja as contagens na hora.', 'Confira as palavras mais repetidas.'],
+  },
+  {
+    slug: 'documentos/metadados',
+    modulo: 'documentos/metadados',
+    nome: 'Metadados do documento',
+    titulo: 'Ver e remover metadados de DOCX e ODT',
+    resumo: 'Autor, empresa, datas e revisões do arquivo.',
+    descricao: 'Veja quem criou e editou um DOCX ou ODT, a empresa, as datas e o tempo de edição, e remova esses dados sem mexer no conteúdo.',
+    termos: ['metadados', 'autor', 'propriedades', 'remover autor', 'privacidade', 'docx', 'odt', 'anonimizar'],
+    icone: 'borracha',
+    passos: ['Escolha o DOCX ou ODT.', 'Veja os metadados.', 'Remova e baixe o documento limpo.'],
+  },
 ]
+
+export const ferramentas = TODAS.filter((f) => !f.requer || RECURSOS[f.requer])
 
 // ─── Consultas ──────────────────────────────────────────────────────────────
 
