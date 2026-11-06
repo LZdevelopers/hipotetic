@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { cpSync, existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -76,8 +76,63 @@ function vercelFunctions() {
   }
 }
 
+/**
+ * Arquivos de apoio de bibliotecas que rodam no navegador, servidos pelo
+ * próprio site (sem CDN e sem abrir a CSP para scripts de terceiros):
+ *   /pdfjs/      cmaps, fontes padrão e decodificadores wasm do pdf.js;
+ *   /tesseract/  worker e núcleo (wasm) do OCR.
+ * No dev, direto do node_modules; no build, copiados para dist/.
+ */
+const ESTATICOS = {
+  pdfjs: [
+    ['cmaps', 'pdfjs-dist/cmaps'],
+    ['standard_fonts', 'pdfjs-dist/standard_fonts'],
+    ['wasm', 'pdfjs-dist/wasm'],
+  ],
+  tesseract: [
+    ['worker.min.js', 'tesseract.js/dist/worker.min.js'],
+    ['tesseract-core-lstm.wasm.js', 'tesseract.js-core/tesseract-core-lstm.wasm.js'],
+    ['tesseract-core-simd-lstm.wasm.js', 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js'],
+    ['tesseract-core-relaxedsimd-lstm.wasm.js', 'tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js'],
+  ],
+}
+
+function arquivosEstaticos() {
+  const modulos = fileURLToPath(new URL('./node_modules/', import.meta.url))
+  let ehSsr = false
+  return {
+    name: 'arquivos-estaticos',
+    configResolved(config) {
+      ehSsr = Boolean(config.build.ssr)
+    },
+    configureServer(server) {
+      for (const [rota, entradas] of Object.entries(ESTATICOS)) {
+        server.middlewares.use(`/${rota}`, (req, res, next) => {
+          const caminho = decodeURIComponent((req.url ?? '').split('?')[0]).replace(/^\/+/, '')
+          if (caminho.split('/').includes('..')) return next()
+          const entrada = entradas.find(([publico]) => caminho === publico || caminho.startsWith(`${publico}/`))
+          if (!entrada) return next()
+          const arquivo = modulos + entrada[1] + caminho.slice(entrada[0].length)
+          if (!existsSync(arquivo)) return next()
+          if (arquivo.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm')
+          if (arquivo.endsWith('.js')) res.setHeader('Content-Type', 'text/javascript')
+          res.end(readFileSync(arquivo))
+        })
+      }
+    },
+    closeBundle() {
+      if (ehSsr) return
+      for (const [rota, entradas] of Object.entries(ESTATICOS)) {
+        for (const [publico, origem] of entradas) {
+          cpSync(modulos + origem, fileURLToPath(new URL(`./dist/${rota}/${publico}`, import.meta.url)), { recursive: true })
+        }
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), vercelFunctions()],
+  plugins: [react(), tailwindcss(), vercelFunctions(), arquivosEstaticos()],
   build: {
     // O manifesto diz qual arquivo é o código de cada ferramenta: a
     // pré-renderização usa para adiantar o download (modulepreload).

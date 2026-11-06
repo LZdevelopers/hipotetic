@@ -135,6 +135,8 @@ for (let i = 0; i < 100; i += 1) {
 const s = await abrirNavegador()
 await tela(s, { largura: 1366, altura: 900 })
 const errosJs = []
+const consoleErros = []
+s.em('Runtime.consoleAPICalled', (p) => p.type === 'error' && consoleErros.push(p.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 500)))
 s.em('Runtime.exceptionThrown', (p) => errosJs.push(p.exceptionDetails.exception?.description?.split('\n')[0] ?? p.exceptionDetails.text))
 
 const filtro = process.env.SO
@@ -144,6 +146,7 @@ let falhas = 0
 for (const cenario of lista) {
   const inicio = Date.now()
   errosJs.length = 0
+  consoleErros.length = 0
   try {
     await navegar(s, BASE + cenario.pagina)
     await s.aguardar('document.querySelector("input[type=file], input[type=url], textarea, input[type=text], canvas, button")')
@@ -156,6 +159,12 @@ for (const cenario of lista) {
         await s.avaliar(`__t.clicar(${JSON.stringify(texto)})`)
       },
       aguardar: (expr, ms) => s.aguardar(expr, ms),
+      /** Vai para outra página no meio do cenário (reinjeta os ajudantes). */
+      async navegar(caminho) {
+        await navegar(s, BASE + caminho)
+        await s.aguardar('document.querySelector("main button, main input")')
+        await s.avaliar(AJUDANTES)
+      },
       esperar,
       async aguardarResultado(ms = 60000) {
         const fim = Date.now() + ms
@@ -175,6 +184,9 @@ for (const cenario of lista) {
   } catch (erro) {
     falhas += 1
     console.error(`✗ ${cenario.nome}: ${erro.message}`)
+    const tela = await s.avaliar(`document.querySelector('main')?.innerText.split(String.fromCharCode(10)).join(' | ').slice(0, 400)`).catch(() => '')
+    console.error(`    na tela: ${tela}`)
+    for (const msg of consoleErros.slice(0, 3)) console.error(`    console.error na página: ${msg}`)
   }
 }
 
