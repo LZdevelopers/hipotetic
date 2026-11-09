@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
@@ -8,6 +8,7 @@ import { formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { aplicarTrilha } from './_trilha'
 import { useTarefa } from '../../nucleo/tarefa'
 import { EscolhaFormatoVideo, Resolucao, medidasPara, nomeMotor } from './_comum'
+import { useUrlObjeto } from '../../nucleo/url'
 
 const PROPORCOES = [
   { id: 'original', rotulo: 'Original', valor: null },
@@ -105,8 +106,7 @@ function Trilho({ duracao, inicio, fim, atual, aoMudar, aoBuscar }) {
 }
 
 function Editor({ arquivo, aoTrocar }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const video = useRef(null)
   const caixa = useRef(null)
   const [info, setInfo] = useState(null)

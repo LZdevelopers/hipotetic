@@ -3,6 +3,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao, Deslizante } from '../../componentes/ui'
 import { ehSvg, rasterizarSvg } from '../../motores/imagem'
+import { useUrlObjeto } from '../../nucleo/url'
 
 const hex = ([r, g, b]) => `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`
 function hsl([r, g, b]) {
@@ -100,8 +101,7 @@ function Amostra({ cor, aoCopiar, copiado }) {
 }
 
 function Painel({ arquivo, aoTrocar }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const [pixels, setPixels] = useState(null)
   const [quantidade, setQuantidade] = useState(6)
   const [escolhidas, setEscolhidas] = useState([])

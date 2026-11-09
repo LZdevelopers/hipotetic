@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { baixarBlob, extensaoDe, formatarBytes, variacao, zipar } from '../../nucleo/arquivos'
 import { Icone } from '../Icone'
 import { Botao, Etiqueta } from '../ui'
 import { iconeDoArquivo } from './SeletorArquivos'
+import { useUrlsObjeto } from '../../nucleo/url'
 
 /** URLs temporárias dos resultados, liberadas quando o componente sai. */
 function useUrls(itens) {
-  const urls = useMemo(() => itens.map((i) => URL.createObjectURL(i.blob)), [itens])
-  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
-  return urls
+  return useUrlsObjeto(useMemo(() => itens.map((i) => i.blob), [itens]))
 }
 
 function Previa({ item, url }) {

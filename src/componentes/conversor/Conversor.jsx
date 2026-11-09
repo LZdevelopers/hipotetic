@@ -6,6 +6,7 @@ import { Icone } from '../Icone'
 import { Aviso, Botao, Caixa, SeloCategoria } from '../ui'
 import { OpcoesConversao } from './Opcoes'
 import { SeletorFormato } from './SeletorFormato'
+import { useUrlObjeto } from '../../nucleo/url'
 
 /**
  * Conversor universal, no estilo "solte o arquivo e escolha o formato":
@@ -34,14 +35,8 @@ function aquecerServidor() {
   fetch('/api/documentos/converter', { method: 'GET' }).catch(() => {})
 }
 
-function useUrl(blob) {
-  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob])
-  useEffect(() => () => url && URL.revokeObjectURL(url), [url])
-  return url
-}
-
 function LinkBaixar({ resultado }) {
-  const url = useUrl(resultado.blob)
+  const url = useUrlObjeto(resultado.blob)
   return (
     <a
       href={url}

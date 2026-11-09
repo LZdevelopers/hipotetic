@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
@@ -7,6 +7,7 @@ import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, dimensoes } from '../../motores/ima
 import { lerMetadados, removerMetadados } from '../../motores/imagem/metadados'
 import { detectarTipo, formatarBytes } from '../../nucleo/arquivos'
 import { ErroAmigavel, cancelado, useTarefa } from '../../nucleo/tarefa'
+import { useUrlObjeto } from '../../nucleo/url'
 
 const mdc = (a, b) => (b ? mdc(b, a % b) : a)
 
@@ -27,8 +28,7 @@ function Tabela({ titulo, itens }) {
 }
 
 function Informacoes({ arquivo }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const [info, setInfo] = useState(null)
   const [erro, setErro] = useState(false)
 

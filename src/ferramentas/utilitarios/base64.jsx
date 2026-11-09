@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, AreaTexto, Botao, Segmentado } from '../../componentes/ui'
 import { baixarBlob, detectarTipo, formatarBytes, semExtensao } from '../../nucleo/arquivos'
+import { useUrlObjeto } from '../../nucleo/url'
 
 function useCopiar() {
   const [copiado, setCopiado] = useState(false)
@@ -125,8 +126,7 @@ function Decodificar() {
     }
   }, [texto])
 
-  const url = useMemo(() => (resultado?.blob && resultado.mime.startsWith('image/') ? URL.createObjectURL(resultado.blob) : null), [resultado])
-  useEffect(() => () => url && URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(resultado?.blob && resultado.mime.startsWith('image/') ? resultado.blob : null)
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">

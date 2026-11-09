@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
@@ -8,6 +8,7 @@ import { filtroCss } from '../../motores/imagem/nucleo'
 import { trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
+import { useUrlObjeto } from '../../nucleo/url'
 
 /* ─── Dados ──────────────────────────────────────────────────────────────── */
 
@@ -145,8 +146,7 @@ const POSICAO = {
 }
 
 function Previa({ arquivo, o, mudar, recortando, aoDimensoes }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const img = useRef(null)
   const [lado, setLado] = useState(800)
   const [nat, setNat] = useState(null)
@@ -519,8 +519,7 @@ export default function EditorImagem() {
 }
 
 function Miniatura({ arquivo, ativo, aoEscolher }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   return (
     <button type="button" onClick={aoEscolher} aria-pressed={ativo} aria-label={arquivo.name} className={`block size-14 shrink-0 overflow-hidden rounded-lg border-2 ${ativo ? 'border-acento' : 'border-transparent opacity-70 hover:opacity-100'}`}>
       <img src={url} alt="" className="size-full object-cover" />

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Caixa, Deslizante, Entrada, Grupo, Segmentado, Seletor } from '../../componentes/ui'
 import { formatarDuracao, semExtensao } from '../../nucleo/arquivos'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
+import { useUrlObjeto } from '../../nucleo/url'
 
 const TAMANHOS = [
   { valor: '1280x720', rotulo: 'YouTube · 1280×720' },
@@ -71,8 +72,7 @@ const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
 
 function Editor({ arquivo, aoTrocar }) {
   const ehVideo = /^video\//.test(arquivo.type) || /\.(mp4|webm|mov|mkv|m4v)$/i.test(arquivo.name)
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const fonte = useRef(null)
   const canvas = useRef(null)
   const [pronto, setPronto] = useState(false)

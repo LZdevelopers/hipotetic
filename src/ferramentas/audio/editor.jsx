@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Caixa, Deslizante, Grupo, Progresso, Segmentado, Seletor } from '../../componentes/ui'
@@ -6,6 +6,7 @@ import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, filtro
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { Bitrate, FormatoAudio } from './_comum'
+import { useUrlObjeto } from '../../nucleo/url'
 
 const tempo = (s) => {
   const m = Math.floor(s / 60)
@@ -33,8 +34,7 @@ async function picos(arquivo, colunas = 600) {
 }
 
 function Editor({ arquivo, aoTrocar }) {
-  const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  const url = useUrlObjeto(arquivo)
   const audio = useRef(null)
   const area = useRef(null)
   const [duracao, setDuracao] = useState(0)
