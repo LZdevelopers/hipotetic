@@ -76,7 +76,10 @@ import {
   Palette,
   PenLine,
   Pipette,
+  Pause,
   Play,
+  Repeat,
+  SkipBack,
   QrCode,
   RefreshCw,
   Replace,
@@ -164,6 +167,9 @@ const ICONES = {
   link: Link,
   balanca: Scale,
   play: Play,
+  pausa: Pause,
+  repetir: Repeat,
+  voltarInicio: SkipBack,
   globo: Globe,
 
   // operações

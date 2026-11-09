@@ -231,10 +231,22 @@ export default [
     pagina: '/audio/editor',
     async executar(t) {
       await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }]), 'aula.wav')`, '0:04.0')
-      await escolher(t, '2')
+      await t.clicar('2×')
       await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração a 2×')
+    },
+  },
+  {
+    nome: 'audio/editor: velocidade 2× com o tom junto (arquivo 48 kHz)',
+    pagina: '/audio/editor',
+    async executar(t) {
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }], 48000), 'tom48.wav')`, '0:04.0')
+      await t.clicar('2×')
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.startsWith('Mudar o tom junto')).click()")
+      await t.clicar('Aplicar e baixar')
+      await t.aguardarResultado(120000)
+      perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração a 2× com tom')
     },
   },
   {
@@ -257,6 +269,32 @@ export default [
       await t.clicar('Juntar áudios')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 4, 0.2, 'duração total')
+    },
+  },
+  {
+    nome: 'audio/editor: player próprio toca com a prévia ao vivo',
+    pagina: '/audio/editor',
+    async executar(t) {
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 1, hz: 0 }, { s: 2, hz: 440 }, { s: 1, hz: 0 }]), 'voz.wav')`, '0:04.0')
+      await t.aguardar("document.querySelector('main canvas')", 10000)
+      assert.equal(await t.js("return document.querySelector('main audio').controls"), false, 'não deveria usar o player do navegador')
+      // Velocidade e tom vão direto para o player.
+      await t.clicar('1,5×')
+      assert.deepEqual(await t.js("const a = document.querySelector('main audio'); return [a.playbackRate, a.preservesPitch]"), [1.5, true])
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.startsWith('Mudar o tom junto')).click()")
+      assert.equal(await t.js("return document.querySelector('main audio').preservesPitch"), false)
+      // Silêncio: o resultado previsto já desconta as pontas mudas (2 s de som a 1,5× ≈ 0:01).
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.startsWith('Remover silêncio')).click()")
+      await t.aguardar("document.querySelector('main').innerText.includes('de silêncio a menos')", 5000)
+      // Toca de verdade: o relógio do player anda e a pausa funciona.
+      await t.js("document.querySelector('main button[aria-label=Tocar]').click()")
+      await t.esperar(700)
+      const andou = await t.js("const a = document.querySelector('main audio'); return [a.paused, a.currentTime]")
+      assert.equal(andou[0], false, 'deveria estar tocando')
+      assert.ok(andou[1] >= 1, `deveria ter pulado o silêncio do começo (tempo ${andou[1]})`)
+      await t.js("document.querySelector('main button[aria-label=Pausar]').click()")
+      await t.esperar(100)
+      assert.equal(await t.js("return document.querySelector('main audio').paused"), true)
     },
   },
   {
