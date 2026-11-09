@@ -1,7 +1,7 @@
-import { executarFfmpeg } from '../../motores/ffmpeg'
-import { infoMidia } from '../../motores/midia'
-import { extensaoDe } from '../../nucleo/arquivos'
-import { ErroAmigavel } from '../../nucleo/tarefa'
+import { executarFfmpeg } from './ffmpeg'
+import { infoMidia } from './midia'
+import { extensaoDe } from '../nucleo/arquivos'
+import { ErroAmigavel } from '../nucleo/tarefa'
 
 export const MAX_SEGUNDOS_GIF = 30
 

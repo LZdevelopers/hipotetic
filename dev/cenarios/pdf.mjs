@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
-import { arquivoPdf, enviar, lerPdf, pdfTeste } from './comum.mjs'
+import { unzipSync } from 'fflate'
+import { arquivoPdf, enviar, formato, lerPdf, pdfTeste } from './comum.mjs'
 
 const bytesDoResultado = (t, i = 0) => t.js(`return await __t.bytes(${i})`)
 
@@ -53,28 +54,31 @@ export default [
     },
   },
   {
-    nome: 'pdf/converter: PDF para JPG a 150 dpi',
-    pagina: '/pdf/converter',
+    nome: 'converter: PDF de 2 páginas → JPG (ZIP com uma por página)',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[${arquivoPdf(await pdfTeste(2))}]`)
-      await t.clicar('Converter páginas')
+      await formato(t, 'JPG')
+      await t.clicar('Converter')
       await t.aguardarResultado()
-      const rs = await t.js('return await __t.resultados()')
-      assert.equal(rs.length, 2)
-      assert.ok(
-        rs.every((r) => r.tipo === 'jpg' && r.largura === 1240),
-        JSON.stringify(rs),
-      )
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, 'zip')
+      const zip = unzipSync(new Uint8Array(await bytesDoResultado(t)))
+      const nomes = Object.keys(zip).sort()
+      assert.deepEqual(nomes, ['doc-pagina-1.jpg', 'doc-pagina-2.jpg'])
+      assert.ok(nomes.every((n) => zip[n][0] === 0xff && zip[n][1] === 0xd8), 'as páginas deveriam ser JPEG')
     },
   },
   {
-    nome: 'pdf/converter: 2 imagens viram 2 páginas A4',
-    pagina: '/pdf/converter',
+    nome: 'converter: 2 imagens juntas em um PDF A4',
+    pagina: '/converter',
     async executar(t) {
-      await t.clicar('Imagens para PDF')
       await enviar(t, `[__t.arquivo(await __t.imagem(800, 600, 'image/jpeg'), 'a.jpg'), __t.arquivo(await __t.imagem(400, 700), 'b.png')]`)
-      await t.clicar('Criar PDF')
+      await formato(t, 'PDF', null)
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.startsWith('Juntar as imagens')).click()")
+      await t.clicar('Converter')
       await t.aguardarResultado()
+      assert.equal((await t.js('return await __t.resultados()')).length, 1)
       const r = await lerPdf(await bytesDoResultado(t))
       assert.equal(r.paginas, 2)
       const { width, height } = r.doc.getPage(0).getSize()
@@ -82,15 +86,15 @@ export default [
     },
   },
   {
-    nome: 'pdf/converter: PDF para texto',
-    pagina: '/pdf/converter',
+    nome: 'converter: PDF para TXT',
+    pagina: '/converter',
     async executar(t) {
-      await t.clicar('PDF para texto')
-      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2))}])`)
-      await t.clicar('Extrair texto')
+      await enviar(t, `[${arquivoPdf(await pdfTeste(2))}]`)
+      await formato(t, 'TXT')
+      await t.clicar('Converter')
       await t.aguardarResultado()
       const texto = await t.js('return await __t.texto()')
-      assert.ok(texto.includes('--- Página 2 ---') && texto.includes('Pagina 2'), texto)
+      assert.ok(texto.includes('Pagina 1') && texto.includes('Pagina 2'), texto)
     },
   },
   {

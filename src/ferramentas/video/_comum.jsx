@@ -73,16 +73,4 @@ export function Fps({ valor, aoMudar }) {
   )
 }
 
-/**
- * Medidas de saída para "lado menor no máximo N" (720p = 720 no lado menor,
- * vale para vídeo deitado e em pé). Sem aumentar. Pares, como o H.264 exige.
- */
-export function medidasPara(info, ladoMenor) {
-  if (!ladoMenor || !info?.largura || !info?.altura) return {}
-  const menor = Math.min(info.largura, info.altura)
-  if (menor <= ladoMenor) return {}
-  const escala = ladoMenor / menor
-  return { largura: Math.round((info.largura * escala) / 2) * 2, altura: Math.round((info.altura * escala) / 2) * 2 }
-}
-
-export const nomeMotor = (motor) => (motor === 'navegador' ? 'acelerado pelo navegador' : 'convertido em WebAssembly')
+export { medidasPara, nomeMotor } from '../../motores/midia'

@@ -14,10 +14,7 @@ function BotaoTema() {
   return (
     <button
       type="button"
-      onClick={(e) => {
-        const r = e.currentTarget.getBoundingClientRect()
-        definirTema(escuro ? 'light' : 'dark', { x: r.left + r.width / 2, y: r.top + r.height / 2 })
-      }}
+      onClick={() => definirTema(escuro ? 'light' : 'dark')}
       aria-label={escuro ? textos.temaClaro : textos.temaEscuro}
       title={escuro ? textos.temaClaro : textos.temaEscuro}
       className="grid size-9 place-items-center rounded-lg text-suave transition-colors hover:bg-superficie-2 hover:text-tinta"
@@ -56,6 +53,10 @@ function MenuCelular({ aberto, aoFechar }) {
         </button>
       </div>
       <nav className="flex flex-col gap-5 overflow-y-auto p-4">
+        <Link para="/converter" className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
+          <SeloCategoria categoria="conversor" icone="substituir" tamanho="p" />
+          Conversor de arquivos
+        </Link>
         {categoriasComFerramentas().map((c) => (
           <div key={c.id}>
             <Link para={`/${c.id}`} className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
@@ -163,6 +164,15 @@ export function Cabecalho() {
         <Marca className="mr-2" />
 
         <nav aria-label="Categorias" className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex">
+          <Link
+            para="/converter"
+            aria-current={caminho === '/converter' ? 'page' : undefined}
+            title="Converter arquivos"
+            className={`mr-1 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${caminho === '/converter' ? 'bg-superficie-2 text-tinta' : 'text-tinta hover:bg-superficie-2'}`}
+          >
+            <Icone nome="substituir" tamanho={15} className="text-acento" />
+            Converter
+          </Link>
           {categoriasComFerramentas().map((c) => (
             <MenuCategoria key={c.id} categoria={c} ativo={categoriaAtual === c.id} />
           ))}
@@ -172,10 +182,11 @@ export function Cabecalho() {
           <button
             type="button"
             onClick={abrirBusca}
+            aria-label={textos.buscarFerramenta}
             className="hidden h-9 items-center gap-2 rounded-lg border border-borda bg-fundo-suave pr-1.5 pl-3 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex"
           >
             <Icone nome="buscar" tamanho={16} />
-            <span className="w-28 text-left lg:w-36">{textos.buscarFerramenta}</span>
+            <span className="w-28 text-left lg:w-36 xl:hidden 2xl:inline">{textos.buscarFerramenta}</span>
             <kbd className="rounded border border-borda bg-superficie px-1.5 py-px font-sans text-[0.6875rem]">{mac ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           <button

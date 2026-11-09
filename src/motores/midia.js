@@ -11,7 +11,7 @@
  *
  * Ambos rodam no aparelho do usuário: nenhum arquivo vai para servidor.
  */
-import { extensaoDe } from '../nucleo/arquivos'
+import { extensaoDe, formatarDuracao } from '../nucleo/arquivos'
 import { ErroAmigavel, cancelado } from '../nucleo/tarefa'
 import { executarFfmpeg } from './ffmpeg'
 
@@ -310,3 +310,36 @@ export async function processarAudio(arquivo, { formato, bitrate = 192, filtros,
   })
   return new Blob([dados], { type: destino.mime })
 }
+
+/* ─── Utilidades de conversão ─────────────────────────────────────────────── */
+
+/**
+ * Medidas de saída para "lado menor no máximo N" (720p = 720 no lado menor,
+ * vale para vídeo deitado e em pé). Sem aumentar. Pares, como o H.264 exige.
+ */
+export function medidasPara(info, ladoMenor) {
+  if (!ladoMenor || !info?.largura || !info?.altura) return {}
+  const menor = Math.min(info.largura, info.altura)
+  if (menor <= ladoMenor) return {}
+  const escala = ladoMenor / menor
+  return { largura: Math.round((info.largura * escala) / 2) * 2, altura: Math.round((info.altura * escala) / 2) * 2 }
+}
+
+export const nomeMotor = (motor) => (motor === 'navegador' ? 'acelerado pelo navegador' : 'convertido em WebAssembly')
+
+/** Áudio (ou o som de um vídeo) para `formato`. Devolve { blob, detalhe }. */
+export async function converterAudio(arquivo, { formato, bitrate = 192, canais }, ctx) {
+  const info = await infoMidia(arquivo).catch(() => ({}))
+  if (info.temAudio === false) throw new ErroAmigavel(`“${arquivo.name}” não tem áudio.`)
+  const blob = await processarAudio(arquivo, { formato, bitrate, canais: canais || undefined }, ctx, info.duracao)
+  const qualidade = FORMATOS_AUDIO[formato]?.semPerdas ? 'sem perdas' : `${bitrate} kbps`
+  return { blob, detalhe: [info.duracao ? formatarDuracao(info.duracao) : null, qualidade].filter(Boolean).join(' · ') }
+}
+
+/** Vídeo (ou GIF animado) para outro formato de vídeo. Devolve { blob, detalhe }. */
+export async function converterVideo(arquivo, { formato, qualidade = 'alta', resolucao = 0, fps, semAudio }, ctx) {
+  const info = await infoMidia(arquivo).catch(() => null)
+  const { blob, motor } = await processarVideo(arquivo, { formato, qualidade, fps: fps || undefined, semAudio, ...medidasPara(info, resolucao) }, ctx)
+  return { blob, detalhe: [info?.duracao ? formatarDuracao(info.duracao) : null, nomeMotor(motor)].filter(Boolean).join(' · ') }
+}
+

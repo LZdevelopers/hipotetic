@@ -15,17 +15,28 @@ O catálogo (`src/ferramentas/catalogo.js`) é a fonte única: navegação, busc
 páginas de categoria, SEO, sitemap e pré-renderização saem dele. **Uma
 ferramenta só entra no catálogo quando funciona** — não existe “em breve”.
 
-Cada tipo de arquivo tem **poucas páginas que fazem muito**: um conversor por
-tipo (o formato se escolhe na página), um editor por tipo (as operações são
-abas ou opções) — em vez de uma página para cada par de formatos.
+**Conversão é uma página só** (`/converter`, como no Convertio): a pessoa solta
+qualquer arquivo, o tipo real é reconhecido pelos bytes e cada arquivo mostra
+só os formatos para os quais pode virar (`src/motores/conversor.js`). As demais
+ferramentas são poucas páginas que fazem muito: um editor por tipo, com as
+operações em abas ou opções.
 
-| Categoria | Páginas | Motor |
+| Conversor | De → para | Motor |
 |---|---|---|
-| Vídeo | baixar (YouTube/TikTok) · converter (MP4, WebM, MOV, MKV, GIF, inclusive GIF→vídeo) · comprimir · editor (trecho, proporção, girar, resolução, velocidade, som: silenciar, trocar ou misturar música) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
-| Áudio | converter (MP3, M4A, AAC, OGG, OPUS, WAV, FLAC; aceita vídeo para extrair o som) · editor (cortar com forma de onda, fades, volume/normalizar, remover silêncio, velocidade) · juntar | ffmpeg.wasm |
-| Imagens | converter (JPG, PNG, WebP, AVIF, SVG→PNG…) · comprimir · editor (recortar, girar, tamanho/redes sociais, cores e filtros, formato) · metadados (ver EXIF/GPS e remover sem recomprimir) · favicon · miniatura · paleta de cores | Web Workers + OffscreenCanvas + jSquash |
-| PDF | unir · dividir · organizar · editar e assinar · comprimir · converter (PDF→imagem, PDF→texto, imagens→PDF) · OCR · numerar e marca d’água · senha (colocar/remover) · comparar · metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
-| Documentos | converter DOCX/DOC/ODT/RTF/HTML ↔ PDF/DOCX/ODT (LibreOffice, no servidor) · visualizar DOCX · texto e contagem · metadados · Markdown→HTML/PDF | navegador + função LibreOffice |
+| Imagem | JPG, PNG, WebP, AVIF, GIF, BMP, SVG, ICO → JPG, PNG, WebP, AVIF, PDF (GIF → MP4/WebM) | Workers + jSquash, pdf-lib |
+| Vídeo | MP4, MOV, MKV, WebM, AVI… → MP4, WebM, MOV, MKV, GIF, MP3, M4A, WAV, FLAC, OGG, OPUS | Mediabunny + ffmpeg.wasm |
+| Áudio | MP3, WAV, M4A, AAC, FLAC, OGG, OPUS… → os mesmos | ffmpeg.wasm |
+| PDF | → JPG, PNG, WebP (uma imagem por página; várias em ZIP), TXT | pdf.js |
+| Documentos | DOCX, DOC, ODT, RTF, HTML, TXT, Markdown → PDF, DOCX, ODT, RTF, TXT, HTML | LibreOffice no servidor; Markdown→HTML e texto no navegador |
+| Compactados | ZIP, RAR, 7Z, TAR, GZ… → ZIP, 7Z, TAR, TAR.GZ | 7-Zip em WebAssembly |
+
+| Demais ferramentas | Páginas | Motor |
+|---|---|---|
+| Vídeo | baixar (YouTube/TikTok) · comprimir · editor (trecho, proporção, girar, resolução, velocidade, som: silenciar, trocar ou misturar música) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
+| Áudio | editor (cortar com forma de onda, fades, volume/normalizar, remover silêncio, velocidade) · juntar | ffmpeg.wasm |
+| Imagens | comprimir · editor (recortar, girar, tamanho/redes sociais, cores e filtros, formato) · metadados (ver EXIF/GPS e remover sem recomprimir) · favicon · miniatura · paleta de cores | Web Workers + OffscreenCanvas + jSquash |
+| PDF | unir · dividir · organizar · editar e assinar · comprimir · OCR · numerar e marca d’água · senha (colocar/remover) · comparar · metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
+| Documentos | visualizar DOCX · texto e contagem · metadados · Markdown→HTML/PDF | navegador + função LibreOffice |
 | Compactados | compactar (ZIP/7Z/TAR/TAR.GZ, senha AES-256) · extrair (ZIP/RAR/7Z/TAR/GZ…) | 7-Zip em WebAssembly |
 | Utilitários | QR Code · hash · identificar arquivo · comparar arquivos · calculadoras (unidades, download) · editor de texto · Base64 | navegador |
 

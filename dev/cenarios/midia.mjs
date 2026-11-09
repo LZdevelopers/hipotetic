@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { enviar } from './comum.mjs'
+import { ajustes, enviar, formato } from './comum.mjs'
 
 // Arquivos produzidos por um cenário e usados nos seguintes (ex.: o MP4 da
 // conversão vira entrada da compressão). Os cenários rodam em ordem.
@@ -34,10 +34,11 @@ async function abrirNoEditor(t) {
 export default [
   // ─── Vídeo ────────────────────────────────────────────────────────────────
   {
-    nome: 'video/converter: gravação WebM vira MP4 (H.264)',
-    pagina: '/video/converter',
+    nome: 'converter: gravação WebM vira MP4 (H.264)',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[__t.arquivo(await __t.gravarVideo(3), 'gravacao.webm')]`)
+      await formato(t, 'MP4')
       await t.clicar('Converter')
       await t.aguardarResultado(180000)
       const [r] = await t.js('return await __t.resultados()')
@@ -50,11 +51,12 @@ export default [
     },
   },
   {
-    nome: 'video/converter: MP4 → WebM em 360p',
-    pagina: '/video/converter',
+    nome: 'converter: MP4 → WebM em 360p',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}]`)
-      await t.clicar('WebM')
+      await formato(t, 'WEBM')
+      await ajustes(t)
       await t.js(`__t.digitar('Resolução', '360')`)
       await t.clicar('Converter')
       await t.aguardarResultado(240000)
@@ -117,11 +119,12 @@ export default [
     },
   },
   {
-    nome: 'video/converter: trecho vira GIF animado',
-    pagina: '/video/converter',
+    nome: 'converter: trecho de vídeo vira GIF animado',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}]`)
-      await t.clicar('GIF')
+      await formato(t, 'GIF')
+      await ajustes(t)
       await t.js(`__t.digitar('Fim', '0:02')`)
       await t.clicar('Converter')
       await t.aguardarResultado(240000)
@@ -132,10 +135,11 @@ export default [
     },
   },
   {
-    nome: 'video/converter: GIF vira MP4',
-    pagina: '/video/converter',
+    nome: 'converter: GIF vira MP4',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[${usar('gif')}]`)
+      await formato(t, 'MP4')
       await t.clicar('Converter')
       await t.aguardarResultado(240000)
       const [r] = await t.js('return await __t.resultados()')
@@ -186,10 +190,11 @@ export default [
 
   // ─── Áudio ────────────────────────────────────────────────────────────────
   {
-    nome: 'audio/converter: WAV para MP3',
-    pagina: '/audio/converter',
+    nome: 'converter: WAV para MP3',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'tom.wav')]`)
+      await formato(t, 'MP3')
       await t.clicar('Converter')
       await t.aguardarResultado(120000)
       const [r] = await t.js('return await __t.resultados()')
@@ -198,19 +203,16 @@ export default [
     },
   },
   {
-    nome: 'audio/converter: extrair de vídeo em MP3 e cópia exata',
-    pagina: '/audio/converter',
+    nome: 'converter: vídeo para MP3 (extrai o som)',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}]`)
-      await t.clicar('Converter')
-      await t.aguardarResultado(120000)
-      assert.equal((await t.js('return await __t.resultados()'))[0].tipo, 'mp3')
-      await t.clicar('Ajustar e refazer')
-      await t.js(`__t.digitar('Formato de saída', 'original')`)
+      await formato(t, 'MP3')
       await t.clicar('Converter')
       await t.aguardarResultado(120000)
       const [r] = await t.js('return await __t.resultados()')
-      assert.ok(/\.(m4a|opus|ogg)$/.test(r.nome), r.nome)
+      assert.equal(r.tipo, 'mp3')
+      perto((await t.js('return await __t.midia()')).duracao, 3, 0.6, 'duração')
     },
   },
   {

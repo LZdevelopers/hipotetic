@@ -25,6 +25,8 @@ export function resolverRota(caminhoBruto) {
   const partes = caminho.slice(1).split('/')
   if (partes.length === 1) {
     if (paginas[partes[0]]) return { tipo: 'texto', caminho, pagina: partes[0] }
+    const geral = ferramentaPorSlug(partes[0])
+    if (geral) return { tipo: 'ferramenta', caminho, ferramenta: geral }
     const categoria = categoriaPorId(partes[0])
     if (categoria && ferramentasDaCategoria(categoria.id).length) return { tipo: 'categoria', caminho, categoria }
   }
@@ -97,8 +99,8 @@ export function metadadosDa(rota) {
       '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'Início', item: `${produto.url}/` },
-        { '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/${c.id}` },
-        { '@type': 'ListItem', position: 3, name: f.nome, item: url },
+        ...(c ? [{ '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/${c.id}` }] : []),
+        { '@type': 'ListItem', position: c ? 3 : 2, name: f.nome, item: url },
       ],
     }
     const app = {

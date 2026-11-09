@@ -2,7 +2,7 @@ import { Component, Suspense, useEffect } from 'react'
 import { GradeFerramentas } from '../componentes/CartaoFerramenta'
 import { Icone } from '../componentes/Icone'
 import { Aviso, Botao, SeloCategoria } from '../componentes/ui'
-import { categoriaDa, ferramentasDaCategoria } from '../ferramentas/catalogo'
+import { categoriaDa, corDa, ferramentasDaCategoria } from '../ferramentas/catalogo'
 import { ComponenteFerramenta } from '../ferramentas/carregador'
 import { registrarUso } from '../nucleo/preferencias'
 import { Link } from '../nucleo/roteador'
@@ -49,7 +49,7 @@ function Carregando() {
 
 export function Ferramenta({ ferramenta }) {
   const categoria = categoriaDa(ferramenta)
-  const relacionadas = ferramentasDaCategoria(categoria.id)
+  const relacionadas = (categoria ? ferramentasDaCategoria(categoria.id) : [])
     .filter((f) => f.slug !== ferramenta.slug && f.modulo !== ferramenta.modulo)
     .slice(0, 6)
 
@@ -64,12 +64,16 @@ export function Ferramenta({ ferramenta }) {
               {textos.inicio}
             </Link>
           </li>
-          <li aria-hidden="true">/</li>
-          <li>
-            <Link para={`/${categoria.id}`} className="hover:text-tinta">
-              {categoria.nome}
-            </Link>
-          </li>
+          {categoria ? (
+            <>
+              <li aria-hidden="true">/</li>
+              <li>
+                <Link para={`/${categoria.id}`} className="hover:text-tinta">
+                  {categoria.nome}
+                </Link>
+              </li>
+            </>
+          ) : null}
           <li aria-hidden="true">/</li>
           <li aria-current="page" className="text-suave">
             {ferramenta.nome}
@@ -78,7 +82,7 @@ export function Ferramenta({ ferramenta }) {
       </nav>
 
       <header className="mt-6 mb-8 flex flex-col gap-4 sm:flex-row sm:items-start">
-        <SeloCategoria categoria={categoria.id} icone={ferramenta.icone} tamanho="g" />
+        <SeloCategoria categoria={corDa(ferramenta)} icone={ferramenta.icone} tamanho="g" />
         <div className="min-w-0 flex-1">
           <h1 className="text-[clamp(1.6rem,3.4vw,2.25rem)]">{ferramenta.titulo}</h1>
           <p className="mt-2 max-w-3xl text-[0.9375rem] text-suave">{ferramenta.descricao}</p>

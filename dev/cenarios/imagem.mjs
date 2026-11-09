@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { SVG, enviar, jpg, png } from './comum.mjs'
+import { SVG, ajustes, enviar, formato, jpg, png } from './comum.mjs'
 
 /** Lê um pixel do resultado `indice` (na página). */
 const pixel = (t, x, y, indice = 0) =>
@@ -19,11 +19,11 @@ const escolher = (t, valor) =>
 
 export default [
   {
-    nome: 'imagem/converter: PNG com transparência → JPG',
-    pagina: '/imagem/converter',
+    nome: 'converter: PNG com transparência → JPG',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, png())
-      await t.clicar('JPG')
+      await formato(t, 'JPG')
       await t.clicar('Converter')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
@@ -33,11 +33,11 @@ export default [
     },
   },
   {
-    nome: 'imagem/converter: lote de 3 → AVIF',
-    pagina: '/imagem/converter',
+    nome: 'converter: “converter todos para” AVIF em 3 imagens',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[__t.arquivo(await __t.imagem(300, 200), 'a.png'), __t.arquivo(await __t.imagem(200, 300, 'image/jpeg'), 'b.jpg'), __t.arquivo(await __t.imagem(256, 256, 'image/webp'), 'c.webp')]`)
-      await t.clicar('AVIF')
+      await formato(t, 'AVIF', null)
       await t.clicar('Converter')
       await t.aguardarResultado(120000)
       const rs = await t.js('return await __t.resultados()')
@@ -45,11 +45,11 @@ export default [
     },
   },
   {
-    nome: 'imagem/converter: PNG → WebP mantém a transparência',
-    pagina: '/imagem/converter',
+    nome: 'converter: PNG → WebP mantém a transparência',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, png(400, 300, true))
-      await t.clicar('WebP')
+      await formato(t, 'WEBP')
       await t.clicar('Converter')
       await t.aguardarResultado()
       assert.equal((await t.js('return await __t.resultados()'))[0].tipo, 'webp')
@@ -57,17 +57,39 @@ export default [
     },
   },
   {
-    nome: 'imagem/converter: SVG 100×50 em 2× → PNG 200×100',
-    pagina: '/imagem/converter',
+    nome: 'converter: SVG 100×50 em 2× → PNG 200×100',
+    pagina: '/converter',
     async executar(t) {
       await enviar(t, `[new File([${JSON.stringify(SVG)}], 'logo.svg', { type: 'image/svg+xml' })]`)
-      await t.clicar('PNG')
+      await formato(t, 'PNG')
+      await ajustes(t)
       await t.js(`__t.digitar('Tamanho dos SVGs', '2')`)
       await t.clicar('Converter')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
       assert.equal(r.tipo, 'png')
       assert.deepEqual([r.largura, r.altura], [200, 100])
+    },
+  },
+  {
+    nome: 'converter: tipos misturados, cada um para um formato',
+    pagina: '/converter',
+    async executar(t) {
+      await enviar(t, `[__t.arquivo(await __t.imagem(320, 240), 'foto.png'), __t.arquivo(__t.wav([{ s: 1, hz: 440 }]), 'tom.wav'), new File(['# Título' + String.fromCharCode(10, 10) + 'Texto **forte**.'], 'nota.md')]`)
+      // Cada linha só oferece o que serve para ela: a imagem não tem MP3.
+      await t.js("document.querySelectorAll('main section[aria-label] > ul > li')[0].querySelector('button[aria-haspopup=dialog]').click()")
+      await t.aguardar("document.querySelector('main [role=dialog]')", 5000)
+      assert.equal(await t.js("return [...document.querySelectorAll('main [role=dialog] button')].some((b) => b.textContent.trim() === 'MP3')"), false)
+      await t.js("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+      await formato(t, 'JPG', 0)
+      await formato(t, 'MP3', 1)
+      await formato(t, 'HTML', 2)
+      await t.clicar('Converter')
+      await t.aguardarResultado(120000)
+      const rs = await t.js('return await __t.resultados()')
+      assert.deepEqual(rs.map((r) => r.nome), ['foto.jpg', 'tom.mp3', 'nota.html'])
+      assert.deepEqual(rs.slice(0, 2).map((r) => r.tipo), ['jpg', 'mp3'])
+      assert.ok((await t.js('return await __t.texto(2)')).includes('<strong>forte</strong>'))
     },
   },
   {

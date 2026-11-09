@@ -84,6 +84,33 @@ export const categorias = [
 ]
 
 const TODAS = [
+  // ─── Conversor único (todos os tipos de arquivo) ──────────────────────────
+  {
+    slug: 'converter',
+    modulo: 'conversor/converter',
+    nome: 'Conversor de arquivos',
+    titulo: 'Conversor de arquivos online',
+    resumo: 'Solte qualquer arquivo e escolha o formato: vídeo, áudio, imagem, PDF, documento.',
+    descricao: 'Converta vídeos, áudios, imagens, PDFs, documentos e compactados: solte o arquivo, o formato é reconhecido e você escolhe para qual converter. Grátis.',
+    termos: [
+      'converter', 'conversor', 'formato', 'mp4', 'webm', 'mov', 'mkv', 'avi', 'gif', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'opus',
+      'jpg', 'jpeg', 'png', 'webp', 'avif', 'svg', 'bmp', 'pdf', 'word', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'markdown',
+      'zip', 'rar', '7z', 'tar', 'vídeo para mp3', 'mp4 para mp3', 'vídeo para gif', 'gif para mp4', 'png para jpg', 'webp para png',
+      'pdf para jpg', 'jpg para pdf', 'imagem para pdf', 'word para pdf', 'docx para pdf', 'rar para zip', 'extrair áudio',
+    ],
+    icone: 'substituir',
+    popular: true,
+    passos: [
+      'Solte os arquivos (ou clique em Escolher arquivos). Pode misturar tipos.',
+      'Em cada arquivo, escolha para qual formato converter: só aparecem os que funcionam para ele.',
+      'Clique em Converter e baixe um a um ou tudo em ZIP.',
+    ],
+    perguntas: [
+      { p: 'Meus arquivos são enviados para algum servidor?', r: 'Vídeos, áudios, imagens, PDFs e compactados são convertidos no seu próprio aparelho e não saem dele. Só documentos (DOCX, ODT, RTF…) vão ao nosso servidor, onde o LibreOffice converte e apaga o arquivo na hora.' },
+      { p: 'Quais formatos posso converter?', r: 'Vídeo (MP4, MOV, MKV, WebM, AVI, GIF…), áudio (MP3, WAV, M4A, FLAC, OGG, OPUS…), imagem (JPG, PNG, WebP, AVIF, SVG, GIF…), PDF (para imagem ou texto), documentos (DOCX, ODT, RTF, Markdown) e compactados (ZIP, RAR, 7Z, TAR).' },
+      { p: 'Tem limite de tamanho?', r: 'O limite é a memória do aparelho: vídeos até cerca de 2 GB, imagens até 60 MB. Documentos convertidos no servidor vão até 4,4 MB.' },
+    ],
+  },
   // ─── Vídeo ────────────────────────────────────────────────────────────────
   {
     slug: 'video/baixar',
@@ -106,19 +133,6 @@ const TODAS = [
       { p: 'O vídeo do TikTok sai sem marca d’água?', r: 'Sim. Baixamos o arquivo original, sem a marca d’água e sem o @ do app.' },
       { p: 'Posso usar o que eu baixar como quiser?', r: 'Não necessariamente. Direitos autorais continuam valendo: baixe seus próprios vídeos ou conteúdo que o autor permite usar.' },
     ],
-  },
-  {
-    slug: 'video/converter',
-    modulo: 'video/converter',
-    nome: 'Converter vídeo',
-    titulo: 'Converter vídeo: MP4, WebM, MOV, MKV, AVI e GIF',
-    resumo: 'De qualquer formato para MP4, WebM, MOV, MKV ou GIF.',
-    descricao: 'Converta vídeos entre MP4, WebM, MOV, MKV e AVI, transforme vídeo em GIF ou GIF em vídeo, escolhendo qualidade e resolução. No navegador.',
-    termos: ['converter', 'mp4', 'webm', 'mov', 'mkv', 'avi', 'gif', 'vídeo para gif', 'gif para mp4', 'formato', 'resolução', 'h264'],
-    icone: 'substituir',
-    popular: true,
-    passos: ['Escolha os vídeos (ou GIFs).', 'Escolha o formato de destino e, se quiser, qualidade e resolução.', 'Converta e baixe.'],
-    perguntas: [{ p: 'O vídeo é enviado para algum servidor?', r: 'Não. A conversão acontece no seu aparelho, com a aceleração de vídeo do navegador (ou WebAssembly, quando o navegador não suporta o formato).' }],
   },
   {
     slug: 'video/comprimir',
@@ -158,18 +172,6 @@ const TODAS = [
 
   // ─── Áudio ────────────────────────────────────────────────────────────────
   {
-    slug: 'audio/converter',
-    modulo: 'audio/converter',
-    nome: 'Converter áudio',
-    titulo: 'Converter áudio: MP3, WAV, OGG, FLAC, M4A e OPUS',
-    resumo: 'Entre todos os formatos, e extrair o som de vídeos.',
-    descricao: 'Converta áudios entre MP3, WAV, OGG, FLAC, M4A e OPUS, ou extraia o som de vídeos MP4 e outros, em lote. Grátis e no navegador.',
-    termos: ['converter', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'opus', 'extrair áudio', 'mp4 para mp3', 'vídeo para mp3', 'whatsapp'],
-    icone: 'substituir',
-    popular: true,
-    passos: ['Escolha os áudios ou vídeos.', 'Escolha o formato e a qualidade.', 'Converta e baixe.'],
-  },
-  {
     slug: 'audio/editor',
     modulo: 'audio/editor',
     nome: 'Editor de áudio',
@@ -194,19 +196,6 @@ const TODAS = [
   },
 
   // ─── Imagens ──────────────────────────────────────────────────────────────
-  {
-    slug: 'imagem/converter',
-    modulo: 'imagem/converter',
-    nome: 'Converter imagens',
-    titulo: 'Converter imagens: JPG, PNG, WebP, AVIF e SVG',
-    resumo: 'Entre JPG, PNG, WebP e AVIF, em lote. Aceita SVG e GIF.',
-    descricao: 'Converta imagens entre JPG, PNG, WebP e AVIF em lote, com controle de qualidade. Aceita também SVG, GIF e BMP. Tudo no navegador.',
-    termos: ['converter', 'jpg', 'jpeg', 'png', 'webp', 'avif', 'svg', 'gif', 'bmp', 'png para jpg', 'webp para png', 'svg para png'],
-    icone: 'substituir',
-    popular: true,
-    passos: ['Arraste as imagens ou cole com Ctrl+V.', 'Escolha o formato de saída e a qualidade.', 'Converta e baixe uma a uma ou em ZIP.'],
-    perguntas: [{ p: 'Qual formato escolher?', r: 'JPG para fotos que precisam abrir em qualquer lugar; PNG para logos com transparência; WebP para sites (bem menor); AVIF para o menor tamanho possível.' }],
-  },
   {
     slug: 'imagem/comprimir',
     modulo: 'imagem/comprimir',
@@ -339,18 +328,6 @@ const TODAS = [
     passos: ['Escolha o PDF.', 'Escolha o nível de compressão.', 'Compare os tamanhos e baixe.'],
   },
   {
-    slug: 'pdf/converter',
-    modulo: 'pdf/converter',
-    nome: 'Converter PDF',
-    titulo: 'Converter PDF para JPG, PNG e texto, ou imagens para PDF',
-    resumo: 'PDF para imagem ou texto, e fotos para PDF.',
-    descricao: 'Converta páginas de PDF em JPG, PNG ou WebP, extraia o texto, ou junte fotos e imagens num PDF. Tudo no navegador.',
-    termos: ['converter', 'pdf para jpg', 'pdf para png', 'pdf para imagem', 'pdf para texto', 'txt', 'jpg para pdf', 'imagem para pdf', 'foto para pdf'],
-    icone: 'substituir',
-    popular: true,
-    passos: ['Escolha o que quer: PDF para imagem, para texto, ou imagens para PDF.', 'Adicione os arquivos e ajuste.', 'Converta e baixe.'],
-  },
-  {
     slug: 'pdf/ocr',
     modulo: 'pdf/ocr',
     nome: 'OCR em PDF',
@@ -407,21 +384,6 @@ const TODAS = [
   },
 
   // ─── Documentos ───────────────────────────────────────────────────────────
-  {
-    slug: 'documentos/converter',
-    modulo: 'documentos/converter',
-    requer: 'documentos',
-    nome: 'Converter documento',
-    titulo: 'Converter documentos: DOCX, DOC, ODT, RTF e PDF',
-    resumo: 'Word, LibreOffice e PDF entre si, com a formatação.',
-    descricao: 'Converta documentos entre DOCX, DOC, ODT, RTF, TXT, HTML e PDF com o LibreOffice, mantendo a formatação. O arquivo é apagado na hora.',
-    termos: ['converter', 'word', 'docx', 'doc', 'odt', 'rtf', 'pdf', 'word para pdf', 'docx para pdf', 'odt para pdf', 'libreoffice'],
-    icone: 'substituir',
-    servidor: true,
-    popular: true,
-    passos: ['Escolha os documentos (até 4,5 MB cada).', 'Escolha o formato de saída.', 'Converta e baixe.'],
-    perguntas: [{ p: 'Por que este conversor usa o servidor?', r: 'Para manter a formatação é preciso um processador de texto completo: usamos o LibreOffice no nosso servidor. O arquivo é processado e apagado imediatamente.' }],
-  },
   {
     slug: 'documentos/visualizar',
     modulo: 'documentos/visualizar',
@@ -585,7 +547,9 @@ const porSlug = new Map(ferramentas.map((f) => [f.slug, f]))
 export const ferramentaPorSlug = (slug) => porSlug.get(slug) ?? null
 export const categoriaPorId = (id) => categorias.find((c) => c.id === id) ?? null
 export const ferramentasDaCategoria = (id) => ferramentas.filter((f) => f.slug.split('/')[0] === id)
-export const categoriaDa = (ferramenta) => categoriaPorId(ferramenta.slug.split('/')[0])
+export const categoriaDa = (ferramenta) => (ferramenta.slug.includes('/') ? categoriaPorId(ferramenta.slug.split('/')[0]) : null)
+/** Cor do selo da ferramenta: a da categoria, ou a do conversor (que não tem categoria). */
+export const corDa = (ferramenta) => categoriaDa(ferramenta)?.id ?? 'conversor'
 export const caminhoDa = (ferramenta) => `/${ferramenta.slug}`
 export const populares = () => ferramentas.filter((f) => f.popular)
 

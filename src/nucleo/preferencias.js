@@ -41,23 +41,14 @@ function aplicarTema(tema) {
 }
 
 /**
- * Troca o tema com uma animação: o tema novo se abre em círculo a partir de
- * (x, y) — normalmente o botão clicado — usando View Transitions. Sem
- * suporte do navegador, ou com "reduzir movimento", a troca é instantânea.
+ * Troca o tema com um esmaecimento curto da página inteira (View Transitions;
+ * duração no app.css). Sem suporte do navegador, ou com "reduzir movimento",
+ * a troca é instantânea.
  */
-export function definirTema(tema, origem) {
+export function definirTema(tema) {
   const reduzir = matchMedia('(prefers-reduced-motion: reduce)').matches
   if (!document.startViewTransition || reduzir) return aplicarTema(tema)
-  const x = origem?.x ?? innerWidth - 40
-  const y = origem?.y ?? 30
-  const raio = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
-  const transicao = document.startViewTransition(() => aplicarTema(tema))
-  transicao.ready.then(() => {
-    document.documentElement.animate(
-      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${raio}px at ${x}px ${y}px)`] },
-      { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', pseudoElement: '::view-transition-new(root)' },
-    )
-  })
+  document.startViewTransition(() => aplicarTema(tema))
 }
 
 export function useTema() {

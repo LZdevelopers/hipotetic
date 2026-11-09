@@ -44,3 +44,21 @@ export async function enviar(t, codigoArquivos) {
 
 export const png = (w = 640, h = 480, alfa = true, nome = 'teste.png') => `[__t.arquivo(await __t.imagem(${w}, ${h}, 'image/png', { alfa: ${alfa} }), '${nome}')]`
 export const jpg = (w = 640, h = 480, nome = 'foto.jpg') => `[__t.arquivo(await __t.imagem(${w}, ${h}, 'image/jpeg', { qualidade: 0.95 }), '${nome}')]`
+
+// ─── Conversor (/converter) ──────────────────────────────────────────────────
+const LINHAS = "document.querySelectorAll('main section[aria-label] > ul > li')"
+
+/** Abre o seletor de formato (da linha `linha`, ou o "Converter todos para" com linha = null) e escolhe `rotulo` pela busca. */
+export async function formato(t, rotulo, linha = 0) {
+  const botao = linha == null ? "document.querySelector('main section[aria-label] > header button[aria-haspopup=dialog]')" : `${LINHAS}[${linha}].querySelector('button[aria-haspopup=dialog]')`
+  await t.js(`${botao}.click()`)
+  await t.aguardar("document.querySelector('main [role=dialog] input[type=search]')", 5000)
+  await t.js(`const campo = document.querySelector('main [role=dialog] input[type=search]')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(campo, ${JSON.stringify(rotulo)})
+    campo.dispatchEvent(new Event('input', { bubbles: true }))`)
+  await t.js(`const b = [...document.querySelectorAll('main [role=dialog] button')].find((x) => x.textContent.trim() === ${JSON.stringify(rotulo)})
+    if (!b) throw new Error('formato fora da lista: ${rotulo}'); b.click()`)
+}
+
+/** Abre os ajustes da conversão da linha `linha`. */
+export const ajustes = (t, linha = 0) => t.js(`${LINHAS}[${linha}].querySelector('button[aria-label="Ajustes da conversão"]').click()`)

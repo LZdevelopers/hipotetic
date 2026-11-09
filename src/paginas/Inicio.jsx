@@ -108,6 +108,21 @@ export function Inicio() {
         </ul>
       </section>
 
+      <Link
+        para="/converter"
+        className="group mt-12 flex flex-col items-start gap-5 rounded-[var(--radius-cartao)] border border-borda bg-superficie p-6 transition-[border-color,box-shadow] duration-200 hover:border-borda-forte hover:shadow-[var(--shadow-cartao)] sm:flex-row sm:items-center sm:p-7"
+      >
+        <SeloCategoria categoria="conversor" icone="substituir" tamanho="g" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-xl font-bold text-tinta">Conversor de arquivos</span>
+          <span className="mt-1 block text-sm text-suave">Solte qualquer arquivo — vídeo, áudio, imagem, PDF, documento ou compactado — e escolha para qual formato converter.</span>
+        </span>
+        <span className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-marca px-5 text-sm font-semibold text-sobre-marca transition-colors group-hover:bg-marca-hover">
+          Converter arquivos
+          <Icone nome="seta" tamanho={16} />
+        </span>
+      </Link>
+
       <Recentes />
 
       <section aria-labelledby="titulo-categorias" className="mt-16">

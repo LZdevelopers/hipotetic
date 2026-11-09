@@ -24,6 +24,33 @@
       "includeFiles": "servicos/libreoffice/saida/lo.tar.br"
     }
   },
+  "redirects": [
+    {
+      "source": "/video/converter",
+      "destination": "/converter",
+      "permanent": true
+    },
+    {
+      "source": "/audio/converter",
+      "destination": "/converter",
+      "permanent": true
+    },
+    {
+      "source": "/imagem/converter",
+      "destination": "/converter",
+      "permanent": true
+    },
+    {
+      "source": "/pdf/converter",
+      "destination": "/converter",
+      "permanent": true
+    },
+    {
+      "source": "/documentos/converter",
+      "destination": "/converter",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

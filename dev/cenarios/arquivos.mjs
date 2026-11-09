@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { strToU8, unzipSync, zipSync } from 'fflate'
-import { enviar } from './comum.mjs'
+import { enviar, formato } from './comum.mjs'
 
 const b64 = (bytes) => Buffer.from(bytes).toString('base64')
 const arquivo = (bytes, nome, tipo = 'application/octet-stream') => `new File([Uint8Array.from(atob('${b64(bytes)}'), (c) => c.charCodeAt(0))], '${nome}', { type: '${tipo}' })`
@@ -189,6 +189,20 @@ export default [
       await t.aguardar('window.__baixados.length > 0', 15000)
       const png = Buffer.from(await ultimoBaixado(t))
       assert.equal(png.subarray(1, 4).toString(), 'PNG')
+    },
+  },
+  {
+    nome: 'converter: ZIP vira 7Z com o mesmo conteúdo',
+    pagina: '/converter',
+    async executar(t) {
+      const zip = zipSync({ 'pasta/a.txt': strToU8('conteúdo A'), 'b.txt': strToU8('conteúdo B') })
+      await enviar(t, `[${arquivo(zip, 'pacote.zip', 'application/zip')}]`)
+      await formato(t, '7Z')
+      await t.clicar('Converter')
+      await t.aguardarResultado(60000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, '7z')
+      assert.equal(r.nome, 'pacote.7z')
     },
   },
 ]

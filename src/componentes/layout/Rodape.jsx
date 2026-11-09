@@ -16,6 +16,11 @@ export function Rodape() {
         <nav aria-label="Categorias">
           <p className="text-sm font-semibold text-tinta">Ferramentas</p>
           <ul className="mt-3 grid grid-cols-2 gap-x-10 gap-y-2">
+            <li>
+              <Link para="/converter" className="text-sm text-suave transition-colors hover:text-tinta">
+                Converter arquivos
+              </Link>
+            </li>
             {categoriasComFerramentas().map((c) => (
               <li key={c.id}>
                 <Link para={`/${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">

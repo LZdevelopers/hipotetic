@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { strToU8, unzipSync, zipSync } from 'fflate'
-import { enviar, lerPdf } from './comum.mjs'
+import { enviar, formato, lerPdf } from './comum.mjs'
 
 /** DOCX mínimo válido (abre no Word e no LibreOffice). */
 function docxTeste({ paragrafos = ['Relatório anual', 'Texto com acentuação: ação, coração.'], autor } = {}) {
@@ -34,10 +34,11 @@ export default [
   ...(comServidor
     ? [
         {
-          nome: 'documentos/converter: DOCX para PDF, LibreOffice mantém o texto',
-          pagina: '/documentos/converter',
+          nome: 'converter: DOCX para PDF, LibreOffice mantém o texto',
+          pagina: '/converter',
           async executar(t) {
             await enviar(t, `[${arquivo(docxTeste(), 'relatorio.docx')}]`)
+            await formato(t, 'PDF')
             await t.clicar('Converter')
             await t.aguardarResultado(120000)
             const r = await lerPdf(await t.js('return await __t.bytes()'))
@@ -45,11 +46,11 @@ export default [
           },
         },
         {
-          nome: 'documentos/converter: ODT vira DOCX',
-          pagina: '/documentos/converter',
+          nome: 'converter: ODT vira DOCX',
+          pagina: '/converter',
           async executar(t) {
             await enviar(t, `[${arquivo(odtTeste(), 'texto.odt')}]`)
-            await t.clicar('DOCX')
+            await formato(t, 'DOCX')
             await t.clicar('Converter')
             await t.aguardarResultado(120000)
             const zip = unzipSync(new Uint8Array(await t.js('return await __t.bytes()')))

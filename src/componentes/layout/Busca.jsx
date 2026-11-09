@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { buscarFerramentas, caminhoDa, categoriaDa, populares } from '../../ferramentas/catalogo'
+import { buscarFerramentas, caminhoDa, categoriaDa, corDa, populares } from '../../ferramentas/catalogo'
 import { useRota } from '../../nucleo/roteador'
 import { textos } from '../../textos'
 import { Icone } from '../Icone'
@@ -46,12 +46,12 @@ export function ListaResultados({ id, resultados, ativo, setAtivo, aoEscolher })
               }}
               className={`flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors ${i === ativo ? 'bg-superficie-2' : ''}`}
             >
-              <SeloCategoria categoria={categoria.id} icone={f.icone} tamanho="p" />
+              <SeloCategoria categoria={corDa(f)} icone={f.icone} tamanho="p" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-tinta">{f.nome}</span>
                 <span className="block truncate text-xs text-fraca">{f.resumo}</span>
               </span>
-              <span className="hidden shrink-0 text-xs text-fraca sm:block">{categoria.nome}</span>
+              <span className="hidden shrink-0 text-xs text-fraca sm:block">{categoria?.nome ?? 'Conversor'}</span>
             </a>
           </li>
         )
