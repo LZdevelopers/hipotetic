@@ -323,9 +323,16 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
       onPointerDown={aoApertar}
       onPointerMove={(e) => {
         if (!dica.current || !duracao) return
+        // Preso dentro da onda: segurando o botão, o mouse pode sair dela.
         const r = area.current.getBoundingClientRect()
-        dica.current.style.left = `${e.clientX - r.left}px`
-        dica.current.firstChild.textContent = tempo(deX(e.clientX))
+        const x = Math.min(Math.max(e.clientX - r.left, 0), r.width)
+        const rotulo = dica.current.firstChild
+        dica.current.style.left = `${x}px`
+        rotulo.textContent = tempo(deX(e.clientX))
+        // A etiqueta também não passa das bordas.
+        const meia = rotulo.offsetWidth / 2
+        const deslocamento = Math.min(Math.max(x, meia), r.width - meia) - x
+        rotulo.style.transform = `translateX(calc(-50% + ${deslocamento}px))`
       }}
       aria-label="Forma de onda: clique ou arraste para percorrer o áudio"
     >
@@ -337,7 +344,7 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
 
       {/* Tempo sob o cursor. */}
       <div ref={dica} className="pointer-events-none absolute top-0 bottom-0 hidden w-px bg-tinta/25 group-hover:block">
-        <span className="absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-tinta px-1.5 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap text-fundo tabular-nums" />
+        <span style={{ transform: 'translateX(-50%)' }} className="absolute -top-6 left-1/2 rounded bg-tinta px-1.5 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap text-fundo tabular-nums" />
       </div>
 
       {/* Cabeça de leitura: movida direto pelo player (sem re-renderizar). */}
