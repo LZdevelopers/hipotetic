@@ -105,7 +105,7 @@ export function Ferramenta({ ferramenta }) {
         </Suspense>
       </LimiteErro>
 
-      {ferramenta.passos?.length || ferramenta.perguntas?.length ? (
+      {!ferramenta.enxuta && (ferramenta.passos?.length || ferramenta.perguntas?.length) ? (
         <div className="mt-20 grid gap-12 lg:grid-cols-2">
           {ferramenta.passos?.length ? (
             <section aria-labelledby="titulo-passos">
@@ -145,7 +145,7 @@ export function Ferramenta({ ferramenta }) {
         </div>
       ) : null}
 
-      {relacionadas.length ? (
+      {!ferramenta.enxuta && relacionadas.length ? (
         <section aria-labelledby="titulo-relacionadas" className="mt-20">
           <h2 id="titulo-relacionadas" className="mb-4 text-xl">
             {textos.relacionadas}

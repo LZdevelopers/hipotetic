@@ -22,6 +22,8 @@
  *   popular    aparece em "Mais usadas" na página inicial
  *   passos     "Como usar" da página (3 passos curtos)
  *   perguntas  perguntas frequentes da página [{ p, r }]
+ *   enxuta     true = página só com a ferramenta (sem "Como usar", perguntas e relacionadas),
+ *              para editores que precisam da tela inteira
  *   requer     recurso de infraestrutura necessário (ex.: 'documentos' = serviço
  *              LibreOffice). Sem o recurso ativo no build, a ferramenta NÃO aparece.
  */
@@ -181,7 +183,7 @@ const TODAS = [
     termos: ['cortar', 'aparar', 'toque', 'ringtone', 'fade', 'volume', 'normalizar', 'silêncio', 'velocidade', 'acelerar', 'podcast'],
     icone: 'onda',
     popular: true,
-    passos: ['Escolha o áudio.', 'Arraste os marcadores e ajuste volume, silêncio e velocidade.', 'Aplique e baixe.'],
+    enxuta: true,
   },
   {
     slug: 'audio/juntar',

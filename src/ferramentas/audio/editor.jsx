@@ -2,13 +2,12 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
-import { Aviso, Botao, Caixa, Deslizante, Grupo, Progresso, Segmentado } from '../../componentes/ui'
-import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
+import { Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
+import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { useTema } from '../../nucleo/preferencias'
 import { useTarefa } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
-import { Bitrate, FormatoAudio } from './_comum'
 import { analisar, ganhoNormalizar, silencios } from './_analise'
 
 /** 65.43 → "1:05.4" */
@@ -50,8 +49,8 @@ function Velocidade({ valor, aoMudar }) {
   const fixar = (v) => aoMudar(Math.round(Math.min(Math.max(v, VEL_MIN), VEL_MAX) * 100) / 100)
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <label htmlFor={id} className="text-[0.8125rem] font-semibold text-tinta">
+      <div className="-mt-2 flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-xs font-semibold tracking-wide text-fraca uppercase">
           Velocidade
         </label>
         <div className="flex items-center gap-1.5">
@@ -319,7 +318,7 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
   return (
     <div
       ref={area}
-      className="group relative h-44 cursor-pointer touch-none rounded-xl bg-fundo-suave select-none sm:h-52"
+      className="group relative h-44 cursor-pointer touch-none rounded-xl bg-fundo-suave select-none sm:h-[clamp(11rem,30vh,17rem)]"
       onPointerDown={aoApertar}
       onPointerMove={(e) => {
         if (!dica.current || !duracao) return
@@ -393,6 +392,38 @@ function BotaoAcao({ rotulo, icone, ...props }) {
   )
 }
 
+/** Bloco de ajustes (uma coluna da faixa de baixo). */
+function Painel({ titulo, children }) {
+  return (
+    <div className="cartao flex min-w-0 flex-col gap-3 p-4">
+      {titulo ? <h3 className="text-xs font-semibold tracking-wide text-fraca uppercase">{titulo}</h3> : null}
+      {children}
+    </div>
+  )
+}
+
+/** <select> compacto, sem rótulo visível (barra do topo). */
+function SeletorCompacto({ rotulo, valor, aoMudar, opcoes }) {
+  return (
+    <label className="relative">
+      <span className="sr-only">{rotulo}</span>
+      <select
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value)}
+        title={rotulo}
+        className="h-9 appearance-none rounded-lg border border-borda-forte bg-superficie pr-8 pl-3 text-[0.8125rem] font-semibold text-tinta transition-colors hover:border-fraca/60 focus:border-acento focus:outline-none"
+      >
+        {opcoes.map((o) => (
+          <option key={o.valor} value={o.valor}>
+            {o.rotulo}
+          </option>
+        ))}
+      </select>
+      <Icone nome="setaBaixo" tamanho={14} className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-fraca" />
+    </label>
+  )
+}
+
 /** Campo de tempo (m:ss.s) que só aplica ao sair ou apertar Enter. */
 function CampoTempo({ rotulo, valor, aoMudar }) {
   const [texto, setTexto] = useState(tempo(valor))
@@ -442,6 +473,7 @@ function Editor({ arquivo, aoTrocar }) {
   const quadro = useRef(0)
   const dentro = useRef(false)
 
+  const raiz = useRef(null)
   const url = useUrlObjeto(analise?.tocar)
   const duracao = analise?.duracao ?? 0
   const historico = useHistorico(o, setO, Boolean(analise))
@@ -489,6 +521,12 @@ function Editor({ arquivo, aoTrocar }) {
     if (audio.current) mostrar(audio.current.currentTime)
   })
 
+  // Arquivo pronto: rola para o editor ficar inteiro na tela (o título fica acima).
+  const carregado = Boolean(analise)
+  useEffect(() => {
+    if (carregado) raiz.current?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [carregado])
+
   // Velocidade e tom: aplicados direto no player.
   useEffect(() => {
     const el = audio.current
@@ -526,8 +564,11 @@ function Editor({ arquivo, aoTrocar }) {
       el.currentTime = r[1]
       t = r[1]
     }
-    // Entrou no trecho (começou a tocar antes dele): a partir daqui vale o fim do trecho.
-    if (!dentro.current && t >= oo.inicio && t < oo.fim) dentro.current = true
+    // Antes do trecho (o corte mudou tocando): pula para o início dele.
+    if (t < oo.inicio - 0.02) {
+      el.currentTime = oo.inicio
+      t = oo.inicio
+    }
     // Chegou ao fim do trecho: repete do início ou para (e volta para o início).
     if (dentro.current && (t >= oo.fim - 0.01 || (r && r[1] >= oo.fim - 0.03))) {
       el.currentTime = oo.inicio
@@ -559,23 +600,36 @@ function Editor({ arquivo, aoTrocar }) {
       motor.current = { ctx, ganho }
     }
     await motor.current.ctx.resume()
+    // Toca sempre dentro do trecho: fora dele (ou no fim), começa do início do corte.
     let t = el.currentTime
-    if (t >= o.fim - 0.02 && t <= o.fim + 0.05) t = o.inicio
-    if (t >= duracao - 0.05) t = o.inicio
+    if (t < o.inicio || t >= o.fim - 0.02) t = o.inicio
     el.currentTime = t
-    dentro.current = t >= o.inicio - 0.01 && t < o.fim
+    dentro.current = true
     motor.current.ganho.gain.value = envelope(t, o, fator)
     await el.play().catch(() => {})
   }
   const pausar = () => audio.current?.pause()
   const alternar = () => (audio.current?.paused ? tocar() : pausar())
+  /** Posiciona a reprodução, sempre dentro do trecho cortado. */
   const buscar = (t) => {
     const el = audio.current
     if (!el) return
-    el.currentTime = t
-    dentro.current = t >= o.inicio - 0.01 && t < o.fim
-    mostrar(t)
+    const { o: oo } = atual.current
+    const alvo = Math.min(Math.max(t, oo.inicio), oo.fim)
+    el.currentTime = alvo
+    dentro.current = true
+    mostrar(alvo)
   }
+  // Mudou o corte: a cabeça de leitura que ficou de fora vai para dentro do trecho.
+  useEffect(() => {
+    const el = audio.current
+    if (!el || !duracao) return
+    const t = el.currentTime
+    if (t < o.inicio || t > o.fim) {
+      el.currentTime = o.inicio
+      mostrar(el.currentTime)
+    }
+  }, [o.inicio, o.fim, duracao])
   /** Volta tudo como estava ao abrir o arquivo (e pode ser desfeito com Ctrl+Z). */
   const redefinir = () => {
     pausar()
@@ -667,47 +721,72 @@ function Editor({ arquivo, aoTrocar }) {
   const duracaoFinal = tempoNoResultado(o.fim, o, regioes)
   const maxFade = Math.max(0.5, Math.min(10, Math.floor((o.fim - o.inicio) * 2) / 4))
 
+  const formatos = Object.entries(FORMATOS_AUDIO).map(([v, x]) => ({ valor: v, rotulo: x.rotulo }))
+  const semPerdas = FORMATOS_AUDIO[o.formato]?.semPerdas
+  const botaoRedondo = 'grid size-11 place-items-center rounded-full transition-colors disabled:opacity-40'
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
-      <div className="flex min-w-0 flex-col gap-4">
-        <section aria-label="Player" className="cartao p-4 sm:p-5">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <p className="min-w-0 truncate text-sm font-semibold text-tinta" title={arquivo.name}>
+    <div ref={raiz} className="flex flex-col gap-3">
+      <section aria-label="Player" className="cartao">
+        {/* Barra do topo: arquivo, desfazer/refazer, redefinir, trocar e exportar */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
+          <SeloCategoria categoria="audio" icone="arquivoAudio" tamanho="p" />
+          <div className="min-w-0 flex-1 basis-40">
+            <p className="truncate text-sm font-semibold text-tinta" title={arquivo.name}>
               {arquivo.name}
             </p>
-            <div className="flex shrink-0 items-center gap-1">
-              <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer} />
-              <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer} />
-              <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={redefinir} disabled={!analise}>
-                Redefinir tudo
-              </Botao>
-              <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar}>
-                Trocar arquivo
-              </Botao>
-            </div>
+            <p className="text-xs text-fraca tabular-nums">{tempo(duracao)} no original</p>
           </div>
+          <div className="flex items-center gap-0.5">
+            <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || processando} />
+            <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer || processando} />
+            <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={redefinir} disabled={!analise || processando}>
+              Redefinir tudo
+            </Botao>
+            <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar} disabled={processando}>
+              Trocar arquivo
+            </Botao>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SeletorCompacto rotulo="Formato do arquivo final" valor={o.formato} aoMudar={(v) => mudar({ formato: v })} opcoes={formatos} />
+            {semPerdas ? null : (
+              <SeletorCompacto
+                rotulo="Qualidade do arquivo final"
+                valor={String(o.bitrate)}
+                aoMudar={(v) => mudar({ bitrate: Number(v) })}
+                opcoes={[96, 128, 192, 256, 320].map((k) => ({ valor: String(k), rotulo: `${k} kbps` }))}
+              />
+            )}
+            {processando ? (
+              <div className="w-60">
+                <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
+              </div>
+            ) : (
+              <Botao icone="baixar" onClick={exportar} disabled={!analise}>
+                Aplicar e baixar
+              </Botao>
+            )}
+          </div>
+        </div>
 
+        {/* Onda (espaço em cima para a etiqueta do tempo sob o cursor) */}
+        <div className="px-4 pt-8 sm:px-5">
           {analise ? (
             <Onda analise={analise} duracao={duracao} o={o} fator={fator} regioes={regioes} aoBuscar={buscar} aoTrecho={mudar} cabeca={cabeca} />
           ) : (
-            <div className="grid h-44 place-items-center rounded-xl bg-fundo-suave sm:h-52">
+            <div className="grid h-44 place-items-center rounded-xl bg-fundo-suave sm:h-[clamp(11rem,30vh,17rem)]">
               <div className="w-56">
                 <Progresso valor={preparo?.v ?? null} rotulo={preparo?.r ?? 'Lendo o áudio'} />
               </div>
             </div>
           )}
+        </div>
 
-          {/* Player próprio */}
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-3">
-            <button
-              type="button"
-              onClick={() => buscar(o.inicio)}
-              disabled={!url}
-              aria-label="Voltar ao início do trecho"
-              title="Voltar ao início do trecho"
-              className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40"
-            >
-              <Icone nome="voltarInicio" tamanho={18} />
+        {/* Player próprio */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-4 px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => buscar(o.inicio)} disabled={!url} aria-label="Voltar ao início do trecho" title="Voltar ao início do trecho" className={`${botaoRedondo} text-suave hover:bg-superficie-2 hover:text-tinta`}>
+              <Icone nome="voltarInicio" tamanho={20} />
             </button>
             <button
               type="button"
@@ -715,148 +794,136 @@ function Editor({ arquivo, aoTrocar }) {
               disabled={!url}
               aria-label={tocando ? 'Pausar' : 'Tocar'}
               title={`${tocando ? 'Pausar' : 'Tocar'} (espaço)`}
-              className="grid size-12 place-items-center rounded-full bg-marca text-sobre-marca shadow-[var(--shadow-cartao)] transition-[background-color,transform] hover:bg-marca-hover active:scale-95 disabled:opacity-40"
+              className="grid size-14 place-items-center rounded-full bg-marca text-sobre-marca shadow-[var(--shadow-cartao)] transition-[background-color,transform] hover:bg-marca-hover active:scale-95 disabled:opacity-40"
             >
-              <Icone nome={tocando ? 'pausa' : 'play'} tamanho={20} className={tocando ? '' : 'translate-x-px'} fill="currentColor" />
+              <Icone nome={tocando ? 'pausa' : 'play'} tamanho={24} className={tocando ? '' : 'translate-x-0.5'} fill="currentColor" />
             </button>
             <button
               type="button"
               onClick={() => setRepetir((r) => !r)}
               aria-pressed={repetir}
               aria-label="Repetir o trecho"
-              title="Repetir o trecho"
-              className={`grid size-10 place-items-center rounded-full transition-colors ${repetir ? 'bg-acento-suave text-acento' : 'text-suave hover:bg-superficie-2 hover:text-tinta'}`}
+              title={repetir ? 'Repetindo o trecho (clique para desligar)' : 'Repetir o trecho'}
+              className={`${botaoRedondo} ${repetir ? 'bg-acento-suave text-acento' : 'text-suave hover:bg-superficie-2 hover:text-tinta'}`}
             >
-              <Icone nome="repetir" tamanho={17} />
+              <Icone nome="repetir" tamanho={19} />
             </button>
-            <p className="ml-1 text-sm font-semibold text-tinta tabular-nums">
+          </div>
+
+          <div className="min-w-0">
+            <p className="font-display text-2xl leading-none font-bold text-tinta tabular-nums">
               <span ref={relogio}>0:00.0</span>
-              <span className="font-normal text-fraca" title="Duração do áudio final"> / {tempo(duracaoFinal)}</span>
+              <span className="text-base font-semibold text-fraca" title="Duração do áudio final">
+                {' '}
+                / {tempo(duracaoFinal)}
+              </span>
             </p>
-            {o.velocidade !== 1 ? <span className="rounded-full bg-cat-audio/15 px-2 py-0.5 text-xs font-bold text-cat-audio tabular-nums">{o.velocidade.toLocaleString('pt-BR')}×</span> : null}
-            <div className="ml-auto flex gap-2">
-              <Botao variante="secundario" tamanho="p" onClick={inicioAqui} disabled={!url} title="Marca o início onde está tocando (tecla I)">
-                Início aqui
-              </Botao>
-              <Botao variante="secundario" tamanho="p" onClick={fimAqui} disabled={!url} title="Marca o fim onde está tocando (tecla O)">
-                Fim aqui
-              </Botao>
-            </div>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-fraca">
+              <span>Duração final</span>
+              {o.velocidade !== 1 ? <span className="rounded-full bg-cat-audio/15 px-1.5 py-px font-bold text-cat-audio tabular-nums">{o.velocidade.toLocaleString('pt-BR')}×</span> : null}
+              {removido > 0.05 ? <span>· {formatarDuracao(removido)} de silêncio a menos</span> : null}
+            </p>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-3 border-t border-borda pt-4">
-            <CampoTempo rotulo="Início" valor={o.inicio} aoMudar={(t) => mudar((x) => ({ inicio: Math.min(Math.max(0, t), x.fim - 0.1) }))} />
-            <CampoTempo rotulo="Fim" valor={o.fim} aoMudar={(t) => mudar((x) => ({ fim: Math.max(Math.min(duracao, t), x.inicio + 0.1) }))} />
-            <p className="pb-2 text-sm text-suave">
-              Duração final: <strong className="font-semibold text-tinta tabular-nums">{tempo(duracaoFinal)}</strong>
-              {o.velocidade !== 1 ? <span className="text-fraca"> · a {o.velocidade.toLocaleString('pt-BR')}×</span> : null}
-              {removido > 0.05 ? <span className="text-fraca"> · {formatarDuracao(removido)} de silêncio a menos</span> : null}
-            </p>
+          <div className="ml-auto flex flex-wrap items-end gap-2">
+            <CampoTempo rotulo="Início" valor={o.inicio} aoMudar={(v) => mudar((x) => ({ inicio: Math.min(Math.max(0, v), x.fim - 0.1) }))} />
+            <CampoTempo rotulo="Fim" valor={o.fim} aoMudar={(v) => mudar((x) => ({ fim: Math.max(Math.min(duracao, v), x.inicio + 0.1) }))} />
+            <Botao variante="secundario" tamanho="p" className="h-9" onClick={inicioAqui} disabled={!url} title="Marca o início onde está tocando (tecla I)">
+              Início aqui
+            </Botao>
+            <Botao variante="secundario" tamanho="p" className="h-9" onClick={fimAqui} disabled={!url} title="Marca o fim onde está tocando (tecla O)">
+              Fim aqui
+            </Botao>
             {o.inicio > 0.05 || o.fim < duracao - 0.05 ? (
-              <button type="button" onClick={() => mudar({ inicio: 0, fim: duracao })} className="ml-auto pb-2 text-xs font-semibold text-suave hover:text-tinta">
-                Usar o áudio inteiro
-              </button>
+              <Botao variante="fantasma" tamanho="p" className="h-9" onClick={() => mudar({ inicio: 0, fim: duracao })} title="Desfaz o corte">
+                Áudio inteiro
+              </Botao>
             ) : null}
           </div>
-          <p className="mt-3 text-xs text-fraca">Clique ou arraste na onda para percorrer o áudio. Para cortar, arraste as alças azuis (ou use Início/Fim aqui). Atalhos: espaço toca/pausa · I e O marcam início e fim · setas andam 1 s · Ctrl+Z desfaz.</p>
-
-          {/* Elemento de áudio sem controles: quem manda é o player acima. */}
-          <audio
-            ref={audio}
-            src={url ?? undefined}
-            preload="auto"
-            className="hidden"
-            onPlay={() => {
-              setTocando(true)
-              cancelAnimationFrame(quadro.current)
-              quadro.current = requestAnimationFrame(laco)
-            }}
-            onPause={() => {
-              setTocando(false)
-              cancelAnimationFrame(quadro.current)
-              mostrar(audio.current?.currentTime ?? 0)
-            }}
-            onEnded={(e) => {
-              // O arquivo acabou antes de o laço ver o fim do trecho (trecho até o final).
-              const el = e.currentTarget
-              const { o: oo, repetir: rep } = atual.current
-              el.currentTime = oo.inicio
-              dentro.current = true
-              if (rep) el.play().catch(() => {})
-              else setTocando(false)
-            }}
-            onSeeked={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
-            onTimeUpdate={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
-          />
-        </section>
-      </div>
-
-      <aside className="cartao flex flex-col gap-6 p-4 sm:p-5 lg:sticky lg:top-20">
-        <p className="-mb-2 flex items-center gap-1.5 text-xs text-fraca">
-          <span className="size-1.5 rounded-full bg-sucesso" />
-          Tudo o que você ajustar já toca no player.
-        </p>
-        <div className={processando ? 'pointer-events-none flex flex-col gap-6 opacity-60' : 'flex flex-col gap-6'} inert={processando ? true : undefined}>
-          <div className="flex flex-col gap-3">
-            <Velocidade valor={o.velocidade} aoMudar={(v) => mudar({ velocidade: v })} />
-            {o.velocidade !== 1 ? <Caixa rotulo="Mudar tom" marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} /> : null}
-          </div>
-
-          <Grupo titulo="Volume">
-            <Segmentado
-              valor={o.volume}
-              aoMudar={(v) => mudar({ volume: v })}
-              opcoes={[
-                { valor: 'manter', rotulo: 'Original' },
-                { valor: 'ganho', rotulo: 'Ajustar' },
-                { valor: 'normalizar', rotulo: 'Normalizar' },
-              ]}
-              dica={o.volume === 'normalizar' ? 'Padrão de streaming (−14 LUFS): volume igual entre faixas, sem distorcer.' : undefined}
-            />
-            {o.volume === 'ganho' ? <Deslizante className="mt-3" rotulo="Ganho" valor={o.ganho} aoMudar={(v) => mudar({ ganho: v })} min={-20} max={20} formatar={(v) => `${v > 0 ? '+' : ''}${v} dB`} /> : null}
-          </Grupo>
-
-          <Grupo titulo="Entrada e saída suaves">
-            <div className="flex flex-col gap-4">
-              <Deslizante rotulo="Entrada suave (fade in)" valor={Math.min(o.fadeIn, maxFade)} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
-              <Deslizante rotulo="Saída suave (fade out)" valor={Math.min(o.fadeOut, maxFade)} aoMudar={(v) => mudar({ fadeOut: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
-            </div>
-          </Grupo>
-
-          <Grupo titulo="Silêncio">
-            <Caixa rotulo="Remover silêncio" dica="Os trechos que saem aparecem apagados na onda e são pulados na prévia." marcado={o.silencio} aoMudar={(v) => mudar({ silencio: v })} />
-            {o.silencio ? (
-              <div className="mt-3 flex flex-col gap-3">
-                <Segmentado
-                  valor={o.silencioOnde}
-                  aoMudar={(v) => mudar({ silencioOnde: v })}
-                  opcoes={[
-                    { valor: 'pontas', rotulo: 'Início e fim' },
-                    { valor: 'tudo', rotulo: 'Todas as pausas' },
-                  ]}
-                />
-                <Deslizante rotulo="O que conta como silêncio" valor={o.limiar} aoMudar={(v) => mudar({ limiar: v })} min={-70} max={-20} formatar={(v) => `abaixo de ${v} dB`} />
-              </div>
-            ) : null}
-          </Grupo>
-
-          <Grupo titulo="Arquivo final">
-            <div className="flex flex-col gap-4">
-              <FormatoAudio valor={o.formato} aoMudar={(v) => mudar({ formato: v })} />
-              <Bitrate valor={o.bitrate} aoMudar={(v) => mudar({ bitrate: v })} formato={o.formato} />
-            </div>
-          </Grupo>
         </div>
+      </section>
 
-        {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
-        {processando ? (
-          <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
-        ) : (
-          <Botao tamanho="g" className="w-full" icone="baixar" onClick={exportar} disabled={!analise}>
-            Aplicar e baixar
-          </Botao>
-        )}
-      </aside>
+      {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
+
+      {/* Ajustes: tudo o que muda aqui já toca no player */}
+      <section aria-label="Ajustes" className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-4 ${processando ? 'pointer-events-none opacity-60' : ''}`} inert={processando ? true : undefined}>
+        <Painel>
+          <Velocidade valor={o.velocidade} aoMudar={(v) => mudar({ velocidade: v })} />
+          {o.velocidade !== 1 ? <Caixa rotulo="Mudar tom" marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} /> : null}
+        </Painel>
+
+        <Painel titulo="Volume">
+          <Segmentado
+            valor={o.volume}
+            aoMudar={(v) => mudar({ volume: v })}
+            opcoes={[
+              { valor: 'manter', rotulo: 'Original' },
+              { valor: 'ganho', rotulo: 'Ajustar' },
+              { valor: 'normalizar', rotulo: 'Normalizar' },
+            ]}
+            dica={o.volume === 'normalizar' ? 'Volume padrão de streaming, sem distorcer.' : undefined}
+          />
+          {o.volume === 'ganho' ? <Deslizante rotulo="Ganho" valor={o.ganho} aoMudar={(v) => mudar({ ganho: v })} min={-20} max={20} formatar={(v) => `${v > 0 ? '+' : ''}${v} dB`} /> : null}
+        </Painel>
+
+        <Painel titulo="Entrada e saída suaves">
+          <Deslizante rotulo="Entrada (fade in)" valor={Math.min(o.fadeIn, maxFade)} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+          <Deslizante rotulo="Saída (fade out)" valor={Math.min(o.fadeOut, maxFade)} aoMudar={(v) => mudar({ fadeOut: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+        </Painel>
+
+        <Painel titulo="Silêncio">
+          <Caixa rotulo="Remover silêncio" marcado={o.silencio} aoMudar={(v) => mudar({ silencio: v })} />
+          {o.silencio ? (
+            <>
+              <Segmentado
+                valor={o.silencioOnde}
+                aoMudar={(v) => mudar({ silencioOnde: v })}
+                opcoes={[
+                  { valor: 'pontas', rotulo: 'Início e fim' },
+                  { valor: 'tudo', rotulo: 'Todas as pausas' },
+                ]}
+              />
+              <Deslizante rotulo="Conta como silêncio" valor={o.limiar} aoMudar={(v) => mudar({ limiar: v })} min={-70} max={-20} formatar={(v) => `abaixo de ${v} dB`} />
+            </>
+          ) : (
+            <p className="text-xs text-fraca">Os trechos removidos aparecem apagados na onda e são pulados ao ouvir.</p>
+          )}
+        </Painel>
+      </section>
+
+      <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fraca">
+        <span className="size-1.5 rounded-full bg-sucesso" />
+        Tudo o que você ajusta já toca no player. Arraste na onda para percorrer; para cortar, use as alças azuis. Atalhos: espaço toca/pausa · I e O marcam início e fim · setas andam 1 s · Ctrl+Z desfaz.
+      </p>
+
+      {/* Elemento de áudio sem controles: quem manda é o player acima. */}
+      <audio
+        ref={audio}
+        src={url ?? undefined}
+        preload="auto"
+        className="hidden"
+        onPlay={() => {
+          setTocando(true)
+          cancelAnimationFrame(quadro.current)
+          quadro.current = requestAnimationFrame(laco)
+        }}
+        onPause={() => {
+          setTocando(false)
+          cancelAnimationFrame(quadro.current)
+          mostrar(audio.current?.currentTime ?? 0)
+        }}
+        onEnded={(e) => {
+          // O arquivo acabou antes de o laço ver o fim do trecho (trecho até o final).
+          const el = e.currentTarget
+          const { o: oo, repetir: rep } = atual.current
+          el.currentTime = oo.inicio
+          dentro.current = true
+          if (rep) el.play().catch(() => {})
+          else setTocando(false)
+        }}
+        onSeeked={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
+      />
     </div>
   )
 }
