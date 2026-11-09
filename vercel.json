@@ -49,6 +49,46 @@
       "source": "/documentos/converter",
       "destination": "/converter",
       "permanent": true
+    },
+    {
+      "source": "/video",
+      "destination": "/#video",
+      "permanent": true
+    },
+    {
+      "source": "/audio",
+      "destination": "/#audio",
+      "permanent": true
+    },
+    {
+      "source": "/imagem",
+      "destination": "/#imagem",
+      "permanent": true
+    },
+    {
+      "source": "/pdf",
+      "destination": "/#pdf",
+      "permanent": true
+    },
+    {
+      "source": "/documentos",
+      "destination": "/#documentos",
+      "permanent": true
+    },
+    {
+      "source": "/compactados",
+      "destination": "/#compactados",
+      "permanent": true
+    },
+    {
+      "source": "/utilitarios",
+      "destination": "/#utilitarios",
+      "permanent": true
+    },
+    {
+      "source": "/audio/juntar",
+      "destination": "/audio/juntar-dividir",
+      "permanent": true
     }
   ],
   "headers": [
@@ -88,7 +128,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+          "value": "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
         },
         {
           "key": "Content-Security-Policy",

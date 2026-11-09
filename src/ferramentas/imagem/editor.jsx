@@ -9,6 +9,7 @@ import { trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useEmEdicao } from '../../nucleo/edicao'
 
 /* ─── Dados ──────────────────────────────────────────────────────────────── */
 
@@ -400,6 +401,7 @@ function resumo(o) {
 export default function EditorImagem() {
   const [arquivos, setArquivos] = useState([])
   const [selecionado, setSelecionado] = useState(0)
+  useEmEdicao(arquivos.length > 0)
   const [o, setO] = useState(INICIAL)
   const [aba, setAba] = useState('recortar')
   const [nat, setNat] = useState(null)

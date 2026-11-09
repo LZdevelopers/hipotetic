@@ -200,6 +200,7 @@ export default [
       const [r] = await t.js('return await __t.resultados()')
       assert.equal(r.tipo, 'mp3')
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.15, 'duração')
+      await guardar(t, 'mp3')
     },
   },
   {
@@ -262,7 +263,7 @@ export default [
   },
   {
     nome: 'audio/juntar: 2 + 1 s com 1 s de pausa = 4 s',
-    pagina: '/audio/juntar',
+    pagina: '/audio/juntar-dividir',
     async executar(t) {
       await enviar(t, `[__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'a.wav'), __t.arquivo(__t.wav([{ s: 1, hz: 660 }]), 'b.wav')]`)
       await t.js(`__t.digitar('Entre as faixas', 'pausa1')`)
@@ -329,6 +330,99 @@ export default [
       await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração do trecho')
+    },
+  },
+  // ─── Áudio: ferramentas novas ─────────────────────────────────────────────
+  {
+    nome: 'audio/gravador: grava do microfone, pausa e salva em MP3',
+    pagina: '/audio/gravador',
+    async executar(t) {
+      await t.js("window.__baixados = []; const __orig = URL.createObjectURL.bind(URL); URL.createObjectURL = (b) => { if (b instanceof Blob) window.__baixados.push(b); return __orig(b) }")
+      await t.js("document.querySelector('main button[aria-label=Gravar]').click()")
+      await t.aguardar("document.querySelector('main button[aria-label=Parar]')", 10000)
+      await t.esperar(1000)
+      await t.js("document.querySelector('main button[aria-label=Pausar]').click()")
+      await t.esperar(700)
+      await t.js("document.querySelector('main button[aria-label=Continuar]').click()")
+      await t.esperar(800)
+      await t.js("document.querySelector('main button[aria-label=Parar]').click()")
+      await t.aguardar("document.querySelector('main section[aria-label=Gravações]')", 10000)
+      await t.clicar('Baixar MP3')
+      await t.aguardar("window.__baixados.some((b) => b.type === 'audio/mpeg')", 60000)
+      const r = await t.js(`const b = window.__baixados.find((x) => x.type === 'audio/mpeg'); const u = new Uint8Array(await b.slice(0, 3).arrayBuffer())
+        const a = new Audio(URL.createObjectURL(b)); await new Promise((ok) => (a.onloadedmetadata = ok)); return [String.fromCharCode(...u), a.duration]`)
+      assert.ok(r[0] === 'ID3' || r[0].charCodeAt(0) === 0xff, 'deveria ser MP3')
+      perto(r[1], 1.8, 0.5, 'duração sem a pausa')
+      // "Editar" leva a gravação para o editor de áudio.
+      await t.clicar('Editar')
+      await t.aguardar("location.pathname === '/audio/editor' && document.querySelector('main canvas')", 20000)
+    },
+  },
+  {
+    nome: 'audio/melhorar-voz: prévia antes/depois e áudio limpo em MP3',
+    pagina: '/audio/melhorar-voz',
+    async executar(t) {
+      await t.js(`__t.enviar(${`[__t.arquivo(__t.wav([{ s: 3, hz: 330 }]), 'fala.wav')]`})`)
+      await t.clicar('Gerar prévia')
+      await t.aguardar("[...document.querySelectorAll('main [role=radio]')].some((b) => b.textContent.trim() === 'Antes')", 60000)
+      await escolher(t, 'mp3')
+      await t.clicar('Limpar e baixar')
+      await t.aguardarResultado(120000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, 'mp3')
+      assert.equal(r.nome, 'fala-voz-limpa.mp3')
+      perto((await t.js('return await __t.midia()')).duracao, 3, 0.2, 'duração')
+    },
+  },
+  {
+    nome: 'audio/melhorar-voz: vídeo mantém a imagem e limpa o som',
+    pagina: '/audio/melhorar-voz',
+    async executar(t) {
+      await t.js(`__t.enviar(${`[${usar('mp4')}]`})`)
+      await t.clicar('Limpar e baixar')
+      await t.aguardarResultado(180000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, 'mp4')
+      assert.ok(r.nome.endsWith('-voz-limpa.mp4'), r.nome)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      assert.ok(temTrilhaDeAudio(await bytes(t)), 'deveria ter áudio')
+    },
+  },
+  {
+    nome: 'audio/tags: grava título, artista e capa no MP3 e lê de volta',
+    pagina: '/audio/tags',
+    async executar(t) {
+      await t.js(`__t.enviar(${`[${usar('mp3')}]`})`)
+      await t.aguardar("[...document.querySelectorAll('main label')].some((l) => l.textContent.trim() === 'Título')", 60000)
+      await t.js("__t.digitar('Título', 'Faixa de teste')")
+      await t.js("__t.digitar('Artista', 'Banda X')")
+      await t.js("__t.digitar('Ano', '2024')")
+      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(300, 300), 'capa.png')], 'main input[aria-label="Imagem da capa"]')`)
+      await t.aguardar("document.querySelector('main img[alt=Capa]')?.naturalWidth > 0", 10000)
+      await t.clicar('Salvar e baixar')
+      await t.aguardarResultado(60000)
+      const b = Buffer.from(await bytes(t))
+      assert.equal(b.subarray(0, 3).toString(), 'ID3')
+      assert.ok(b.includes('Faixa de teste') && b.includes('Banda X') && b.includes('APIC'), 'tags ou capa ausentes')
+      // Abre o resultado de novo: os campos e a capa voltam preenchidos.
+      const b64 = b.toString('base64')
+      await t.clicar('Outro arquivo')
+      await t.js(`__t.enviar(${`[new File([Uint8Array.from(atob('${b64}'), (c) => c.charCodeAt(0))], 'com-tags.mp3', { type: 'audio/mpeg' })]`})`)
+      await t.aguardar("[...document.querySelectorAll('main input')].some((i) => i.value === 'Faixa de teste')", 60000)
+      await t.aguardar("document.querySelector('main img[alt=Capa]')?.naturalWidth === 300", 10000)
+    },
+  },
+  {
+    nome: 'audio/juntar-dividir: dividir nas pausas gera 3 partes',
+    pagina: '/audio/juntar-dividir',
+    async executar(t) {
+      await t.clicar('Dividir')
+      await enviar(t, `[__t.arquivo(__t.wav([{ s: 1, hz: 440 }, { s: 2, hz: 0 }, { s: 1, hz: 550 }, { s: 2, hz: 0 }, { s: 1, hz: 660 }]), 'tres-faixas.wav')]`)
+      await t.clicar('Dividir áudio')
+      await t.aguardarResultado(60000)
+      const rs = await t.js('return await __t.resultados()')
+      assert.deepEqual(rs.map((r) => r.nome), ['tres-faixas-parte-01.wav', 'tres-faixas-parte-02.wav', 'tres-faixas-parte-03.wav'])
     },
   },
 ]

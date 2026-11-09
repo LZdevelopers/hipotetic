@@ -1,9 +1,10 @@
-import { Component, Suspense, useEffect } from 'react'
-import { GradeFerramentas } from '../componentes/CartaoFerramenta'
+import { Component, Suspense, useEffect, useState } from 'react'
+import { Pilulas } from '../componentes/ListaFerramentas'
 import { Icone } from '../componentes/Icone'
 import { Aviso, Botao, SeloCategoria } from '../componentes/ui'
-import { categoriaDa, corDa, ferramentasDaCategoria } from '../ferramentas/catalogo'
+import { categoriaDa, corDa, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
 import { ComponenteFerramenta } from '../ferramentas/carregador'
+import { ContextoEdicao } from '../nucleo/edicao'
 import { registrarUso } from '../nucleo/preferencias'
 import { Link } from '../nucleo/roteador'
 import { textos } from '../textos'
@@ -49,9 +50,11 @@ function Carregando() {
 
 export function Ferramenta({ ferramenta }) {
   const categoria = categoriaDa(ferramenta)
-  const relacionadas = (categoria ? ferramentasDaCategoria(categoria.id) : [])
+  // Mesma categoria; o conversor (sem categoria) mostra as mais usadas.
+  const relacionadas = (categoria ? ferramentasDaCategoria(categoria.id) : populares())
     .filter((f) => f.slug !== ferramenta.slug && f.modulo !== ferramenta.modulo)
-    .slice(0, 6)
+    .slice(0, 8)
+  const [emEdicao, setEmEdicao] = useState(false)
 
   useEffect(() => registrarUso(ferramenta.slug), [ferramenta.slug])
 
@@ -68,7 +71,7 @@ export function Ferramenta({ ferramenta }) {
             <>
               <li aria-hidden="true">/</li>
               <li>
-                <Link para={`/${categoria.id}`} className="hover:text-tinta">
+                <Link para={`/#${categoria.id}`} className="hover:text-tinta">
                   {categoria.nome}
                 </Link>
               </li>
@@ -100,57 +103,39 @@ export function Ferramenta({ ferramenta }) {
       </header>
 
       <LimiteErro key={ferramenta.slug}>
-        <Suspense fallback={<Carregando />}>
-          <ComponenteFerramenta ferramenta={ferramenta} />
-        </Suspense>
+        <ContextoEdicao.Provider value={setEmEdicao}>
+          <Suspense fallback={<Carregando />}>
+            <ComponenteFerramenta ferramenta={ferramenta} />
+          </Suspense>
+        </ContextoEdicao.Provider>
       </LimiteErro>
 
-      {!ferramenta.enxuta && (ferramenta.passos?.length || ferramenta.perguntas?.length) ? (
-        <div className="mt-20 grid gap-12 lg:grid-cols-2">
-          {ferramenta.passos?.length ? (
-            <section aria-labelledby="titulo-passos">
-              <h2 id="titulo-passos" className="text-xl">
-                {textos.comoUsar}
-              </h2>
-              <ol className="mt-5 flex flex-col gap-4">
-                {ferramenta.passos.map((p, i) => (
-                  <li key={i} className="flex gap-3.5">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full border border-borda-forte text-xs font-bold text-tinta tabular-nums">
-                      {i + 1}
-                    </span>
-                    <p className="pt-0.5 text-sm text-suave">{p}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
-          {ferramenta.perguntas?.length ? (
-            <section aria-labelledby="titulo-perguntas">
-              <h2 id="titulo-perguntas" className="text-xl">
-                {textos.perguntas}
-              </h2>
-              <div className="mt-5 divide-y divide-borda border-y border-borda">
-                {ferramenta.perguntas.map((q) => (
-                  <details key={q.p} className="group py-1">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm font-semibold text-tinta [&::-webkit-details-marker]:hidden">
-                      {q.p}
-                      <Icone nome="setaBaixo" tamanho={16} className="text-fraca transition-transform group-open:rotate-180" />
-                    </summary>
-                    <p className="pb-4 text-sm text-suave">{q.r}</p>
-                  </details>
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </div>
+      {/* Antes de começar (ou fora dos editores): perguntas e ferramentas relacionadas. Editando: só a ferramenta. */}
+      {!emEdicao && ferramenta.perguntas?.length ? (
+        <section aria-labelledby="titulo-perguntas" className="mt-20 max-w-3xl">
+          <h2 id="titulo-perguntas" className="text-xl">
+            {textos.perguntas}
+          </h2>
+          <div className="mt-5 divide-y divide-borda border-y border-borda">
+            {ferramenta.perguntas.map((q) => (
+              <details key={q.p} className="group py-1">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm font-semibold text-tinta [&::-webkit-details-marker]:hidden">
+                  {q.p}
+                  <Icone nome="setaBaixo" tamanho={16} className="text-fraca transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="pb-4 text-sm text-suave">{q.r}</p>
+              </details>
+            ))}
+          </div>
+        </section>
       ) : null}
 
-      {!ferramenta.enxuta && relacionadas.length ? (
-        <section aria-labelledby="titulo-relacionadas" className="mt-20">
+      {!emEdicao && relacionadas.length ? (
+        <section aria-labelledby="titulo-relacionadas" className="mt-16">
           <h2 id="titulo-relacionadas" className="mb-4 text-xl">
             {textos.relacionadas}
           </h2>
-          <GradeFerramentas lista={relacionadas} />
+          <Pilulas lista={relacionadas} />
         </section>
       ) : null}
     </div>

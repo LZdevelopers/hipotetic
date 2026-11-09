@@ -9,6 +9,7 @@ import { trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo } from '../imagem/_comum'
 import { DialogoAssinatura } from './_assinatura'
+import { useEmEdicao } from '../../nucleo/edicao'
 
 const FERRAMENTAS = [
   { id: 'selecionar', rotulo: 'Selecionar', icone: 'selecao' },
@@ -120,6 +121,7 @@ function Pagina({ doc, numero, largura, escala, elementos, selecionado, ferramen
 }
 
 function Editor({ arquivo, aoTrocar, inicial }) {
+  useEmEdicao()
   const [doc, setDoc] = useState(null)
   const [tamanhos, setTamanhos] = useState([])
   const [erro, setErro] = useState(null)

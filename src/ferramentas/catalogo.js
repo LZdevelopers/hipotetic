@@ -20,10 +20,7 @@
  *   servidor   true quando o arquivo vai ao servidor (a página avisa)
  *   servidorDetalhe  o que exatamente passa pelo servidor (opcional)
  *   popular    aparece em "Mais usadas" na página inicial
- *   passos     "Como usar" da página (3 passos curtos)
  *   perguntas  perguntas frequentes da página [{ p, r }]
- *   enxuta     true = página só com a ferramenta (sem "Como usar", perguntas e relacionadas),
- *              para editores que precisam da tela inteira
  *   requer     recurso de infraestrutura necessário (ex.: 'documentos' = serviço
  *              LibreOffice). Sem o recurso ativo no build, a ferramenta NÃO aparece.
  */
@@ -102,11 +99,6 @@ const TODAS = [
     ],
     icone: 'substituir',
     popular: true,
-    passos: [
-      'Solte os arquivos (ou clique em Escolher arquivos). Pode misturar tipos.',
-      'Em cada arquivo, escolha para qual formato converter: só aparecem os que funcionam para ele.',
-      'Clique em Converter e baixe um a um ou tudo em ZIP.',
-    ],
     perguntas: [
       { p: 'Meus arquivos são enviados para algum servidor?', r: 'Vídeos, áudios, imagens, PDFs e compactados são convertidos no seu próprio aparelho e não saem dele. Só documentos (DOCX, ODT, RTF…) vão ao nosso servidor, onde o LibreOffice converte e apaga o arquivo na hora.' },
       { p: 'Quais formatos posso converter?', r: 'Vídeo (MP4, MOV, MKV, WebM, AVI, GIF…), áudio (MP3, WAV, M4A, FLAC, OGG, OPUS…), imagem (JPG, PNG, WebP, AVIF, SVG, GIF…), PDF (para imagem ou texto), documentos (DOCX, ODT, RTF, Markdown) e compactados (ZIP, RAR, 7Z, TAR).' },
@@ -126,11 +118,6 @@ const TODAS = [
     servidor: true,
     servidorDetalhe: 'O link passa pelo nosso servidor para buscar o vídeo. Nada fica guardado.',
     popular: true,
-    passos: [
-      'Copie o link do vídeo no app ou no navegador (Compartilhar → Copiar link).',
-      'Cole aqui: a plataforma é reconhecida sozinha e as qualidades aparecem.',
-      'Escolha vídeo ou só o áudio e a qualidade, e baixe.',
-    ],
     perguntas: [
       { p: 'O vídeo do TikTok sai sem marca d’água?', r: 'Sim. Baixamos o arquivo original, sem a marca d’água e sem o @ do app.' },
       { p: 'Posso usar o que eu baixar como quiser?', r: 'Não necessariamente. Direitos autorais continuam valendo: baixe seus próprios vídeos ou conteúdo que o autor permite usar.' },
@@ -146,7 +133,6 @@ const TODAS = [
     termos: ['comprimir', 'reduzir', 'diminuir', 'tamanho', 'mb', 'whatsapp', 'email', 'pesado'],
     icone: 'comprimir',
     popular: true,
-    passos: ['Escolha o vídeo.', 'Escolha o nível ou o tamanho máximo em MB.', 'Comprima e compare os tamanhos.'],
   },
   {
     slug: 'video/editor',
@@ -158,7 +144,6 @@ const TODAS = [
     termos: ['editar', 'cortar', 'aparar', 'trecho', 'girar', 'proporção', 'vertical', '9:16', 'reels', 'velocidade', 'câmera lenta', 'silenciar', 'sem som', 'música', 'trilha', 'adicionar áudio'],
     icone: 'filme',
     popular: true,
-    passos: ['Escolha o vídeo.', 'Ajuste o trecho, a proporção, o giro, a velocidade e o som, vendo a prévia.', 'Exporte e baixe.'],
   },
   {
     slug: 'video/juntar-dividir',
@@ -169,7 +154,6 @@ const TODAS = [
     descricao: 'Junte vários vídeos em um, mesmo de tamanhos diferentes, ou divida um vídeo em partes iguais, a cada X segundos ou em tempos escolhidos.',
     termos: ['juntar', 'unir', 'mesclar', 'emendar', 'dividir', 'separar', 'partes', 'stories', 'segmentar'],
     icone: 'unir',
-    passos: ['Escolha juntar ou dividir.', 'Adicione os vídeos e ajuste.', 'Gere e baixe.'],
   },
 
   // ─── Áudio ────────────────────────────────────────────────────────────────
@@ -183,18 +167,47 @@ const TODAS = [
     termos: ['cortar', 'aparar', 'toque', 'ringtone', 'fade', 'volume', 'normalizar', 'silêncio', 'velocidade', 'acelerar', 'podcast'],
     icone: 'onda',
     popular: true,
-    enxuta: true,
   },
   {
-    slug: 'audio/juntar',
-    modulo: 'audio/unir',
-    nome: 'Juntar áudios',
-    titulo: 'Juntar áudios e músicas em um arquivo',
-    resumo: 'Una faixas com pausa ou transição suave.',
-    descricao: 'Junte várias músicas ou gravações em um arquivo, emendando direto, com pausa ou com transição suave (crossfade). Grátis e no navegador.',
-    termos: ['juntar', 'unir', 'mesclar', 'mixar', 'emendar', 'crossfade', 'playlist'],
+    slug: 'audio/gravador',
+    modulo: 'audio/gravador',
+    nome: 'Gravador de voz',
+    titulo: 'Gravador de voz online',
+    resumo: 'Grave do microfone com redução de ruído e baixe em MP3.',
+    descricao: 'Grave sua voz pelo microfone com redução de ruído e de eco, pause quando quiser e baixe em MP3, WAV ou M4A. Grátis, sem cadastro e sem enviar nada.',
+    termos: ['gravar', 'gravador', 'microfone', 'voz', 'narração', 'podcast', 'áudio', 'mp3', 'memo', 'nota de voz'],
+    icone: 'microfone',
+    popular: true,
+  },
+  {
+    slug: 'audio/melhorar-voz',
+    modulo: 'audio/melhorar-voz',
+    nome: 'Limpar e melhorar voz',
+    titulo: 'Remover ruído e melhorar a voz de áudios e vídeos',
+    resumo: 'Tire chiado e zumbido, deixe a voz clara e no volume certo.',
+    descricao: 'Remova ruído de fundo, chiado e zumbido, deixe a voz mais clara e o volume no padrão de podcasts. Compare antes e depois. Funciona com áudio e vídeo.',
+    termos: ['ruído', 'chiado', 'barulho', 'zumbido', 'limpar', 'melhorar', 'voz', 'podcast', 'aula', 'redução de ruído', 'noise', 'volume', 'loudness', 'lufs'],
+    icone: 'magica',
+  },
+  {
+    slug: 'audio/juntar-dividir',
+    modulo: 'audio/juntar-dividir',
+    nome: 'Juntar e dividir',
+    titulo: 'Juntar áudios ou dividir um áudio em partes',
+    resumo: 'Una faixas, ou divida nas pausas, por tempo ou em partes iguais.',
+    descricao: 'Junte músicas e gravações com pausa ou transição suave, ou divida um áudio longo nas pausas, a cada X minutos ou em partes iguais, sem perder qualidade.',
+    termos: ['juntar', 'unir', 'mesclar', 'emendar', 'crossfade', 'dividir', 'separar', 'cortar em partes', 'faixas', 'pausas', 'audiobook'],
     icone: 'unir',
-    passos: ['Adicione os áudios e ordene.', 'Escolha a transição e o formato.', 'Junte e baixe.'],
+  },
+  {
+    slug: 'audio/tags',
+    modulo: 'audio/tags',
+    nome: 'Tags e capa',
+    titulo: 'Editar tags de música: título, artista, álbum e capa',
+    resumo: 'Título, artista, álbum, ano e capa de MP3, M4A e FLAC.',
+    descricao: 'Edite as tags de músicas MP3, M4A, FLAC e OGG: título, artista, álbum, ano, faixa, gênero e capa do álbum, sem recomprimir o áudio.',
+    termos: ['tags', 'id3', 'metadados', 'capa', 'álbum', 'artista', 'título', 'mp3tag', 'música', 'informações'],
+    icone: 'musica',
   },
 
   // ─── Imagens ──────────────────────────────────────────────────────────────
@@ -208,7 +221,6 @@ const TODAS = [
     termos: ['comprimir', 'compactar', 'reduzir', 'diminuir', 'otimizar', 'peso', 'kb', 'tamanho', 'tinypng'],
     icone: 'comprimir',
     popular: true,
-    passos: ['Arraste as imagens.', 'Escolha o nível de compressão e, se quiser, reduza as dimensões.', 'Compare os tamanhos e baixe.'],
   },
   {
     slug: 'imagem/editor',
@@ -220,7 +232,6 @@ const TODAS = [
     termos: ['editar', 'recortar', 'cortar', 'crop', 'girar', 'espelhar', 'redimensionar', 'resize', 'tamanho', 'instagram', 'redes sociais', 'brilho', 'contraste', 'filtro', 'preto e branco'],
     icone: 'ajustar',
     popular: true,
-    passos: ['Escolha uma ou várias imagens.', 'Use as abas: recortar, girar, tamanho, cores e formato de saída.', 'Aplique e baixe.'],
   },
   {
     slug: 'imagem/metadados',
@@ -231,7 +242,6 @@ const TODAS = [
     descricao: 'Veja formato, dimensões e os metadados EXIF de fotos (câmera, data, localização GPS) e remova tudo sem recomprimir a imagem.',
     termos: ['metadados', 'exif', 'gps', 'localização', 'privacidade', 'informações', 'câmera', 'remover exif', 'propriedades'],
     icone: 'info',
-    passos: ['Escolha as fotos.', 'Veja o que cada uma revela.', 'Remova os metadados e baixe.'],
   },
   {
     slug: 'imagem/favicon',
@@ -242,7 +252,6 @@ const TODAS = [
     descricao: 'Gere favicon.ico, ícones PNG, apple-touch-icon e site.webmanifest a partir de uma imagem ou SVG, com o código HTML pronto.',
     termos: ['favicon', 'ico', 'ícone', 'site', 'apple touch', 'manifest', 'pwa'],
     icone: 'moldura',
-    passos: ['Escolha o logo (de preferência quadrado ou SVG).', 'Ajuste fundo, margem e cantos.', 'Baixe o ZIP e cole o código no <head>.'],
   },
   {
     slug: 'imagem/miniatura',
@@ -253,7 +262,6 @@ const TODAS = [
     descricao: 'Crie miniaturas (thumbnails) para YouTube e redes a partir de uma imagem ou de um quadro de vídeo, com título opcional.',
     termos: ['thumbnail', 'miniatura', 'capa', 'youtube', 'quadro', 'frame', 'poster'],
     icone: 'imagemBaixar',
-    passos: ['Escolha uma imagem ou um vídeo.', 'Escolha o quadro e, se quiser, um título.', 'Gere e baixe.'],
   },
   {
     slug: 'imagem/cores',
@@ -264,7 +272,6 @@ const TODAS = [
     descricao: 'Descubra as cores predominantes de uma imagem e pegue cores com conta-gotas. Copie em HEX, RGB, HSL, CSS ou JSON.',
     termos: ['cores', 'paleta', 'hex', 'rgb', 'hsl', 'conta-gotas', 'color picker'],
     icone: 'paleta',
-    passos: ['Escolha a imagem.', 'Veja as cores e clique na imagem para pegar uma cor exata.', 'Copie no formato que precisar.'],
   },
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
@@ -278,7 +285,6 @@ const TODAS = [
     termos: ['unir', 'juntar', 'mesclar', 'combinar', 'merge', 'agrupar'],
     icone: 'unir',
     popular: true,
-    passos: ['Adicione os PDFs.', 'Ordene a lista.', 'Una e baixe.'],
   },
   {
     slug: 'pdf/dividir',
@@ -290,7 +296,6 @@ const TODAS = [
     termos: ['dividir', 'separar', 'split', 'extrair páginas', 'partes', 'selecionar páginas'],
     icone: 'dividir',
     popular: true,
-    passos: ['Escolha o PDF.', 'Escolha como dividir ou quais páginas extrair.', 'Baixe as partes.'],
   },
   {
     slug: 'pdf/organizar',
@@ -302,7 +307,6 @@ const TODAS = [
     termos: ['organizar', 'reordenar', 'girar', 'rotacionar', 'excluir páginas', 'apagar páginas', 'duplicar', 'adicionar páginas', 'mover'],
     icone: 'galeria',
     popular: true,
-    passos: ['Escolha o PDF.', 'Arraste, gire, duplique ou exclua as páginas.', 'Salve o PDF.'],
   },
   {
     slug: 'pdf/editar',
@@ -314,7 +318,6 @@ const TODAS = [
     termos: ['editar', 'assinar', 'assinatura', 'escrever', 'preencher', 'anotar', 'destacar', 'imagem', 'nota', 'rubrica'],
     icone: 'assinatura',
     popular: true,
-    passos: ['Escolha o PDF.', 'Escolha a ferramenta e clique onde quer colocar.', 'Ajuste e salve.'],
     perguntas: [{ p: 'É uma assinatura digital com certificado?', r: 'Não. É a imagem da sua assinatura no documento, como assinar no papel. Assinaturas com certificado (ICP-Brasil) exigem um certificado próprio.' }],
   },
   {
@@ -327,7 +330,6 @@ const TODAS = [
     termos: ['comprimir', 'compactar', 'reduzir', 'diminuir', 'otimizar', 'pesado', 'mb', 'email'],
     icone: 'comprimir',
     popular: true,
-    passos: ['Escolha o PDF.', 'Escolha o nível de compressão.', 'Compare os tamanhos e baixe.'],
   },
   {
     slug: 'pdf/ocr',
@@ -338,7 +340,6 @@ const TODAS = [
     descricao: 'Reconheça o texto de PDFs digitalizados e fotos de documentos e gere um PDF pesquisável ou um .txt. OCR em português, no navegador.',
     termos: ['ocr', 'reconhecer texto', 'digitalizado', 'escaneado', 'pesquisável', 'foto de documento', 'imagem para texto'],
     icone: 'ocr',
-    passos: ['Escolha o PDF digitalizado ou a foto.', 'Escolha o idioma.', 'Baixe o PDF pesquisável ou o texto.'],
   },
   {
     slug: 'pdf/numerar-marca-dagua',
@@ -349,7 +350,6 @@ const TODAS = [
     descricao: 'Numere as páginas do PDF no canto e formato que quiser, ou coloque uma marca d’água de texto ou imagem em todas as páginas.',
     termos: ['numerar', 'números de página', 'paginação', 'marca d’água', 'marca dagua', 'watermark', 'carimbo', 'confidencial'],
     icone: 'carimbo',
-    passos: ['Escolha numerar ou marca d’água.', 'Escolha o PDF e ajuste.', 'Baixe.'],
   },
   {
     slug: 'pdf/senha',
@@ -360,7 +360,6 @@ const TODAS = [
     descricao: 'Proteja um PDF com senha AES-256 e permissões, ou remova a senha de um PDF que você tem autorização para abrir.',
     termos: ['senha', 'proteger', 'criptografar', 'bloquear', 'desbloquear', 'remover senha', 'tirar senha'],
     icone: 'pdfCadeado',
-    passos: ['Escolha colocar ou remover a senha.', 'Escolha o PDF e digite a senha.', 'Baixe.'],
   },
   {
     slug: 'pdf/comparar',
@@ -371,7 +370,6 @@ const TODAS = [
     descricao: 'Compare duas versões de um PDF: o texto que entrou e saiu, página a página, e as diferenças visuais destacadas.',
     termos: ['comparar', 'diferença', 'diff', 'versões', 'alterações', 'revisão'],
     icone: 'comparar',
-    passos: ['Escolha o original e a nova versão.', 'Compare.', 'Veja as diferenças página a página.'],
   },
   {
     slug: 'pdf/metadados',
@@ -382,7 +380,6 @@ const TODAS = [
     descricao: 'Veja as informações de um PDF (páginas, papel, versão, datas), edite título e autor ou remova todos os metadados.',
     termos: ['metadados', 'propriedades', 'informações', 'autor', 'título', 'remover metadados', 'xmp'],
     icone: 'info',
-    passos: ['Escolha o PDF.', 'Veja e edite as informações.', 'Salve ou remova tudo.'],
   },
 
   // ─── Documentos ───────────────────────────────────────────────────────────
@@ -395,7 +392,6 @@ const TODAS = [
     descricao: 'Abra e leia documentos DOCX com a formatação, além de ODT, RTF, HTML e TXT, sem instalar o Word nem enviar o arquivo.',
     termos: ['abrir', 'visualizar', 'ler', 'docx', 'word', 'sem word', 'odt', 'rtf'],
     icone: 'ver',
-    passos: ['Escolha o documento.', 'Leia direto na página.', 'Abra outro quando quiser.'],
   },
   {
     slug: 'documentos/texto',
@@ -407,7 +403,6 @@ const TODAS = [
     termos: ['texto', 'extrair texto', 'txt', 'contar palavras', 'contador', 'caracteres', 'tcc', 'redação', 'tempo de leitura'],
     icone: 'texto',
     popular: true,
-    passos: ['Escolha um documento ou cole o texto.', 'Veja as contagens.', 'Copie ou baixe o texto.'],
   },
   {
     slug: 'documentos/metadados',
@@ -418,7 +413,6 @@ const TODAS = [
     descricao: 'Veja quem criou e editou um DOCX ou ODT, a empresa, as datas e o tempo de edição, e remova esses dados sem mexer no conteúdo.',
     termos: ['metadados', 'autor', 'propriedades', 'remover autor', 'privacidade', 'docx', 'odt'],
     icone: 'borracha',
-    passos: ['Escolha o DOCX ou ODT.', 'Veja os metadados.', 'Remova e baixe.'],
   },
   {
     slug: 'documentos/markdown',
@@ -429,7 +423,6 @@ const TODAS = [
     descricao: 'Escreva ou abra Markdown e gere HTML limpo, com prévia ao vivo, tabelas e estilo opcional. Salve também como PDF.',
     termos: ['markdown', 'md', 'html', 'readme', 'md para html', 'md para pdf'],
     icone: 'arquivoCodigo',
-    passos: ['Escreva ou abra um .md.', 'Confira a prévia.', 'Baixe o HTML ou salve como PDF.'],
   },
 
   // ─── Compactados ──────────────────────────────────────────────────────────
@@ -443,7 +436,6 @@ const TODAS = [
     termos: ['compactar', 'zipar', 'zip', '7z', 'tar', 'gz', 'pasta', 'senha', 'criar zip'],
     icone: 'pastaCompactada',
     popular: true,
-    passos: ['Adicione os arquivos ou uma pasta.', 'Escolha o formato, o nível e, se quiser, uma senha.', 'Compacte e baixe.'],
     perguntas: [{ p: 'Posso criar RAR?', r: 'Não. RAR é proprietário: só o WinRAR cria. Use ZIP (abre em tudo) ou 7Z (compressão maior).' }],
   },
   {
@@ -456,7 +448,6 @@ const TODAS = [
     termos: ['extrair', 'descompactar', 'abrir', 'unzip', 'rar', 'zip', '7z', 'unrar', 'rar para zip', 'converter rar'],
     icone: 'extrair',
     popular: true,
-    passos: ['Escolha o arquivo compactado.', 'Marque o que quer (ou tudo).', 'Baixe: vários arquivos saem juntos num ZIP.'],
   },
 
   // ─── Utilitários ──────────────────────────────────────────────────────────
@@ -470,7 +461,6 @@ const TODAS = [
     termos: ['qr', 'qr code', 'qrcode', 'wifi', 'whatsapp', 'link', 'gerar qr'],
     icone: 'qr',
     popular: true,
-    passos: ['Escolha o tipo e preencha.', 'Ajuste as cores.', 'Baixe em PNG ou SVG.'],
   },
   {
     slug: 'utilitarios/hash',
@@ -481,7 +471,6 @@ const TODAS = [
     descricao: 'Calcule MD5, SHA-1, SHA-256, SHA-512 e CRC32 de arquivos de qualquer tamanho ou de textos, e confira com o hash publicado.',
     termos: ['hash', 'md5', 'sha1', 'sha256', 'sha512', 'crc32', 'checksum', 'integridade'],
     icone: 'hash',
-    passos: ['Escolha os arquivos (ou digite um texto).', 'Cole o hash esperado, se quiser conferir.', 'Calcule.'],
   },
   {
     slug: 'utilitarios/identificar',
@@ -492,7 +481,6 @@ const TODAS = [
     descricao: 'Descubra o formato real de um arquivo pela assinatura dos bytes, mesmo com extensão errada, e veja dimensões, duração e páginas.',
     termos: ['identificar', 'tipo', 'formato', 'extensão', 'mime', 'propriedades', 'que arquivo é'],
     icone: 'arquivoTipo',
-    passos: ['Escolha os arquivos.', 'Veja o tipo real e as propriedades.', 'Renomeie se a extensão estiver errada.'],
   },
   {
     slug: 'utilitarios/comparar',
@@ -503,7 +491,6 @@ const TODAS = [
     descricao: 'Saiba se dois arquivos são idênticos byte a byte e, se forem de texto, veja as linhas que mudaram. Sem enviar os arquivos.',
     termos: ['comparar', 'diferença', 'diff', 'idêntico', 'igual', 'duplicado'],
     icone: 'comparar',
-    passos: ['Escolha os dois arquivos.', 'Compare.', 'Veja o resultado.'],
   },
   {
     slug: 'utilitarios/calculadoras',
@@ -514,7 +501,6 @@ const TODAS = [
     descricao: 'Converta tamanhos entre bytes, KB, MB, GB, TB e KiB/MiB/GiB, e calcule o tempo de download e a taxa de compressão.',
     termos: ['converter', 'kb', 'mb', 'gb', 'tb', 'gib', 'unidades', 'tempo de download', 'velocidade', 'mbps', 'compressão'],
     icone: 'calculadora',
-    passos: ['Escolha a calculadora.', 'Digite os valores.', 'Veja o resultado na hora.'],
   },
   {
     slug: 'utilitarios/texto',
@@ -525,7 +511,6 @@ const TODAS = [
     descricao: 'Abra TXT, CSV, JSON e LOG com busca e a codificação certa (acentos corrigidos), ou escreva e salve um novo arquivo de texto.',
     termos: ['texto', 'txt', 'abrir', 'criar', 'csv', 'json', 'log', 'codificação', 'acentos', 'utf-8', 'bloco de notas'],
     icone: 'texto',
-    passos: ['Abra um arquivo ou escreva um novo.', 'Busque, corrija a codificação ou edite.', 'Salve.'],
   },
   {
     slug: 'utilitarios/base64',
@@ -536,7 +521,6 @@ const TODAS = [
     descricao: 'Transforme imagens e outros arquivos em Base64 (data URI, CSS, HTML ou Markdown) ou decodifique Base64 de volta em arquivo.',
     termos: ['base64', 'data uri', 'codificar', 'decodificar', 'css', 'embed', 'imagem para base64'],
     icone: 'binario',
-    passos: ['Escolha o sentido.', 'Envie o arquivo ou cole o Base64.', 'Copie ou baixe.'],
   },
 ]
 

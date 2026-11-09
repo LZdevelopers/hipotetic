@@ -41,10 +41,11 @@ const segundos = (h, m, s) => Number(h) * 3600 + Number(m) * 60 + Number(s)
  *   args:     argumentos (sem o -y final e sem a saída)
  *   saida:    nome do arquivo de saída (ou lista, para vários)
  *   duracao:  duração esperada da saída em segundos (melhora o progresso)
+ *   aoLog:    recebe cada linha do log (opcional)
  * Devolve Uint8Array (ou lista, se `saida` for lista).
  * Progresso: lido do log ("time=…") contra a duração.
  */
-export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgredir, sinal, rotulo = 'Convertendo' }) {
+export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgredir, aoLog: ouvinte, sinal, rotulo = 'Convertendo' }) {
   const anterior = fila
   let liberar
   fila = new Promise((r) => (liberar = r))
@@ -63,6 +64,7 @@ export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgred
     let ultimasLinhas = []
     const aoLog = ({ message }) => {
       ultimasLinhas = [...ultimasLinhas.slice(-30), message]
+      ouvinte?.(message)
       if (!total) {
         const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(message)
         if (d) total = segundos(d[1], d[2], d[3])

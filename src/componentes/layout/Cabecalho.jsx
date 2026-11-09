@@ -59,7 +59,7 @@ function MenuCelular({ aberto, aoFechar }) {
         </Link>
         {categoriasComFerramentas().map((c) => (
           <div key={c.id}>
-            <Link para={`/${c.id}`} className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
+            <Link para={`/#${c.id}`} className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
               <SeloCategoria categoria={c.id} icone={c.icone} tamanho="p" />
               {c.nome}
             </Link>
@@ -108,7 +108,7 @@ function MenuCategoria({ categoria, ativo }) {
       onKeyDown={(e) => e.key === 'Escape' && fechar(0)}
     >
       <Link
-        para={`/${categoria.id}`}
+        para={`/#${categoria.id}`}
         aria-current={ativo ? 'page' : undefined}
         aria-expanded={aberto}
         aria-haspopup="true"
@@ -135,10 +135,6 @@ function MenuCategoria({ categoria, ativo }) {
               </li>
             ))}
           </ul>
-          <Link para={`/${categoria.id}`} onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-center justify-between border-t border-borda bg-fundo-suave px-4 py-2.5 text-xs font-semibold text-suave hover:text-tinta">
-            {categoria.titulo}
-            <Icone nome="seta" tamanho={14} />
-          </Link>
         </div>
       </div>
     </div>

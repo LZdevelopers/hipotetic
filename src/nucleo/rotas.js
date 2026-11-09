@@ -1,20 +1,10 @@
-import {
-  caminhoDa,
-  categoriaDa,
-  categoriaPorId,
-  categorias,
-  categoriasComFerramentas,
-  ferramentaPorSlug,
-  ferramentas,
-  ferramentasDaCategoria,
-} from '../ferramentas/catalogo'
+import { caminhoDa, categoriaDa, categorias, ferramentaPorSlug, ferramentas } from '../ferramentas/catalogo'
 import { paginas, produto } from '../textos'
 import { normalizarCaminho } from './roteador'
 
 /**
  * Resolve um caminho em uma rota:
  *   /                     → início
- *   /pdf                  → categoria
  *   /pdf/unir             → ferramenta
  *   /privacidade, /termos → páginas de texto
  *   resto                 → 404
@@ -27,8 +17,6 @@ export function resolverRota(caminhoBruto) {
     if (paginas[partes[0]]) return { tipo: 'texto', caminho, pagina: partes[0] }
     const geral = ferramentaPorSlug(partes[0])
     if (geral) return { tipo: 'ferramenta', caminho, ferramenta: geral }
-    const categoria = categoriaPorId(partes[0])
-    if (categoria && ferramentasDaCategoria(categoria.id).length) return { tipo: 'categoria', caminho, categoria }
   }
   if (partes.length === 2) {
     const ferramenta = ferramentaPorSlug(partes.join('/'))
@@ -41,7 +29,6 @@ export function resolverRota(caminhoBruto) {
 export function todasAsRotas() {
   return [
     '/',
-    ...categoriasComFerramentas().map((c) => `/${c.id}`),
     ...ferramentas.map(caminhoDa),
     ...Object.keys(paginas).map((p) => `/${p}`),
   ]
@@ -73,24 +60,6 @@ export function metadadosDa(rota) {
     }
   }
 
-  if (rota.tipo === 'categoria') {
-    const c = rota.categoria
-    return {
-      ...base,
-      titulo: `${c.titulo} online e grátis${sufixo}`,
-      descricao: c.descricao,
-      jsonld: {
-        '@context': 'https://schema.org',
-        '@type': 'CollectionPage',
-        name: c.titulo,
-        description: c.descricao,
-        url,
-        inLanguage: 'pt-BR',
-        hasPart: ferramentasDaCategoria(c.id).map((f) => ({ '@type': 'WebApplication', name: f.titulo, url: produto.url + caminhoDa(f) })),
-      },
-    }
-  }
-
   if (rota.tipo === 'ferramenta') {
     const f = rota.ferramenta
     const c = categoriaDa(f)
@@ -99,7 +68,7 @@ export function metadadosDa(rota) {
       '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'Início', item: `${produto.url}/` },
-        ...(c ? [{ '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/${c.id}` }] : []),
+        ...(c ? [{ '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/#${c.id}` }] : []),
         { '@type': 'ListItem', position: c ? 3 : 2, name: f.nome, item: url },
       ],
     }

@@ -9,6 +9,7 @@ import { aplicarTrilha } from './_trilha'
 import { useTarefa } from '../../nucleo/tarefa'
 import { EscolhaFormatoVideo, Resolucao, medidasPara, nomeMotor } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useEmEdicao } from '../../nucleo/edicao'
 
 const PROPORCOES = [
   { id: 'original', rotulo: 'Original', valor: null },
@@ -106,6 +107,7 @@ function Trilho({ duracao, inicio, fim, atual, aoMudar, aoBuscar }) {
 }
 
 function Editor({ arquivo, aoTrocar }) {
+  useEmEdicao()
   const url = useUrlObjeto(arquivo)
   const video = useRef(null)
   const caixa = useRef(null)

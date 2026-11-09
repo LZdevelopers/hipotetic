@@ -29,7 +29,6 @@ export const textos = {
   menu: 'Menu',
   fechar: 'Fechar',
   inicio: 'Início',
-  comoUsar: 'Como usar',
   perguntas: 'Perguntas frequentes',
   relacionadas: 'Ferramentas relacionadas',
   noNavegador: 'Processado no seu navegador',
@@ -44,14 +43,6 @@ export const inicio = {
   subtitulo:
     'Converta, comprima, corte, junte e organize vídeos, áudios, imagens, PDFs e documentos. Quase tudo roda no seu navegador: rápido, gratuito e sem enviar seus arquivos para ninguém.',
   categorias: 'Categorias',
-  comoFunciona: {
-    titulo: 'Como funciona',
-    passos: [
-      { icone: 'buscar', titulo: 'Escolha a ferramenta', texto: 'Busque pelo que você quer fazer ou navegue pelas categorias.' },
-      { icone: 'enviar', titulo: 'Adicione os arquivos', texto: 'Arraste para a página ou escolha do seu aparelho. Muitas aceitam vários de uma vez.' },
-      { icone: 'baixar', titulo: 'Baixe o resultado', texto: 'Ajuste o que quiser, processe e baixe. Vários arquivos saem juntos em um ZIP.' },
-    ],
-  },
   principios: [
     {
       icone: 'seguro',

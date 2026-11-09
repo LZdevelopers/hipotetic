@@ -76,6 +76,8 @@ export async function abrirNavegador() {
     '--disable-extensions',
     '--hide-scrollbars',
     '--autoplay-policy=no-user-gesture-required', // gravar áudio de teste sem clique
+    '--use-fake-ui-for-media-stream', // microfone liberado sem perguntar…
+    '--use-fake-device-for-media-stream', // …e falso (um bipe), para testar o gravador
     'about:blank',
   ])
   let alvo

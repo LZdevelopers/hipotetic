@@ -1,33 +1,7 @@
-import { GradeFerramentas } from '../componentes/CartaoFerramenta'
-import { BotaoLink, SeloCategoria } from '../componentes/ui'
-import { ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
-import { Link } from '../nucleo/roteador'
+import { Pilulas } from '../componentes/ListaFerramentas'
+import { BotaoLink } from '../componentes/ui'
+import { populares } from '../ferramentas/catalogo'
 import { paginas, textos } from '../textos'
-
-export function Categoria({ categoria }) {
-  const lista = ferramentasDaCategoria(categoria.id)
-  return (
-    <div className="container-pagina">
-      <nav aria-label="Você está em" className="pt-6 text-[0.8125rem] text-fraca">
-        <Link para="/" className="hover:text-tinta">
-          {textos.inicio}
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span aria-current="page" className="text-suave">
-          {categoria.nome}
-        </span>
-      </nav>
-      <header className="mt-6 mb-10 flex flex-col gap-4 sm:flex-row sm:items-center">
-        <SeloCategoria categoria={categoria.id} icone={categoria.icone} tamanho="g" />
-        <div>
-          <h1 className="text-[clamp(1.75rem,3.6vw,2.5rem)]">{categoria.titulo}</h1>
-          <p className="mt-2 max-w-3xl text-suave">{categoria.descricao}</p>
-        </div>
-      </header>
-      <GradeFerramentas lista={lista} />
-    </div>
-  )
-}
 
 export function Texto({ pagina }) {
   const p = paginas[pagina]
@@ -62,7 +36,7 @@ export function NaoEncontrada() {
       </div>
       <section className="mt-16">
         <h2 className="mb-4 text-lg">{textos.maisUsadas}</h2>
-        <GradeFerramentas lista={populares()} mostrarCategoria />
+        <Pilulas lista={populares()} />
       </section>
     </div>
   )

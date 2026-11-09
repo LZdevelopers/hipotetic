@@ -9,6 +9,8 @@ import { useTema } from '../../nucleo/preferencias'
 import { useTarefa } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
 import { analisar, ganhoNormalizar, silencios } from './_analise'
+import { useEmEdicao } from '../../nucleo/edicao'
+import { receber } from '../../nucleo/entrega'
 
 /** 65.43 → "1:05.4" */
 const tempo = (s) => {
@@ -455,6 +457,7 @@ function CampoTempo({ rotulo, valor, aoMudar }) {
 /* ─── Editor ─────────────────────────────────────────────────────────────── */
 
 function Editor({ arquivo, aoTrocar }) {
+  useEmEdicao()
   const formatoInicial = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'aac'].includes(extensaoDe(arquivo.name)) ? extensaoDe(arquivo.name) : 'mp3'
   const padrao = (fim) => ({ inicio: 0, fim, fadeIn: 0, fadeOut: 0, formato: formatoInicial, bitrate: 192, volume: 'manter', ganho: 6, silencio: false, silencioOnde: 'pontas', limiar: -45, velocidade: 1, tom: false })
   const [o, setO] = useState(() => padrao(0))
@@ -930,7 +933,11 @@ function Editor({ arquivo, aoTrocar }) {
 
 /** Editor de áudio: trecho, velocidade, volume, fades e silêncio — com prévia ao vivo no player. */
 export default function EditorAudio() {
-  const [arquivos, setArquivos] = useState([])
+  // Vindo do gravador ("Editar"): já abre com a gravação.
+  const [arquivos, setArquivos] = useState(() => {
+    const entregue = receber('audio/editor')
+    return entregue ? [{ id: 'entregue', arquivo: entregue }] : []
+  })
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={[...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]} descricaoFormatos={`${DESCRICAO_AUDIO} (ou vídeo)`} limiteBytes={LIMITE_AUDIO} />
   return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
 }

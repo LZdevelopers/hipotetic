@@ -23,7 +23,7 @@ export function Rodape() {
             </li>
             {categoriasComFerramentas().map((c) => (
               <li key={c.id}>
-                <Link para={`/${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
+                <Link para={`/#${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
                   {c.nome}
                 </Link>
               </li>

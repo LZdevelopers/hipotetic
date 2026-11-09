@@ -3,7 +3,7 @@ import { Cabecalho } from './componentes/layout/Cabecalho'
 import { Rodape } from './componentes/layout/Rodape'
 import { Ferramenta } from './paginas/Ferramenta'
 import { Inicio } from './paginas/Inicio'
-import { Categoria, NaoEncontrada, Texto } from './paginas/Outras'
+import { NaoEncontrada, Texto } from './paginas/Outras'
 import { metadadosDa, resolverRota } from './nucleo/rotas'
 import { Roteador, useRota } from './nucleo/roteador'
 import { textos } from './textos'
@@ -30,8 +30,6 @@ function Conteudo() {
   switch (rota.tipo) {
     case 'inicio':
       return <Inicio />
-    case 'categoria':
-      return <Categoria categoria={rota.categoria} />
     case 'ferramenta':
       return <Ferramenta key={rota.ferramenta.slug} ferramenta={rota.ferramenta} />
     case 'texto':

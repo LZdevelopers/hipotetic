@@ -6,6 +6,7 @@ import { Aviso, Botao, Progresso } from '../../componentes/ui'
 import { LIMITE_PDF, abrirEdicao, abrirLeitura, miniaturaPagina, obterPdfLib, salvarPdf } from '../../motores/pdf'
 import { semExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
+import { useEmEdicao } from '../../nucleo/edicao'
 
 const DICAS = {
   organizar: 'Arraste as páginas para mudar a ordem. Use os botões de cada página para girar, duplicar ou excluir.',
@@ -56,6 +57,7 @@ function Miniatura({ fonte, indice, giro, branca }) {
 }
 
 function Editor({ inicial, foco, aoTrocar }) {
+  useEmEdicao()
   const [fontes, setFontes] = useState([])
   const [paginas, setPaginas] = useState([])
   const [selecao, setSelecao] = useState(new Set())

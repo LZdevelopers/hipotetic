@@ -103,9 +103,9 @@ const db = (potencia) => 10 * Math.log10(Math.max(potencia, 1e-12))
 /**
  * Trechos (em segundos) que "remover silêncio" tiraria, dentro de [inicio, fim].
  * modo 'pontas': só o silêncio do começo e do fim; 'tudo': também pausas de
- * 0,5 s ou mais no meio (como o filtro usado na exportação).
+ * `minimo` segundos ou mais no meio (0,5 s, como o filtro usado na exportação).
  */
-export function silencios(analise, { inicio, fim, limiar, modo }) {
+export function silencios(analise, { inicio, fim, limiar, modo, minimo = 0.5 }) {
   if (!analise) return []
   const { energia } = analise
   const j0 = Math.max(0, Math.floor(inicio / JANELA))
@@ -127,7 +127,7 @@ export function silencios(analise, { inicio, fim, limiar, modo }) {
       }
       const ini = j
       while (j <= b && mudo(j)) j += 1
-      if ((j - ini) * JANELA >= 0.5) regioes.push([ini * JANELA, j * JANELA])
+      if ((j - ini) * JANELA >= minimo) regioes.push([ini * JANELA, j * JANELA])
     }
   }
   if (b < j1 - 1) regioes.push([(b + 1) * JANELA, fim])

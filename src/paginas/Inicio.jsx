@@ -1,9 +1,9 @@
 import { useId, useRef, useState } from 'react'
-import { CartaoFerramenta, GradeFerramentas } from '../componentes/CartaoFerramenta'
 import { Icone } from '../componentes/Icone'
+import { Indice, Pilulas } from '../componentes/ListaFerramentas'
 import { ListaResultados, useBuscaTeclado } from '../componentes/layout/Busca'
 import { SeloCategoria } from '../componentes/ui'
-import { caminhoDa, categoriasComFerramentas, ferramentaPorSlug, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
+import { caminhoDa, ferramentaPorSlug, ferramentas, populares } from '../ferramentas/catalogo'
 import { useRecentes } from '../nucleo/preferencias'
 import { Link, useRota } from '../nucleo/roteador'
 import { inicio, textos } from '../textos'
@@ -66,7 +66,7 @@ function Recentes() {
   const lista = slugs.map(ferramentaPorSlug).filter(Boolean)
   if (!lista.length) return null
   return (
-    <section aria-labelledby="titulo-recentes" className="mt-14">
+    <section aria-labelledby="titulo-recentes" className="mt-12">
       <div className="mb-4 flex items-baseline justify-between gap-4">
         <h2 id="titulo-recentes" className="text-lg">
           {textos.recentes}
@@ -75,13 +75,12 @@ function Recentes() {
           {textos.limparRecentes}
         </button>
       </div>
-      <GradeFerramentas lista={lista} mostrarCategoria />
+      <Pilulas lista={lista} />
     </section>
   )
 }
 
 export function Inicio() {
-  const cats = categoriasComFerramentas()
   const atalhos = populares().slice(0, 6)
 
   return (
@@ -125,57 +124,27 @@ export function Inicio() {
 
       <Recentes />
 
-      <section aria-labelledby="titulo-categorias" className="mt-16">
-        <h2 id="titulo-categorias" className="sr-only">
-          {inicio.categorias}
-        </h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cats.map((c) => (
-            <li key={c.id} className="cartao flex flex-col p-5">
-              <Link para={`/${c.id}`} className="group flex items-center gap-3">
-                <SeloCategoria categoria={c.id} icone={c.icone} />
-                <span className="flex items-center gap-1.5 font-display text-lg font-bold text-tinta">
-                  {c.nome}
-                  <Icone nome="seta" tamanho={16} className="text-fraca transition-transform duration-200 group-hover:translate-x-0.5" />
-                </span>
-              </Link>
-              <ul className="mt-4 flex flex-col">
-                {ferramentasDaCategoria(c.id).map((f) => (
-                  <li key={f.slug}>
-                    <Link para={caminhoDa(f)} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm text-suave transition-colors hover:bg-superficie-2 hover:text-tinta">
-                      {f.nome}
-                      {f.servidor ? <Icone nome="servidor" tamanho={13} className="text-fraca" aria-label="usa o servidor" /> : null}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+      <section id="ferramentas" aria-labelledby="titulo-ferramentas" className="mt-16 scroll-mt-24">
+        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <h2 id="titulo-ferramentas" className="text-2xl">
+            Todas as ferramentas
+          </h2>
+          <p className="text-sm text-fraca">{ferramentas.length} ferramentas · grátis, sem cadastro e sem marca d’água</p>
+        </div>
+        <Indice />
       </section>
 
-      <section aria-labelledby="titulo-como" className="mt-20 grid gap-10 border-t border-borda pt-14 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <div>
-          <h2 id="titulo-como" className="text-2xl">
-            {inicio.comoFunciona.titulo}
-          </h2>
-          <p className="mt-2 text-sm text-suave">Grátis, sem cadastro e, quase sempre, sem enviar seus arquivos para ninguém.</p>
-        </div>
-        <ol className="grid gap-8 sm:grid-cols-3">
-          {inicio.comoFunciona.passos.map((p, i) => (
-            <li key={p.titulo}>
-              <span className="flex items-center gap-3">
-                <span className="grid size-9 place-items-center rounded-full border border-borda-forte text-sm font-bold text-tinta tabular-nums">{i + 1}</span>
-                <Icone nome={p.icone} tamanho={18} className="text-fraca" />
-              </span>
-              <h3 className="mt-4 text-base">{p.titulo}</h3>
-              <p className="mt-1.5 text-sm text-suave">{p.texto}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <ul className="mt-20 grid gap-8 border-t border-borda pt-12 sm:grid-cols-3">
+        {inicio.principios.map((p) => (
+          <li key={p.titulo} className="flex gap-3.5">
+            <Icone nome={p.icone} tamanho={20} className="mt-0.5 text-fraca" />
+            <div>
+              <h3 className="text-base">{p.titulo}</h3>
+              <p className="mt-1 text-sm text-suave">{p.texto}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
-
-export { CartaoFerramenta }

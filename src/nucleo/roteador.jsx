@@ -37,7 +37,16 @@ export function Roteador({ caminhoInicial, children }) {
     history[substituir ? 'replaceState' : 'pushState'](null, '', novo + url.search + url.hash)
     startTransition(() => setCaminho(novo))
     if (url.hash) {
-      requestAnimationFrame(() => document.getElementById(url.hash.slice(1))?.scrollIntoView())
+      // A página nova renderiza numa transição: espera a âncora aparecer (até ~0,5 s).
+      const id = decodeURIComponent(url.hash.slice(1))
+      let tentativas = 0
+      const rolar = () => {
+        const alvo = document.getElementById(id)
+        if (alvo) alvo.scrollIntoView({ block: 'start' })
+        else if ((tentativas += 1) < 30) requestAnimationFrame(rolar)
+        else scrollTo({ top: 0 })
+      }
+      requestAnimationFrame(rolar)
     } else {
       scrollTo({ top: 0 })
     }
