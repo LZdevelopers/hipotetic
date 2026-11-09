@@ -6,3 +6,6 @@ dist/
 
 .vercel
 dist-ssr/
+
+# LibreOffice empacotado (~100 MB): gerado por npm run empacotar:libreoffice
+servicos/libreoffice/saida/

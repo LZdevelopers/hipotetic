@@ -34,8 +34,8 @@ export default [
   ...(comServidor
     ? [
         {
-          nome: 'documentos/docx-para-pdf: LibreOffice mantém o texto',
-          pagina: '/documentos/docx-para-pdf',
+          nome: 'documentos/converter: DOCX para PDF, LibreOffice mantém o texto',
+          pagina: '/documentos/converter',
           async executar(t) {
             await enviar(t, `[${arquivo(docxTeste(), 'relatorio.docx')}]`)
             await t.clicar('Converter')
@@ -45,10 +45,11 @@ export default [
           },
         },
         {
-          nome: 'documentos/odt-para-docx: ODT vira DOCX',
-          pagina: '/documentos/odt-para-docx',
+          nome: 'documentos/converter: ODT vira DOCX',
+          pagina: '/documentos/converter',
           async executar(t) {
             await enviar(t, `[${arquivo(odtTeste(), 'texto.odt')}]`)
+            await t.clicar('DOCX')
             await t.clicar('Converter')
             await t.aguardarResultado(120000)
             const zip = unzipSync(new Uint8Array(await t.js('return await __t.bytes()')))
@@ -58,34 +59,34 @@ export default [
       ]
     : []),
   {
-    nome: 'documentos/extrair-texto: DOCX vira .txt',
-    pagina: '/documentos/extrair-texto',
+    nome: 'documentos/texto: DOCX vira .txt com contagem',
+    pagina: '/documentos/texto',
     async executar(t) {
       await enviar(t, `[${arquivo(docxTeste(), 'relatorio.docx')}]`)
-      await t.clicar('Extrair texto')
+      await t.clicar('Ler documento')
       await t.aguardarResultado()
       assert.equal(await t.js('return await __t.texto()'), 'Relatório anual\nTexto com acentuação: ação, coração.')
     },
   },
   {
-    nome: 'documentos/extrair-texto: ODT e RTF',
-    pagina: '/documentos/extrair-texto',
+    nome: 'documentos/texto: ODT e RTF',
+    pagina: '/documentos/texto',
     async executar(t) {
       await enviar(t, `[${arquivo(odtTeste('Olá do ODT'), 'a.odt')}]`)
-      await t.clicar('Extrair texto')
+      await t.clicar('Ler documento')
       await t.aguardarResultado()
       assert.equal(await t.js('return await __t.texto()'), 'Olá do ODT')
       await t.clicar('Nova operação')
       const rtf = String.raw`{\rtf1\ansi{\fonttbl{\f0 Arial;}}\f0 Cora\'e7\'e3o \b forte\b0\par Segunda linha}`
       await enviar(t, `[new File([${JSON.stringify(rtf)}], 'b.rtf')]`)
-      await t.clicar('Extrair texto')
+      await t.clicar('Ler documento')
       await t.aguardarResultado()
       assert.equal(await t.js('return await __t.texto()'), 'Coração forte\nSegunda linha')
     },
   },
   {
-    nome: 'documentos/contar-palavras: texto colado',
-    pagina: '/documentos/contar-palavras',
+    nome: 'documentos/texto: contar palavras de texto colado',
+    pagina: '/documentos/texto',
     async executar(t) {
       await t.clicar('Colar texto')
       await t.js(`__t.digitar('Texto', 'Um texto curto. Tem duas frases e guarda-chuva conta como uma!')`)
@@ -110,8 +111,8 @@ export default [
     },
   },
   {
-    nome: 'documentos/markdown-para-html: gera HTML',
-    pagina: '/documentos/markdown-para-html',
+    nome: 'documentos/markdown: gera HTML',
+    pagina: '/documentos/markdown',
     async executar(t) {
       await t.js(CAPTURAR)
       await t.js(`__t.digitar('Markdown', '# Olá\\n\\nTexto **forte**.')`)

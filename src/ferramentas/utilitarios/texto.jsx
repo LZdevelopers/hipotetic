@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Modos } from '../../componentes/ferramenta/Modos'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { AreaTexto, Aviso, Botao, Caixa, Entrada, Segmentado, Seletor } from '../../componentes/ui'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
@@ -155,6 +156,14 @@ function Gerar() {
   )
 }
 
-export default function Texto({ modo = 'visualizar' }) {
-  return modo === 'gerar' ? <Gerar /> : <Visualizar />
+/** Editor de texto: abrir um arquivo (com codificação, busca, JSON) ou escrever um novo e salvar. */
+export default function Texto() {
+  return (
+    <Modos
+      modos={[
+        { valor: 'abrir', rotulo: 'Abrir arquivo', icone: 'ver', Componente: Visualizar },
+        { valor: 'novo', rotulo: 'Escrever novo', icone: 'caneta', Componente: Gerar },
+      ]}
+    />
+  )
 }

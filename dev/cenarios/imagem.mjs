@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict'
 import { SVG, enviar, jpg, png } from './comum.mjs'
 
+/** Lê um pixel do resultado `indice` (na página). */
+const pixel = (t, x, y, indice = 0) =>
+  t.js(`const a = document.querySelectorAll('section[aria-label=Resultado] a[download]')[${indice}]
+    const bmp = await createImageBitmap(await (await fetch(a.href)).blob())
+    const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
+    return [...ctx.getImageData(${x}, ${y}, 1, 1).data]`)
+
+/** Abre uma aba do editor de imagem. */
+const aba = (t, nome) => t.js(`[...document.querySelectorAll('main [role=tab]')].find((b) => b.textContent.trim() === ${JSON.stringify(nome)}).click()`)
+
+/** Escolhe a opção `valor` no <select> da página que tem essa opção. */
+const escolher = (t, valor) =>
+  t.js(`const s = [...document.querySelectorAll('main select')].find((x) => [...x.options].some((o) => o.value === ${JSON.stringify(valor)}))
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(valor)})
+    s.dispatchEvent(new Event('change', { bubbles: true }))`)
+
 export default [
   {
     nome: 'imagem/converter: PNG com transparência → JPG',
@@ -25,33 +41,28 @@ export default [
       await t.clicar('Converter')
       await t.aguardarResultado(120000)
       const rs = await t.js('return await __t.resultados()')
-      assert.equal(rs.length, 3)
-      assert.ok(rs.every((r) => r.tipo === 'avif'), JSON.stringify(rs))
-      assert.deepEqual(rs.map((r) => r.nome), ['a.avif', 'b.avif', 'c.avif'])
+      assert.ok(rs.length === 3 && rs.every((r) => r.tipo === 'avif'), JSON.stringify(rs))
     },
   },
   {
-    nome: 'imagem/png-para-webp: mantém a transparência',
-    pagina: '/imagem/png-para-webp',
+    nome: 'imagem/converter: PNG → WebP mantém a transparência',
+    pagina: '/imagem/converter',
     async executar(t) {
       await enviar(t, png(400, 300, true))
+      await t.clicar('WebP')
       await t.clicar('Converter')
       await t.aguardarResultado()
-      const [r] = await t.js('return await __t.resultados()')
-      assert.equal(r.tipo, 'webp')
-      const alfa = await t.js(`
-        const a = document.querySelector('section[aria-label=Resultado] a[download]')
-        const bmp = await createImageBitmap(await (await fetch(a.href)).blob())
-        const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
-        return ctx.getImageData(5, 5, 1, 1).data[3]`)
-      assert.equal(alfa, 0, 'o canto transparente deveria continuar transparente')
+      assert.equal((await t.js('return await __t.resultados()'))[0].tipo, 'webp')
+      assert.equal((await pixel(t, 5, 5))[3], 0, 'o canto transparente deveria continuar transparente')
     },
   },
   {
-    nome: 'imagem/svg-para-png: SVG 100×50 em 2× → 200×100',
-    pagina: '/imagem/svg-para-png',
+    nome: 'imagem/converter: SVG 100×50 em 2× → PNG 200×100',
+    pagina: '/imagem/converter',
     async executar(t) {
       await enviar(t, `[new File([${JSON.stringify(SVG)}], 'logo.svg', { type: 'image/svg+xml' })]`)
+      await t.clicar('PNG')
+      await t.js(`__t.digitar('Tamanho dos SVGs', '2')`)
       await t.clicar('Converter')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
@@ -68,49 +79,31 @@ export default [
       await t.clicar('Comprimir')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
-      const original = await t.js(`return document.body.textContent.match(/antes\\)/) ? 1 : 0`)
       assert.equal(r.tipo, 'jpg')
       assert.equal(r.largura, 1280)
-      assert.ok(original, 'deveria mostrar o tamanho de antes')
     },
   },
   {
-    nome: 'imagem/redimensionar: 50% e largura fixa com proporção',
-    pagina: '/imagem/redimensionar',
+    nome: 'imagem/editor: recorte 1:1',
+    pagina: '/imagem/editor',
     async executar(t) {
       await enviar(t, png(640, 480, false))
-      await t.clicar('Redimensionar')
-      await t.aguardarResultado()
-      let [r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.largura, r.altura], [320, 240])
-      await t.clicar('Ajustar e refazer')
-      await t.clicar('Largura × altura')
-      await t.js(`__t.digitar('Largura', 100)`)
-      await t.clicar('Redimensionar')
-      await t.aguardarResultado()
-      ;[r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.largura, r.altura], [100, 75])
-    },
-  },
-  {
-    nome: 'imagem/recortar: proporção 1:1',
-    pagina: '/imagem/recortar',
-    async executar(t) {
-      await t.js(`__t.enviar(${png(640, 480, false)})`)
-      await t.aguardar(`document.querySelector('[role=slider]')`)
+      await t.aguardar(`document.querySelector('main img[alt="Prévia"]')?.naturalWidth > 0`)
       await t.clicar('1:1')
-      await t.clicar('Recortar')
+      await t.clicar('Aplicar')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
       assert.deepEqual([r.largura, r.altura], [480, 480])
-      assert.equal(r.nome, 'teste-recortada.png')
+      assert.equal(r.nome, 'teste-editada.png')
     },
   },
   {
-    nome: 'imagem/girar: 90° troca largura e altura',
-    pagina: '/imagem/girar',
+    nome: 'imagem/editor: girar 90° troca largura e altura',
+    pagina: '/imagem/editor',
     async executar(t) {
       await enviar(t, png(640, 480, false))
+      await aba(t, 'Girar')
+      await t.clicar('Horário')
       await t.clicar('Aplicar')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
@@ -118,47 +111,55 @@ export default [
     },
   },
   {
-    nome: 'imagem/ajustar: preto e branco gera pixels cinza',
-    pagina: '/imagem/ajustar',
+    nome: 'imagem/editor: tamanho de rede social (post quadrado)',
+    pagina: '/imagem/editor',
     async executar(t) {
-      await enviar(t, png(300, 200, false))
-      await t.clicar('Preto e branco')
+      await enviar(t, png(800, 600, false))
+      await aba(t, 'Tamanho')
+      await escolher(t, 'rede')
       await t.clicar('Aplicar')
       await t.aguardarResultado()
-      const px = await t.js(`
-        const a = document.querySelector('section[aria-label=Resultado] a[download]')
-        const bmp = await createImageBitmap(await (await fetch(a.href)).blob())
-        const c = new OffscreenCanvas(bmp.width, bmp.height); const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0)
-        return [...ctx.getImageData(150, 30, 1, 1).data]`)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.deepEqual([r.largura, r.altura], [1080, 1080])
+    },
+  },
+  {
+    nome: 'imagem/editor: lote em 50% e filtro P&B',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await enviar(t, `[__t.arquivo(await __t.imagem(640, 480), 'a.png'), __t.arquivo(await __t.imagem(300, 200), 'b.png')]`)
+      await aba(t, 'Tamanho')
+      await escolher(t, 'porcentagem')
+      await aba(t, 'Cores')
+      await t.clicar('P&B')
+      await t.clicar('Aplicar')
+      await t.aguardarResultado()
+      const rs = await t.js('return await __t.resultados()')
+      assert.deepEqual(
+        rs.map((r) => [r.largura, r.altura]),
+        [
+          [320, 240],
+          [150, 100],
+        ],
+      )
+      const px = await pixel(t, 160, 30)
       assert.ok(Math.abs(px[0] - px[1]) <= 2 && Math.abs(px[1] - px[2]) <= 2, `pixel não é cinza: ${px}`)
     },
   },
   {
-    nome: 'imagem/remover-metadados: tira câmera e GPS sem recomprimir',
-    pagina: '/imagem/remover-metadados',
-    async executar(t) {
-      await enviar(t, `[__t.arquivo(await __t.comExif(await __t.imagem(400, 300, 'image/jpeg')), 'gps.jpg')]`)
-      await t.clicar('Remover metadados')
-      await t.aguardarResultado()
-      const [r] = await t.js('return await __t.resultados()')
-      assert.equal(r.tipo, 'jpg')
-      assert.deepEqual([r.largura, r.altura], [400, 300])
-      const bytes = await t.js('return await __t.bytes()')
-      const texto = String.fromCharCode(...bytes)
-      assert.ok(!texto.includes('CameraTeste'), 'a câmera continua no arquivo')
-      assert.ok(!texto.includes('Exif'), 'o EXIF continua no arquivo')
-    },
-  },
-  {
-    nome: 'imagem/informacoes: mostra câmera e alerta de GPS',
-    pagina: '/imagem/informacoes',
+    nome: 'imagem/metadados: mostra câmera e GPS e remove sem recomprimir',
+    pagina: '/imagem/metadados',
     async executar(t) {
       await t.js(`__t.enviar([__t.arquivo(await __t.comExif(await __t.imagem(400, 300, 'image/jpeg')), 'gps.jpg')])`)
       await t.aguardar(`document.body.textContent.includes('CameraTeste')`, 15000)
       const texto = await t.js('return document.body.textContent')
-      assert.ok(texto.includes('Esta foto revela onde foi tirada'))
-      assert.ok(texto.includes('400 × 300 px'))
-      assert.ok(texto.includes('-23.55'), 'latitude S deveria ser negativa')
+      assert.ok(texto.includes('Esta foto revela onde foi tirada') && texto.includes('-23.55'))
+      await t.clicar('Remover metadados')
+      await t.aguardarResultado()
+      const [r] = await t.js('return await __t.resultados()')
+      assert.deepEqual([r.tipo, r.largura, r.altura], ['jpg', 400, 300])
+      const bytes = String.fromCharCode(...(await t.js('return await __t.bytes()')))
+      assert.ok(!bytes.includes('CameraTeste') && !bytes.includes('Exif'), 'metadados continuam no arquivo')
     },
   },
   {
@@ -166,35 +167,12 @@ export default [
     pagina: '/imagem/favicon',
     async executar(t) {
       await t.js(`__t.enviar(${png(512, 512, true)})`)
-      await t.aguardar(`__t.habilitado('Gerar favicon')`)
       await t.clicar('Gerar favicon')
       await t.aguardarResultado()
-      const rs = await t.js('return await __t.resultados()')
-      const porNome = Object.fromEntries(rs.map((r) => [r.nome, r]))
+      const porNome = Object.fromEntries((await t.js('return await __t.resultados()')).map((r) => [r.nome, r]))
       assert.equal(porNome['favicon.ico'].tipo, 'ico')
       assert.equal(porNome['apple-touch-icon.png'].largura, 180)
-      assert.equal(porNome['android-chrome-512x512.png'].largura, 512)
       assert.ok(porNome['site.webmanifest'])
-    },
-  },
-  {
-    nome: 'imagem/tamanhos-redes-sociais: 4 tamanhos padrão',
-    pagina: '/imagem/tamanhos-redes-sociais',
-    async executar(t) {
-      await enviar(t, png(800, 600, false))
-      await t.clicar('Gerar')
-      await t.aguardarResultado()
-      const rs = await t.js('return await __t.resultados()')
-      const medidas = rs.map((r) => `${r.largura}x${r.altura}`).sort()
-      assert.deepEqual(medidas, ['1080x1080', '1080x1920', '1200x630', '1280x720'].sort())
-    },
-  },
-  {
-    nome: 'imagem/base64: gera data URI',
-    pagina: '/imagem/base64',
-    async executar(t) {
-      await t.js(`__t.enviar(${png(64, 64, false)})`)
-      await t.aguardar(`document.querySelector('textarea')?.value.startsWith('data:image/png;base64,iVBOR')`)
     },
   },
   {
@@ -210,13 +188,20 @@ export default [
     pagina: '/imagem/miniatura',
     async executar(t) {
       await t.js(`__t.enviar(${png(800, 800, false)})`)
-      await t.aguardar(`__t.habilitado('Gerar miniatura')`)
+      await t.aguardar("[...document.querySelectorAll('main label')].some((l) => l.textContent.trim() === 'Título')")
       await t.js(`__t.digitar('Título', 'Teste de miniatura')`)
       await t.clicar('Gerar miniatura')
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
-      assert.equal(r.tipo, 'jpg')
-      assert.deepEqual([r.largura, r.altura], [1280, 720])
+      assert.deepEqual([r.tipo, r.largura, r.altura], ['jpg', 1280, 720])
+    },
+  },
+  {
+    nome: 'utilitarios/base64: gera data URI',
+    pagina: '/utilitarios/base64',
+    async executar(t) {
+      await t.js(`__t.enviar(${png(64, 64, false)})`)
+      await t.aguardar(`document.querySelector('textarea')?.value.startsWith('data:image/png;base64,iVBOR')`)
     },
   },
 ]

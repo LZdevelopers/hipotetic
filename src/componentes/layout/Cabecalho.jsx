@@ -14,7 +14,10 @@ function BotaoTema() {
   return (
     <button
       type="button"
-      onClick={() => definirTema(escuro ? 'light' : 'dark')}
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        definirTema(escuro ? 'light' : 'dark', { x: r.left + r.width / 2, y: r.top + r.height / 2 })
+      }}
       aria-label={escuro ? textos.temaClaro : textos.temaEscuro}
       title={escuro ? textos.temaClaro : textos.temaEscuro}
       className="grid size-9 place-items-center rounded-lg text-suave transition-colors hover:bg-superficie-2 hover:text-tinta"
@@ -75,6 +78,72 @@ function MenuCelular({ aberto, aoFechar }) {
   )
 }
 
+/**
+ * Item de categoria do cabeçalho com menu suspenso: passar o mouse (ou focar
+ * com o teclado) mostra as ferramentas da categoria. Atraso curto para não
+ * "piscar" ao atravessar o menu; Esc ou escolher uma ferramenta fecha.
+ */
+function MenuCategoria({ categoria, ativo }) {
+  const [aberto, setAberto] = useState(false)
+  const timer = useRef(null)
+  const lista = ferramentasDaCategoria(categoria.id)
+  const abrir = () => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setAberto(true), 90)
+  }
+  const fechar = (atraso = 140) => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setAberto(false), atraso)
+  }
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={abrir}
+      onMouseLeave={() => fechar()}
+      onFocus={abrir}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && fechar(0)}
+      onKeyDown={(e) => e.key === 'Escape' && fechar(0)}
+    >
+      <Link
+        para={`/${categoria.id}`}
+        aria-current={ativo ? 'page' : undefined}
+        aria-expanded={aberto}
+        aria-haspopup="true"
+        onClick={() => fechar(0)}
+        className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${ativo || aberto ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'}`}
+      >
+        {categoria.nome}
+        <Icone nome="setaBaixo" tamanho={14} className={`text-fraca transition-transform duration-200 ${aberto ? 'rotate-180' : ''}`} />
+      </Link>
+      <div
+        className={`absolute top-full left-1/2 z-50 w-[22rem] -translate-x-1/2 pt-2 transition-[opacity,translate] duration-200 ${aberto ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'}`}
+      >
+        <div className="overflow-hidden rounded-2xl border border-borda bg-superficie shadow-[var(--shadow-flutuante)]">
+          <ul className="flex flex-col p-1.5">
+            {lista.map((f) => (
+              <li key={f.slug}>
+                <Link para={caminhoDa(f)} onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-start gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-superficie-2">
+                  <SeloCategoria categoria={categoria.id} icone={f.icone} tamanho="p" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-tinta">{f.nome}</span>
+                    <span className="block text-xs leading-snug text-fraca">{f.resumo}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link para={`/${categoria.id}`} onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-center justify-between border-t border-borda bg-fundo-suave px-4 py-2.5 text-xs font-semibold text-suave hover:text-tinta">
+            {categoria.titulo}
+            <Icone nome="seta" tamanho={14} />
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Cabecalho() {
   const { caminho } = useRota()
   const [buscaAberta, setBuscaAberta] = useState(false)
@@ -95,16 +164,7 @@ export function Cabecalho() {
 
         <nav aria-label="Categorias" className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex">
           {categoriasComFerramentas().map((c) => (
-            <Link
-              key={c.id}
-              para={`/${c.id}`}
-              aria-current={categoriaAtual === c.id ? 'page' : undefined}
-              className={`rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                categoriaAtual === c.id ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'
-              }`}
-            >
-              {c.nome}
-            </Link>
+            <MenuCategoria key={c.id} categoria={c} ativo={categoriaAtual === c.id} />
           ))}
         </nav>
 

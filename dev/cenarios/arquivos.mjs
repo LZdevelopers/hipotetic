@@ -14,8 +14,8 @@ let zipComSenha = null
 export default [
   // ─── Compactados ──────────────────────────────────────────────────────────
   {
-    nome: 'compactados/criar-zip: dois arquivos num ZIP válido',
-    pagina: '/compactados/criar-zip',
+    nome: 'compactados/compactar: dois arquivos num ZIP válido',
+    pagina: '/compactados/compactar',
     async executar(t) {
       await enviar(t, `[new File(['primeiro arquivo'], 'a.txt'), new File(['segundo arquivo com mais texto'], 'b.txt')]`)
       await t.clicar('Compactar')
@@ -28,8 +28,8 @@ export default [
     },
   },
   {
-    nome: 'compactados/criar-zip: com senha usa AES-256',
-    pagina: '/compactados/criar-zip',
+    nome: 'compactados/compactar: ZIP com senha usa AES-256',
+    pagina: '/compactados/compactar',
     async executar(t) {
       await enviar(t, `[new File(['conteudo secreto'], 'segredo.txt')]`)
       await t.js(`__t.digitar('Senha (opcional)', 'abc123')`)
@@ -43,10 +43,11 @@ export default [
     },
   },
   {
-    nome: 'compactados/criar-7z: gera 7Z',
-    pagina: '/compactados/criar-7z',
+    nome: 'compactados/compactar: gera 7Z',
+    pagina: '/compactados/compactar',
     async executar(t) {
       await enviar(t, `[new File(['x'.repeat(5000)], 'repetido.txt')]`)
+      await t.clicar('7Z')
       await t.clicar('Compactar')
       await t.aguardarResultado(60000)
       const [r] = await t.js('return await __t.resultados()')
@@ -97,20 +98,6 @@ export default [
       await t.aguardar('document.querySelector("main").innerText.includes("bomba de descompactação")', 30000)
     },
   },
-  {
-    nome: 'compactados/converter: ZIP → 7Z',
-    pagina: '/compactados/converter',
-    async executar(t) {
-      const zip = zipSync({ 'pasta/um.txt': strToU8('um'), 'dois.txt': strToU8('dois') })
-      await enviar(t, `[${arquivo(zip, 'velho.zip', 'application/zip')}]`)
-      await t.clicar('7Z')
-      await t.clicar('Converter')
-      await t.aguardarResultado(60000)
-      const [r] = await t.js('return await __t.resultados()')
-      assert.equal(r.tipo, '7z')
-      assert.equal(r.nome, 'velho.7z')
-    },
-  },
 
   // ─── Utilitários ──────────────────────────────────────────────────────────
   {
@@ -128,8 +115,8 @@ export default [
     },
   },
   {
-    nome: 'utilitarios/identificar-arquivo: PNG disfarçado de .jpg',
-    pagina: '/utilitarios/identificar-arquivo',
+    nome: 'utilitarios/identificar: PNG disfarçado de .jpg',
+    pagina: '/utilitarios/identificar',
     async executar(t) {
       await t.js(`__t.enviar([__t.arquivo(await __t.imagem(120, 80), 'foto.jpg')])`)
       await t.aguardar('document.querySelector("main").innerText.includes("o conteúdo é PNG")', 20000)
@@ -137,8 +124,8 @@ export default [
     },
   },
   {
-    nome: 'utilitarios/comparar-arquivos: textos com 1 linha diferente',
-    pagina: '/utilitarios/comparar-arquivos',
+    nome: 'utilitarios/comparar: textos com 1 linha diferente',
+    pagina: '/utilitarios/comparar',
     async executar(t) {
       await t.js(`const inputs = document.querySelectorAll('main input[type=file]')
         const pares = [[inputs[0], new File(['linha 1\\nlinha 2\\nlinha 3\\n'], 'a.txt')], [inputs[1], new File(['linha 1\\nlinha DOIS\\nlinha 3\\n'], 'b.txt')]]
@@ -150,23 +137,24 @@ export default [
     },
   },
   {
-    nome: 'utilitarios/unidades: 1 GiB em bytes',
-    pagina: '/utilitarios/unidades',
+    nome: 'utilitarios/calculadoras: 1 GiB em bytes',
+    pagina: '/utilitarios/calculadoras',
     async executar(t) {
       await t.js(`__t.digitar('Unidade', 'GiB')`)
       await t.aguardar('document.querySelector("main").innerText.includes("1.073.741.824")')
     },
   },
   {
-    nome: 'utilitarios/calculadora: 4,7 GB a 100 Mbit/s',
-    pagina: '/utilitarios/calculadora',
+    nome: 'utilitarios/calculadoras: 4,7 GB a 100 Mbit/s',
+    pagina: '/utilitarios/calculadoras',
     async executar(t) {
+      await t.clicar('Download e compressão')
       await t.aguardar('document.querySelector("main").innerText.includes("6 min 16 s")')
     },
   },
   {
-    nome: 'utilitarios/visualizar-texto: corrige acentos de arquivo Windows-1252',
-    pagina: '/utilitarios/visualizar-texto',
+    nome: 'utilitarios/texto: corrige acentos de arquivo Windows-1252',
+    pagina: '/utilitarios/texto',
     async executar(t) {
       // "ação e coração" em Windows-1252 (ç = E7, ã = E3)
       await t.js(`__t.enviar([new File([new Uint8Array([0x61,0xe7,0xe3,0x6f,0x20,0x65,0x20,0x63,0x6f,0x72,0x61,0xe7,0xe3,0x6f])], 'antigo.txt', { type: 'text/plain' })])`)
@@ -175,10 +163,11 @@ export default [
     },
   },
   {
-    nome: 'utilitarios/criar-arquivo-texto: CSV com BOM e CRLF',
-    pagina: '/utilitarios/criar-arquivo-texto',
+    nome: 'utilitarios/texto: criar CSV com BOM e CRLF',
+    pagina: '/utilitarios/texto',
     async executar(t) {
       await t.js(CAPTURAR)
+      await t.clicar('Escrever novo')
       await t.js(`__t.digitar('Conteúdo', 'nome;cidade\\nJoão;São Paulo')`)
       await t.js(`__t.digitar('Tipo', 'csv')`)
       await t.clicar('CRLF')

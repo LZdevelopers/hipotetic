@@ -1,37 +1,29 @@
-import { categoriasComFerramentas, caminhoDa, ferramentasDaCategoria } from '../../ferramentas/catalogo'
+import { categoriasComFerramentas } from '../../ferramentas/catalogo'
 import { Link } from '../../nucleo/roteador'
 import { rodape } from '../../textos'
 import { AssinaturaLzdev, Marca } from './Marca'
 
+/** Rodapé enxuto: marca, categorias e links legais (as ferramentas ficam no menu do topo). */
 export function Rodape() {
-  const categorias = categoriasComFerramentas()
   return (
     <footer className="mt-24 border-t border-borda bg-fundo-suave">
-      <div className="container-pagina grid gap-10 py-12 md:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="container-pagina flex flex-col gap-10 py-12 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col items-start gap-4">
           <Marca />
           <p className="max-w-xs text-sm text-suave">{rodape.frase}</p>
           <AssinaturaLzdev />
         </div>
-        <nav aria-label="Ferramentas" className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-          {categorias.map((c) => (
-            <div key={c.id}>
-              <Link para={`/${c.id}`} className="text-sm font-semibold text-tinta hover:underline">
-                {c.nome}
-              </Link>
-              <ul className="mt-3 flex flex-col gap-2">
-                {ferramentasDaCategoria(c.id)
-                  .slice(0, 6)
-                  .map((f) => (
-                    <li key={f.slug}>
-                      <Link para={caminhoDa(f)} className="text-sm text-suave transition-colors hover:text-tinta">
-                        {f.nome}
-                      </Link>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ))}
+        <nav aria-label="Categorias">
+          <p className="text-sm font-semibold text-tinta">Ferramentas</p>
+          <ul className="mt-3 grid grid-cols-2 gap-x-10 gap-y-2">
+            {categoriasComFerramentas().map((c) => (
+              <li key={c.id}>
+                <Link para={`/${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
+                  {c.nome}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
       </div>
       <div className="border-t border-borda">

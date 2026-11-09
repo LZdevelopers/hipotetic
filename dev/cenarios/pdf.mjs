@@ -39,12 +39,13 @@ export default [
     },
   },
   {
-    nome: 'pdf/extrair-paginas: 3 e 1, nessa ordem',
-    pagina: '/pdf/extrair-paginas',
+    nome: 'pdf/dividir: extrair 3 e 1, nessa ordem',
+    pagina: '/pdf/dividir',
     async executar(t) {
       await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
+      await t.clicar('Extrair')
       await t.js(`__t.digitar('Páginas', '3, 1')`)
-      await t.clicar('Extrair páginas')
+      await t.clicar('Dividir PDF')
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
       assert.equal(r.paginas, 2)
@@ -52,8 +53,8 @@ export default [
     },
   },
   {
-    nome: 'pdf/para-jpg: 2 páginas a 150 dpi',
-    pagina: '/pdf/para-jpg',
+    nome: 'pdf/converter: PDF para JPG a 150 dpi',
+    pagina: '/pdf/converter',
     async executar(t) {
       await enviar(t, `[${arquivoPdf(await pdfTeste(2))}]`)
       await t.clicar('Converter páginas')
@@ -67,9 +68,10 @@ export default [
     },
   },
   {
-    nome: 'pdf/de-imagens: 2 imagens viram 2 páginas A4',
-    pagina: '/pdf/de-imagens',
+    nome: 'pdf/converter: 2 imagens viram 2 páginas A4',
+    pagina: '/pdf/converter',
     async executar(t) {
+      await t.clicar('Imagens para PDF')
       await enviar(t, `[__t.arquivo(await __t.imagem(800, 600, 'image/jpeg'), 'a.jpg'), __t.arquivo(await __t.imagem(400, 700), 'b.png')]`)
       await t.clicar('Criar PDF')
       await t.aguardarResultado()
@@ -80,9 +82,10 @@ export default [
     },
   },
   {
-    nome: 'pdf/para-texto: extrai o texto',
-    pagina: '/pdf/para-texto',
+    nome: 'pdf/converter: PDF para texto',
+    pagina: '/pdf/converter',
     async executar(t) {
+      await t.clicar('PDF para texto')
       await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2))}])`)
       await t.clicar('Extrair texto')
       await t.aguardarResultado()
@@ -91,8 +94,8 @@ export default [
     },
   },
   {
-    nome: 'pdf/numerar-paginas: “2 / 3” na página 2',
-    pagina: '/pdf/numerar-paginas',
+    nome: 'pdf/numerar-marca-dagua: numerar, “2 / 3” na página 2',
+    pagina: '/pdf/numerar-marca-dagua',
     async executar(t) {
       await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
       await t.clicar('Numerar páginas')
@@ -102,9 +105,10 @@ export default [
     },
   },
   {
-    nome: 'pdf/marca-dagua: texto em todas as páginas',
-    pagina: '/pdf/marca-dagua',
+    nome: 'pdf/numerar-marca-dagua: marca d’água em todas as páginas',
+    pagina: '/pdf/numerar-marca-dagua',
     async executar(t) {
+      await t.clicar('Marca d’água')
       await enviar(t, `[${arquivoPdf(await pdfTeste(2))}]`)
       await t.clicar('Aplicar marca')
       await t.aguardarResultado()
@@ -116,8 +120,8 @@ export default [
     },
   },
   {
-    nome: 'pdf/proteger + desbloquear: AES-256, senha errada e certa',
-    pagina: '/pdf/proteger',
+    nome: 'pdf/senha: proteger (AES-256) e remover com senha errada e certa',
+    pagina: '/pdf/senha',
     async executar(t) {
       await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
       await t.js(`__t.digitar('Senha para abrir', 'segredo1'); __t.digitar('Repita a senha', 'segredo1')`)
@@ -126,7 +130,8 @@ export default [
       const protegido = await bytesDoResultado(t)
       assert.ok(Buffer.from(protegido).includes('/Encrypt'), 'deveria estar criptografado')
 
-      await t.navegar('/pdf/desbloquear')
+      await t.navegar('/pdf/senha')
+      await t.clicar('Remover senha')
       await enviar(t, `[${arquivoPdf(Buffer.from(protegido).toString('base64'), 'protegido.pdf')}]`)
       await t.js(`__t.digitar('Senha do PDF', 'errada')`)
       await t.clicar('Desbloquear')
@@ -159,8 +164,8 @@ export default [
     },
   },
   {
-    nome: 'pdf/remover-metadados: título e autor somem',
-    pagina: '/pdf/remover-metadados',
+    nome: 'pdf/metadados: título e autor somem',
+    pagina: '/pdf/metadados',
     async executar(t) {
       await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(1, { titulo: 'Relatorio Secreto', autor: 'Fulano' }))}])`)
       await t.aguardar('document.querySelector("main").innerText.includes("Versão do PDF")', 15000)

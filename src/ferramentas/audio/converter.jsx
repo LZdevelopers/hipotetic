@@ -1,15 +1,19 @@
 import { ModeloConversao } from '../../componentes/ferramenta/ModeloConversao'
 import { Segmentado } from '../../componentes/ui'
 import { executarFfmpeg } from '../../motores/ffmpeg'
-import { DESCRICAO_AUDIO, DESCRICAO_VIDEO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_VIDEO, infoMidia, processarAudio } from '../../motores/midia'
+import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_VIDEO, infoMidia, processarAudio } from '../../motores/midia'
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { ErroAmigavel, cancelado } from '../../nucleo/tarefa'
 import { Bitrate, FormatoAudio } from './_comum'
 
-function Configuracoes({ opcoes, mudar }) {
+const ehVideo = (a) => EXTENSOES_VIDEO.includes(extensaoDe(a.arquivo.name))
+
+function Configuracoes({ opcoes, mudar, arquivos }) {
+  const temVideo = arquivos.some(ehVideo)
   return (
     <div className="flex flex-col gap-5">
-      <FormatoAudio valor={opcoes.formato} aoMudar={(v) => mudar('formato', v)} comOriginal={opcoes.deVideo} />
+      <FormatoAudio valor={opcoes.formato} aoMudar={(v) => mudar('formato', v)} comOriginal={temVideo} />
+      {temVideo ? <p className="-mt-3 text-xs text-fraca">Dos vídeos, só o áudio é extraído.</p> : null}
       <Bitrate valor={opcoes.bitrate} aoMudar={(v) => mudar('bitrate', v)} formato={opcoes.formato} />
       {opcoes.formato !== 'original' ? (
         <Segmentado
@@ -31,20 +35,19 @@ function Configuracoes({ opcoes, mudar }) {
 const COPIA = { aac: ['m4a', 'audio/mp4'], mp3: ['mp3', 'audio/mpeg'], opus: ['opus', 'audio/ogg'], vorbis: ['ogg', 'audio/ogg'], flac: ['flac', 'audio/flac'] }
 
 /**
- * Converter áudio — ou extrair o áudio de vídeos (`deVideo`). As páginas
- * específicas (WAV para MP3…) passam `entrada` e `saida`.
+ * Conversor de áudio único: entre MP3, M4A, AAC, OGG, OPUS, WAV e FLAC — e
+ * também extrai o áudio de vídeos (com opção de copiar sem recodificar).
  */
-export default function ConverterAudio({ entrada, saida = 'mp3', deVideo = false }) {
-  const extensoes = entrada ? [entrada] : deVideo ? EXTENSOES_VIDEO : [...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]
+export default function ConverterAudio() {
   return (
     <ModeloConversao
-      extensoes={extensoes}
-      descricaoFormatos={entrada ? entrada.toUpperCase() : deVideo ? DESCRICAO_VIDEO : `${DESCRICAO_AUDIO} (ou vídeo)`}
+      extensoes={[...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]}
+      descricaoFormatos={`${DESCRICAO_AUDIO} ou vídeos (para extrair o som)`}
       limiteBytes={LIMITE_VIDEO}
       maximo={50}
-      opcoesIniciais={{ formato: saida, bitrate: 192, canais: '', deVideo }}
+      opcoesIniciais={{ formato: 'mp3', bitrate: 192, canais: '' }}
       Configuracoes={Configuracoes}
-      rotuloAcao={deVideo ? 'Extrair áudio' : 'Converter'}
+      rotuloAcao="Converter"
       nomeZip="audios.zip"
       processar={async (itens, o, { progresso, sinal }) => {
         const saidas = []
@@ -66,7 +69,7 @@ export default function ConverterAudio({ entrada, saida = 'mp3', deVideo = false
           } else {
             blob = await processarAudio(arquivo, { formato: o.formato, bitrate: o.bitrate, canais: o.canais || undefined }, ctx, info.duracao)
           }
-          saidas.push({ nome: trocarExtensao(arquivo.name, ext), blob, original: deVideo ? undefined : arquivo.size, detalhe: [info.duracao ? formatarDuracao(info.duracao) : null, FORMATOS_AUDIO[ext]?.semPerdas ? 'sem perdas' : o.formato === 'original' ? 'cópia exata' : `${o.bitrate} kbps`].filter(Boolean).join(' · ') })
+          saidas.push({ nome: trocarExtensao(arquivo.name, ext), blob, original: EXTENSOES_VIDEO.includes(extensaoDe(arquivo.name)) ? undefined : arquivo.size, detalhe: [info.duracao ? formatarDuracao(info.duracao) : null, FORMATOS_AUDIO[ext]?.semPerdas ? 'sem perdas' : o.formato === 'original' ? 'cópia exata' : `${o.bitrate} kbps`].filter(Boolean).join(' · ') })
         }
         return saidas
       }}

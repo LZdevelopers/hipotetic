@@ -13,6 +13,18 @@ const usar = (chave) => {
 const perto = (valor, esperado, folga, rotulo) => assert.ok(Math.abs(valor - esperado) <= folga, `${rotulo}: ${valor} (esperado ~${esperado})`)
 const bytes = (t, i = 0) => t.js(`return await __t.bytes(${i})`)
 const temTrilhaDeAudio = (b) => Buffer.from(b).includes('soun')
+/** Editor de áudio: abre o arquivo e espera a duração aparecer. */
+async function abrirEditorAudio(t, codigoArquivo, duracaoTexto) {
+  await t.js(`__t.enviar([${codigoArquivo}])`)
+  await t.aguardar(`document.querySelector('main audio') && document.querySelector('main').innerText.includes('${duracaoTexto}')`, 20000)
+}
+
+/** Escolhe a opção `valor` no <select> da página que tem essa opção. */
+const escolher = (t, valor) =>
+  t.js(`const s = [...document.querySelectorAll('main select')].find((x) => [...x.options].some((o) => o.value === ${JSON.stringify(valor)}))
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(valor)})
+    s.dispatchEvent(new Event('change', { bubbles: true }))`)
+
 /** Editor de vídeo: um arquivo só, vai direto para a edição (sem lista). */
 async function abrirNoEditor(t) {
   await t.js(`__t.enviar([${usar('mp4')}])`)
@@ -22,8 +34,8 @@ async function abrirNoEditor(t) {
 export default [
   // ─── Vídeo ────────────────────────────────────────────────────────────────
   {
-    nome: 'video/webm-para-mp4: gravação WebM vira MP4 (H.264)',
-    pagina: '/video/webm-para-mp4',
+    nome: 'video/converter: gravação WebM vira MP4 (H.264)',
+    pagina: '/video/converter',
     async executar(t) {
       await enviar(t, `[__t.arquivo(await __t.gravarVideo(3), 'gravacao.webm')]`)
       await t.clicar('Converter')
@@ -66,8 +78,8 @@ export default [
     },
   },
   {
-    nome: 'video/cortar: trecho de 1 s a 2,5 s',
-    pagina: '/video/cortar',
+    nome: 'video/editor: cortar trecho de 1 s a 2,5 s',
+    pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
       await t.js(`for (const [rotulo, valor] of [['Início (minutos:segundos)', '0:01'], ['Fim (minutos:segundos)', '0:02.5']]) {
@@ -82,8 +94,8 @@ export default [
     },
   },
   {
-    nome: 'video/mudar-proporcao: 16:9 → vertical 9:16',
-    pagina: '/video/mudar-proporcao',
+    nome: 'video/editor: proporção 16:9 → vertical 9:16',
+    pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
       await t.js(`[...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === '9:16').click()`)
@@ -94,22 +106,24 @@ export default [
     },
   },
   {
-    nome: 'video/velocidade: 2× pelo ffmpeg (metade da duração)',
-    pagina: '/video/velocidade',
+    nome: 'video/editor: velocidade 2× pelo ffmpeg (metade da duração)',
+    pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
+      await t.js(`__t.digitar('Velocidade', '2')`)
       await t.clicar('Exportar vídeo')
       await t.aguardarResultado(300000)
       perto((await t.js('return await __t.midia()')).duracao, 1.5, 0.35, 'duração a 2×')
     },
   },
   {
-    nome: 'video/para-gif: trecho vira GIF animado',
-    pagina: '/video/para-gif',
+    nome: 'video/converter: trecho vira GIF animado',
+    pagina: '/video/converter',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}]`)
+      await t.clicar('GIF')
       await t.js(`__t.digitar('Fim', '0:02')`)
-      await t.clicar('Criar GIF')
+      await t.clicar('Converter')
       await t.aguardarResultado(240000)
       const [r] = await t.js('return await __t.resultados()')
       assert.equal(r.tipo, 'gif')
@@ -118,8 +132,8 @@ export default [
     },
   },
   {
-    nome: 'video/gif-para-mp4: GIF vira MP4',
-    pagina: '/video/gif-para-mp4',
+    nome: 'video/converter: GIF vira MP4',
+    pagina: '/video/converter',
     async executar(t) {
       await enviar(t, `[${usar('gif')}]`)
       await t.clicar('Converter')
@@ -130,8 +144,8 @@ export default [
     },
   },
   {
-    nome: 'video/unir: dois vídeos somam as durações',
-    pagina: '/video/unir',
+    nome: 'video/juntar-dividir: juntar soma as durações',
+    pagina: '/video/juntar-dividir',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}, __t.arquivo(await __t.gravarVideo(2, 320, 240), 'b.webm')]`)
       await t.clicar('Juntar vídeos')
@@ -142,9 +156,10 @@ export default [
     },
   },
   {
-    nome: 'video/dividir: em 2 partes sem recodificar',
-    pagina: '/video/dividir',
+    nome: 'video/juntar-dividir: dividir em 2 partes sem recodificar',
+    pagina: '/video/juntar-dividir',
     async executar(t) {
+      await t.clicar('Dividir')
       await enviar(t, `[${usar('mp4')}]`)
       await t.clicar('Dividir vídeo')
       await t.aguardarResultado(240000)
@@ -154,13 +169,14 @@ export default [
     },
   },
   {
-    nome: 'video/adicionar-audio: troca o som do vídeo',
-    pagina: '/video/adicionar-audio',
+    nome: 'video/editor: trocar o som por uma música',
+    pagina: '/video/editor',
     async executar(t) {
-      await t.js(`const inputs = document.querySelectorAll('main input[type=file]')
-        const pares = [[inputs[0], ${usar('mp4')}], [inputs[1], __t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')]]
-        for (const [input, arquivo] of pares) { const dt = new DataTransfer(); dt.items.add(arquivo); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })) }`)
-      await t.clicar('Adicionar áudio')
+      await abrirNoEditor(t)
+      await escolher(t, 'trocar')
+      await t.aguardar('document.querySelector("main aside input[type=file]")')
+      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')], 'main aside input[type=file]')`)
+      await t.clicar('Exportar vídeo')
       await t.aguardarResultado(240000)
       const b = await bytes(t)
       assert.ok(temTrilhaDeAudio(b), 'sem trilha de áudio')
@@ -170,8 +186,8 @@ export default [
 
   // ─── Áudio ────────────────────────────────────────────────────────────────
   {
-    nome: 'audio/wav-para-mp3: 2 s de tom',
-    pagina: '/audio/wav-para-mp3',
+    nome: 'audio/converter: WAV para MP3',
+    pagina: '/audio/converter',
     async executar(t) {
       await enviar(t, `[__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'tom.wav')]`)
       await t.clicar('Converter')
@@ -182,56 +198,57 @@ export default [
     },
   },
   {
-    nome: 'audio/extrair-de-video: MP4 → MP3 e cópia exata (M4A)',
-    pagina: '/audio/extrair-de-video',
+    nome: 'audio/converter: extrair de vídeo em MP3 e cópia exata',
+    pagina: '/audio/converter',
     async executar(t) {
       await enviar(t, `[${usar('mp4')}]`)
-      await t.clicar('Extrair áudio')
+      await t.clicar('Converter')
       await t.aguardarResultado(120000)
       assert.equal((await t.js('return await __t.resultados()'))[0].tipo, 'mp3')
       await t.clicar('Ajustar e refazer')
       await t.js(`__t.digitar('Formato de saída', 'original')`)
-      await t.clicar('Extrair áudio')
+      await t.clicar('Converter')
       await t.aguardarResultado(120000)
       const [r] = await t.js('return await __t.resultados()')
       assert.ok(/\.(m4a|opus|ogg)$/.test(r.nome), r.nome)
     },
   },
   {
-    nome: 'audio/remover-silencio: 1 s de som entre silêncios',
-    pagina: '/audio/remover-silencio',
+    nome: 'audio/editor: remover silêncio deixa 1 s de som',
+    pagina: '/audio/editor',
     async executar(t) {
-      await enviar(t, `[__t.arquivo(__t.wav([{ s: 1.5, hz: 0 }, { s: 1, hz: 440 }, { s: 1.5, hz: 0 }]), 'fala.wav')]`)
-      await t.clicar('Remover silêncio')
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 1.5, hz: 0 }, { s: 1, hz: 440 }, { s: 1.5, hz: 0 }]), 'fala.wav')`, '0:04.0')
+      await t.js(`[...document.querySelectorAll('main label')].find((l) => l.textContent.trim().startsWith('Remover silêncio')).click()`)
+      await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 1, 0.25, 'duração sem silêncio')
     },
   },
   {
-    nome: 'audio/velocidade: 2× mantendo o tom',
-    pagina: '/audio/velocidade',
+    nome: 'audio/editor: velocidade 2× mantendo o tom',
+    pagina: '/audio/editor',
     async executar(t) {
-      await enviar(t, `[__t.arquivo(__t.wav([{ s: 4, hz: 440 }]), 'aula.wav')]`)
-      await t.js(`__t.digitar('Velocidade', '2')`)
-      await t.clicar('Mudar velocidade')
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }]), 'aula.wav')`, '0:04.0')
+      await escolher(t, '2')
+      await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração a 2×')
     },
   },
   {
-    nome: 'audio/volume: normalizar gera áudio válido',
-    pagina: '/audio/volume',
+    nome: 'audio/editor: normalizar o volume',
+    pagina: '/audio/editor',
     async executar(t) {
-      await enviar(t, `[__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'baixo.wav')]`)
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'baixo.wav')`, '0:02.0')
       await t.clicar('Normalizar')
-      await t.clicar('Ajustar volume')
+      await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração')
     },
   },
   {
-    nome: 'audio/unir: 2 + 1 s com 1 s de pausa = 4 s',
-    pagina: '/audio/unir',
+    nome: 'audio/juntar: 2 + 1 s com 1 s de pausa = 4 s',
+    pagina: '/audio/juntar',
     async executar(t) {
       await enviar(t, `[__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'a.wav'), __t.arquivo(__t.wav([{ s: 1, hz: 660 }]), 'b.wav')]`)
       await t.js(`__t.digitar('Entre as faixas', 'pausa1')`)
@@ -241,8 +258,8 @@ export default [
     },
   },
   {
-    nome: 'audio/cortar: trecho com fade',
-    pagina: '/audio/cortar',
+    nome: 'audio/editor: cortar trecho com fade',
+    pagina: '/audio/editor',
     async executar(t) {
       await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 5, hz: 440 }]), 'musica.wav')])`)
       await t.aguardar('document.querySelector("main audio") && document.querySelector("main").innerText.includes("0:05.0")', 20000)
@@ -250,7 +267,7 @@ export default [
       await t.clicar('Início aqui')
       await t.js(`const a = document.querySelector('main audio'); a.currentTime = 3; await new Promise((ok) => a.addEventListener('timeupdate', ok, { once: true }))`)
       await t.clicar('Fim aqui')
-      await t.clicar('Cortar')
+      await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração do trecho')
     },

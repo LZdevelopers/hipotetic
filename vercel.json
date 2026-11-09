@@ -18,6 +18,10 @@
     },
     "api/miniatura.js": {
       "maxDuration": 20
+    },
+    "api/documentos/converter.js": {
+      "maxDuration": 120,
+      "includeFiles": "servicos/libreoffice/saida/lo.tar.br"
     }
   },
   "headers": [

@@ -15,15 +15,19 @@ O catálogo (`src/ferramentas/catalogo.js`) é a fonte única: navegação, busc
 páginas de categoria, SEO, sitemap e pré-renderização saem dele. **Uma
 ferramenta só entra no catálogo quando funciona** — não existe “em breve”.
 
-| Categoria | Ferramentas | Motor |
+Cada tipo de arquivo tem **poucas páginas que fazem muito**: um conversor por
+tipo (o formato se escolhe na página), um editor por tipo (as operações são
+abas ou opções) — em vez de uma página para cada par de formatos.
+
+| Categoria | Páginas | Motor |
 |---|---|---|
-| Vídeo | baixar do YouTube/TikTok, converter (+ MP4↔WebM, MOV/MKV/AVI→MP4), comprimir (por nível ou em MB), editor (trecho, proporção, girar, resolução, velocidade, silenciar), vídeo→GIF, GIF→MP4, juntar, dividir, adicionar música | Mediabunny (WebCodecs) + ffmpeg.wasm |
-| Áudio | converter (MP3, M4A, AAC, OGG, OPUS, WAV, FLAC), extrair de vídeo, cortar com forma de onda, juntar, volume/normalizar, remover silêncio, velocidade | ffmpeg.wasm |
-| Imagens | converter (+ PNG↔JPG, PNG↔WebP, JPG↔WebP, SVG→PNG), comprimir, redimensionar, recortar, girar, ajustes e filtros, remover metadados (sem recomprimir), informações/EXIF, favicon, tamanhos para redes, miniatura, paleta de cores, Base64 | Web Workers + OffscreenCanvas + jSquash (MozJPEG, WebP, AVIF, OxiPNG) |
-| PDF | unir, dividir, extrair/excluir/girar/organizar páginas, editar e assinar, comprimir, PDF→JPG/PNG, imagens→PDF, extrair texto, OCR, numerar, marca d’água, proteger/desbloquear, comparar, metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
-| Documentos | visualizar DOCX, extrair texto, contar palavras, metadados DOCX/ODT, Markdown→HTML/PDF; **com o serviço LibreOffice**: converter DOCX/DOC/ODT/RTF/HTML ↔ PDF/DOCX/ODT | navegador + contêiner LibreOffice |
-| Compactados | criar ZIP/7Z/TAR/TAR.GZ (senha AES-256, pastas), extrair ZIP/RAR/7Z/TAR/GZ…, converter (RAR→ZIP…) | 7-Zip em WebAssembly |
-| Utilitários | QR Code, hashes (MD5…SHA-512, CRC32), identificar arquivo, comparar arquivos, unidades, calculadora de download, visualizar/criar texto | navegador |
+| Vídeo | baixar (YouTube/TikTok) · converter (MP4, WebM, MOV, MKV, GIF, inclusive GIF→vídeo) · comprimir · editor (trecho, proporção, girar, resolução, velocidade, som: silenciar, trocar ou misturar música) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
+| Áudio | converter (MP3, M4A, AAC, OGG, OPUS, WAV, FLAC; aceita vídeo para extrair o som) · editor (cortar com forma de onda, fades, volume/normalizar, remover silêncio, velocidade) · juntar | ffmpeg.wasm |
+| Imagens | converter (JPG, PNG, WebP, AVIF, SVG→PNG…) · comprimir · editor (recortar, girar, tamanho/redes sociais, cores e filtros, formato) · metadados (ver EXIF/GPS e remover sem recomprimir) · favicon · miniatura · paleta de cores | Web Workers + OffscreenCanvas + jSquash |
+| PDF | unir · dividir · organizar · editar e assinar · comprimir · converter (PDF→imagem, PDF→texto, imagens→PDF) · OCR · numerar e marca d’água · senha (colocar/remover) · comparar · metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
+| Documentos | converter DOCX/DOC/ODT/RTF/HTML ↔ PDF/DOCX/ODT (LibreOffice, no servidor) · visualizar DOCX · texto e contagem · metadados · Markdown→HTML/PDF | navegador + função LibreOffice |
+| Compactados | compactar (ZIP/7Z/TAR/TAR.GZ, senha AES-256) · extrair (ZIP/RAR/7Z/TAR/GZ…) | 7-Zip em WebAssembly |
+| Utilitários | QR Code · hash · identificar arquivo · comparar arquivos · calculadoras (unidades, download) · editor de texto · Base64 | navegador |
 
 ## Stack e estrutura
 
@@ -41,7 +45,8 @@ src/
   nucleo/                       roteador, rotas/metadados, arquivos, tarefa, preferências
   textos.js                     textos globais (pt-BR, pronto para tradução)
 api/                            download por link (YouTube/TikTok) e miniatura
-servicos/documentos/            contêiner LibreOffice (Dockerfile.vercel + servidor.mjs)
+api/documentos/converter.js     conversão de documentos (LibreOffice dentro da função)
+servicos/libreoffice/           gera o pacote do LibreOffice para a função (Docker)
 dev/                            pré-renderização e testes em navegador real
 ```
 
@@ -57,35 +62,43 @@ npm run test:paginas       # todas as páginas em Chrome real: erros, CSP, layou
 npm run test:ferramentas   # cada ferramenta processa arquivos reais e o resultado é conferido
 ```
 
-Testando também a conversão de documentos (precisa do Docker):
-
-```bash
-docker build -f servicos/documentos/Dockerfile.vercel -t hipotetic-documentos servicos/documentos
-docker run -d -p 8090:80 hipotetic-documentos
-VITE_DOCUMENTOS=1 npm run build
-DOCUMENTOS_URL=http://localhost:8090 npm run test:ferramentas
-```
-
-## Serviço de documentos (LibreOffice)
+## Conversão de documentos (LibreOffice)
 
 Converter DOCX/ODT/DOC/RTF com fidelidade exige um processador de texto
-completo. `servicos/documentos/` é um contêiner (Node 24 + LibreOffice Writer +
-fontes compatíveis com as do Office) que recebe o arquivo, converte e **apaga na
-hora**. Limites: 4,5 MB por arquivo (limite de corpo das funções), 100 s por
-conversão, uma por vez por instância, 20 por IP a cada 10 min; macros e links
-externos desativados; tipo validado pelo conteúdo.
+completo. Para não pagar contêiner, o LibreOffice roda **dentro de uma função
+comum da Vercel** (`api/documentos/converter.js`, gratuita no plano Hobby):
 
-As ferramentas que dependem dele têm `requer: 'documentos'` no catálogo e **só
-aparecem no build com `VITE_DOCUMENTOS=1`**. Para ativar na Vercel é preciso
-publicar o contêiner como *service* — veja `servicos/vercel.servicos.json`
-(proposta do `vercel.json` com Services). Custo: o registro de imagens da
-Vercel cobra armazenamento (US$ 0,10/GB/mês; a imagem tem ~0,9 GB).
+1. `npm run empacotar:libreoffice` (precisa do Docker) monta um LibreOffice
+   enxuto — sem interface, ajuda, Python, bancos de dados — com as bibliotecas
+   de sistema e fontes métrico-compatíveis com as do Office (Liberation,
+   Carlito, Caladea), e gera `servicos/libreoffice/saida/lo.tar.br`
+   (~430 MB aberto, Brotli). Esse arquivo não vai para o Git.
+2. A função leva o pacote (`includeFiles` no `vercel.json`) e, na primeira
+   chamada de cada instância, o descompacta em `/tmp/lo` (alguns segundos);
+   as chamadas seguintes reaproveitam. A página “acorda” a função ao abrir.
+3. Cada conversão usa uma pasta temporária exclusiva, apagada na hora. Limites:
+   4,5 MB por arquivo (corpo das funções), 100 s por conversão, uma por vez por
+   instância, 20 por IP a cada 10 min; macros e links externos desativados;
+   tipo validado pelo conteúdo.
+
+O build ativa as ferramentas de documentos sozinho quando o pacote existe
+(ou com `VITE_DOCUMENTOS=1`). Testando localmente num ambiente igual ao da
+Vercel (Amazon Linux + Node 24, sem LibreOffice instalado):
+
+```bash
+npm run empacotar:libreoffice
+docker build -f servicos/libreoffice/teste.Dockerfile -t hipotetic-lo-teste .
+docker run --rm -p 8090:8090 --tmpfs /tmp:size=512m,exec hipotetic-lo-teste
+npm run build
+DOCUMENTOS_URL=http://localhost:8090 SO=documentos npm run test:ferramentas
+```
 
 ## Variáveis de ambiente
 
 | Nome | Para quê |
 |---|---|
-| `VITE_DOCUMENTOS` | `1` publica as ferramentas de conversão de documentos (exige o serviço). |
+| `VITE_DOCUMENTOS` | `1` força as ferramentas de conversão de documentos (o build já ativa sozinho se o pacote existir). |
+| `DOCUMENTOS_URL` | em desenvolvimento, repassa `/api/documentos` para outro servidor (ex.: o contêiner de teste). |
 | `YOUTUBE_DOWNLOAD` | `off` desliga o download do YouTube. |
 | `YOUTUBE_MAX_MINUTOS` | duração máxima para download do YouTube (padrão 120). |
 | `TIKTOK_DOWNLOAD` | `off` desliga o download do TikTok. |

@@ -61,10 +61,11 @@ function Estatisticas({ texto }) {
 }
 
 /**
- * Extrair texto (modo "extrair") ou contar palavras (modo "contar") de
- * DOCX, ODT, RTF, PDF, HTML e TXT — ou de texto colado.
+ * Texto de documentos: extrai o texto de DOCX, ODT, RTF, PDF, HTML e TXT (ou
+ * usa um texto colado) e mostra as contagens — palavras, caracteres, frases,
+ * tempo de leitura — com o .txt para baixar.
  */
-export default function TextoDocumento({ modo = 'extrair' }) {
+export default function TextoDocumento() {
   const [origem, setOrigem] = useState('arquivo')
   const [arquivos, setArquivos] = useState([])
   const [colado, setColado] = useState('')
@@ -78,11 +79,11 @@ export default function TextoDocumento({ modo = 'extrair' }) {
 
   const textoColadoMemo = useMemo(() => colado, [colado])
 
-  if (modo === 'extrair' && tarefa.fase === 'pronto') {
+  if (tarefa.fase === 'pronto') {
     const { texto } = tarefa.resultado
     return (
       <div className="flex flex-col gap-4">
-        {!texto.trim() ? <Aviso tom="alerta">Nenhum texto encontrado. Se for um PDF digitalizado, use o OCR de PDF.</Aviso> : null}
+        {!texto.trim() ? <Aviso tom="alerta">Nenhum texto encontrado. Se for um PDF digitalizado, use o OCR de PDF.</Aviso> : <Estatisticas texto={texto} />}
         <Resultados
           itens={[{ nome: `${semExtensao(arquivos[0].arquivo.name)}.txt`, blob: new Blob([texto], { type: 'text/plain;charset=utf-8' }), detalhe: `${contar(texto).palavras.toLocaleString('pt-BR')} palavras` }]}
           aoAjustar={tarefa.reiniciar}
@@ -98,21 +99,19 @@ export default function TextoDocumento({ modo = 'extrair' }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {modo === 'contar' ? (
-        <Segmentado
-          valor={origem}
-          aoMudar={(v) => {
-            setOrigem(v)
-            tarefa.reiniciar()
-          }}
-          className="max-w-sm"
-          opcoes={[
-            { valor: 'arquivo', rotulo: 'Documento' },
-            { valor: 'texto', rotulo: 'Colar texto' },
-          ]}
-        />
-      ) : null}
-      {origem === 'texto' && modo === 'contar' ? (
+      <Segmentado
+        valor={origem}
+        aoMudar={(v) => {
+          setOrigem(v)
+          tarefa.reiniciar()
+        }}
+        className="max-w-sm"
+        opcoes={[
+          { valor: 'arquivo', rotulo: 'Documento' },
+          { valor: 'texto', rotulo: 'Colar texto' },
+        ]}
+      />
+      {origem === 'texto' ? (
         <>
           <AreaTexto rotulo="Texto" valor={colado} aoMudar={setColado} className="[&_textarea]:min-h-48 [&_textarea]:font-sans" placeholder="Cole ou digite o texto…" />
           <Estatisticas texto={textoColadoMemo} />
@@ -134,11 +133,9 @@ export default function TextoDocumento({ modo = 'extrair' }) {
           {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
           {tarefa.fase === 'processando' ? (
             <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} />
-          ) : tarefa.fase === 'pronto' && modo === 'contar' ? (
-            <Estatisticas texto={tarefa.resultado.texto} />
           ) : (
-            <Botao tamanho="g" icone={modo === 'contar' ? 'calculadora' : 'texto'} className="self-start" onClick={extrair} disabled={!arquivos.length}>
-              {modo === 'contar' ? 'Contar palavras' : 'Extrair texto'}
+            <Botao tamanho="g" icone="texto" className="self-start" onClick={extrair} disabled={!arquivos.length}>
+              Ler documento
             </Botao>
           )}
         </>

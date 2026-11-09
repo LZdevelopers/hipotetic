@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
-import { Aviso, Botao, Deslizante, Progresso } from '../../componentes/ui'
-import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, infoMidia, processarAudio } from '../../motores/midia'
+import { Aviso, Botao, Caixa, Deslizante, Grupo, Progresso, Segmentado, Seletor } from '../../componentes/ui'
+import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { Bitrate, FormatoAudio } from './_comum'
@@ -40,7 +40,7 @@ function Editor({ arquivo, aoTrocar }) {
   const [duracao, setDuracao] = useState(0)
   const [onda, setOnda] = useState(undefined)
   const [atual, setAtual] = useState(0)
-  const [o, setO] = useState({ inicio: 0, fim: 0, fadeIn: 0, fadeOut: 0, formato: ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(extensaoDe(arquivo.name)) ? extensaoDe(arquivo.name) : 'mp3', bitrate: 192 })
+  const [o, setO] = useState({ inicio: 0, fim: 0, fadeIn: 0, fadeOut: 0, formato: ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(extensaoDe(arquivo.name)) ? extensaoDe(arquivo.name) : 'mp3', bitrate: 192, volume: 'manter', ganho: 6, silencio: false, silencioOnde: 'pontas', limiar: -45, velocidade: 1, tom: false })
   const tarefa = useTarefa()
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
@@ -86,11 +86,23 @@ function Editor({ arquivo, aoTrocar }) {
   const exportar = () =>
     tarefa.executar((ctx) => {
       const trecho = o.fim - o.inicio
-      const filtros = [o.fadeIn ? `afade=t=in:st=0:d=${o.fadeIn}` : null, o.fadeOut ? `afade=t=out:st=${Math.max(0, trecho - o.fadeOut)}:d=${o.fadeOut}` : null].filter(Boolean).join(',') || undefined
-      return processarAudio(arquivo, { formato: o.formato, bitrate: o.bitrate, inicio: o.inicio, fim: o.fim, filtros }, ctx, trecho).then((blob) => [
-        { nome: trocarExtensao(arquivo.name, o.formato, '-trecho'), blob, detalhe: `${tempo(o.inicio)} → ${tempo(o.fim)} (${formatarDuracao(trecho)})` },
-      ])
-    }, 'Cortando')
+      // Ordem: fades no trecho → tirar silêncio → velocidade → volume.
+      const ponta = `silenceremove=start_periods=1:start_duration=0.05:start_threshold=${o.limiar}dB`
+      const filtros = [
+        o.fadeIn ? `afade=t=in:st=0:d=${o.fadeIn}` : null,
+        o.fadeOut ? `afade=t=out:st=${Math.max(0, trecho - o.fadeOut)}:d=${o.fadeOut}` : null,
+        o.silencio ? (o.silencioOnde === 'tudo' ? `${ponta},silenceremove=stop_periods=-1:stop_duration=0.5:stop_threshold=${o.limiar}dB` : `${ponta},areverse,${ponta},areverse`) : null,
+        o.velocidade !== 1 ? (o.tom ? `asetrate=44100*${o.velocidade},aresample=44100` : filtroVelocidadeAudio(o.velocidade)) : null,
+        o.volume === 'ganho' ? `volume=${o.ganho}dB,alimiter=limit=0.98` : o.volume === 'normalizar' ? 'loudnorm=I=-14:TP=-1.5:LRA=11' : null,
+      ]
+        .filter(Boolean)
+        .join(',')
+      const inteiro = o.inicio < 0.05 && o.fim > duracao - 0.05
+      return processarAudio(arquivo, { formato: o.formato, bitrate: o.bitrate, inicio: inteiro ? undefined : o.inicio, fim: inteiro ? undefined : o.fim, filtros: filtros || undefined }, ctx, trecho / o.velocidade).then(async (blob) => {
+        const final = await infoMidia(new File([blob], `x.${o.formato}`)).catch(() => ({}))
+        return [{ nome: trocarExtensao(arquivo.name, o.formato, '-editado'), blob, detalhe: final.duracao ? `${formatarDuracao(final.duracao)} de áudio` : undefined }]
+      })
+    }, 'Processando')
 
   if (tarefa.fase === 'pronto') return <Resultados itens={tarefa.resultado} duracao={tarefa.duracao} aoAjustar={tarefa.reiniciar} aoReiniciar={aoTrocar} rotuloNovo="Outro áudio" />
 
@@ -176,6 +188,39 @@ function Editor({ arquivo, aoTrocar }) {
       </div>
       <aside className="cartao flex flex-col gap-5 p-4 lg:sticky lg:top-20">
         <div className={processando ? 'pointer-events-none flex flex-col gap-5 opacity-60' : 'flex flex-col gap-5'}>
+          <Grupo titulo="Volume">
+            <Segmentado
+              valor={o.volume}
+              aoMudar={(v) => mudar({ volume: v })}
+              opcoes={[
+                { valor: 'manter', rotulo: 'Manter' },
+                { valor: 'ganho', rotulo: 'Ajustar' },
+                { valor: 'normalizar', rotulo: 'Normalizar' },
+              ]}
+              dica={o.volume === 'normalizar' ? 'Padrão de streaming (−14 LUFS): volume igual entre faixas, sem distorcer.' : undefined}
+            />
+            {o.volume === 'ganho' ? <Deslizante className="mt-3" rotulo="Ganho" valor={o.ganho} aoMudar={(v) => mudar({ ganho: v })} min={-20} max={20} formatar={(v) => `${v > 0 ? '+' : ''}${v} dB`} /> : null}
+          </Grupo>
+          <Grupo titulo="Silêncio">
+            <Caixa rotulo="Remover silêncio" marcado={o.silencio} aoMudar={(v) => mudar({ silencio: v })} />
+            {o.silencio ? (
+              <div className="mt-3 flex flex-col gap-3">
+                <Segmentado
+                  valor={o.silencioOnde}
+                  aoMudar={(v) => mudar({ silencioOnde: v })}
+                  opcoes={[
+                    { valor: 'pontas', rotulo: 'Início e fim' },
+                    { valor: 'tudo', rotulo: 'Todas as pausas' },
+                  ]}
+                />
+                <Deslizante rotulo="O que conta como silêncio" valor={o.limiar} aoMudar={(v) => mudar({ limiar: v })} min={-70} max={-20} formatar={(v) => `${v} dB`} />
+              </div>
+            ) : null}
+          </Grupo>
+          <Grupo titulo="Velocidade">
+            <Seletor valor={String(o.velocidade)} aoMudar={(v) => mudar({ velocidade: Number(v) })} opcoes={[0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 3].map((v) => ({ valor: String(v), rotulo: v === 1 ? 'Normal (1×)' : `${v.toLocaleString('pt-BR')}×` }))} />
+            {o.velocidade !== 1 ? <Caixa className="mt-3" rotulo="Mudar o tom junto" dica="Desmarcado, a voz continua natural." marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} /> : null}
+          </Grupo>
           <Deslizante rotulo="Entrada suave (fade in)" valor={o.fadeIn} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={10} passo={0.5} formatar={(v) => `${v.toLocaleString('pt-BR')} s`} />
           <Deslizante rotulo="Saída suave (fade out)" valor={o.fadeOut} aoMudar={(v) => mudar({ fadeOut: v })} min={0} max={10} passo={0.5} formatar={(v) => `${v.toLocaleString('pt-BR')} s`} />
           <FormatoAudio valor={o.formato} aoMudar={(v) => mudar({ formato: v })} />
@@ -189,8 +234,8 @@ function Editor({ arquivo, aoTrocar }) {
             <Botao variante="secundario" onClick={aoTrocar}>
               Trocar
             </Botao>
-            <Botao className="flex-1" icone="cortar" onClick={exportar} disabled={!duracao}>
-              Cortar
+            <Botao className="flex-1" icone="baixar" onClick={exportar} disabled={!duracao}>
+              Aplicar e baixar
             </Botao>
           </div>
         )}
@@ -199,7 +244,8 @@ function Editor({ arquivo, aoTrocar }) {
   )
 }
 
-export default function CortarAudio() {
+/** Editor de áudio: trecho, fades, volume, silêncio e velocidade numa página só. */
+export default function EditorAudio() {
   const [arquivos, setArquivos] = useState([])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={[...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]} descricaoFormatos={`${DESCRICAO_AUDIO} (ou vídeo)`} limiteBytes={LIMITE_AUDIO} />
   return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />

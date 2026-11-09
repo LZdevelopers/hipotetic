@@ -45,7 +45,7 @@ function Codificar() {
   }, [arquivo])
 
   if (!arquivo) {
-    return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} limiteBytes={20 * 1024 * 1024} descricaoFormatos="Qualquer imagem (ou outro arquivo) até 20 MB" aceitarColar />
+    return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} limiteBytes={20 * 1024 * 1024} descricaoFormatos="Qualquer arquivo até 20 MB (imagens, fontes, PDFs…)" aceitarColar />
   }
 
   const uri = `data:${mime};base64,${b64}`
@@ -149,7 +149,7 @@ function Decodificar() {
             <p className="text-sm text-suave">
               {resultado.ext.toUpperCase()} · {formatarBytes(resultado.blob.size)}
             </p>
-            <Botao icone="baixar" className="self-start" onClick={() => baixarBlob(resultado.blob, `imagem.${resultado.ext}`)}>
+            <Botao icone="baixar" className="self-start" onClick={() => baixarBlob(resultado.blob, `arquivo.${resultado.ext}`)}>
               Baixar arquivo
             </Botao>
           </>
@@ -168,8 +168,8 @@ export default function Base64({ modo: inicial = 'codificar' }) {
         aoMudar={setModo}
         className="max-w-md"
         opcoes={[
-          { valor: 'codificar', rotulo: 'Imagem → Base64' },
-          { valor: 'decodificar', rotulo: 'Base64 → Imagem' },
+          { valor: 'codificar', rotulo: 'Arquivo → Base64' },
+          { valor: 'decodificar', rotulo: 'Base64 → Arquivo' },
         ]}
       />
       {modo === 'codificar' ? <Codificar /> : <Decodificar />}

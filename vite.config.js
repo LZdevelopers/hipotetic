@@ -153,6 +153,12 @@ function arquivosEstaticos() {
   }
 }
 
+// As ferramentas de conversão de documentos só entram no site quando o
+// LibreOffice empacotado existe (npm run empacotar:libreoffice): nada de
+// publicar ferramenta sem o motor. VITE_DOCUMENTOS=0 força desligar.
+const PACOTE_LO = fileURLToPath(new URL('./servicos/libreoffice/saida/lo.tar.br', import.meta.url))
+if (process.env.VITE_DOCUMENTOS == null && existsSync(PACOTE_LO)) process.env.VITE_DOCUMENTOS = '1'
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), vercelFunctions(), arquivosEstaticos()],
   build: {

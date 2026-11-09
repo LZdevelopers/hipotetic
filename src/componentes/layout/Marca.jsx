@@ -29,19 +29,25 @@ export function Marca({ className = '' }) {
   )
 }
 
-/** Assinatura "um projeto LZdev" com o símbolo oficial. */
+/**
+ * Assinatura "Um projeto LZdev" com o símbolo oficial (estrela branca sem
+ * fundo; no tema claro é invertida para preto). Só "LZdev" é link.
+ */
 export function AssinaturaLzdev() {
   return (
-    <a
-      href="https://lzdev.com.br"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 text-xs text-fraca transition-colors hover:text-tinta"
-    >
-      <img src="/lzdev-mark.png" alt="" width="18" height="18" className="size-[18px] rounded-[4px] bg-black" />
+    <p className="inline-flex items-center gap-2.5 text-sm text-fraca">
+      <img src="/lzdev-marca.png" alt="" width="28" height="28" className="size-7 invert escuro:invert-0" />
       <span>
-        um projeto <strong className="font-display font-extrabold text-tinta">LZdev</strong>
+        Um projeto{' '}
+        <a
+          href="https://lzdev.com.br"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-sm font-display font-extrabold text-tinta underline-offset-4 transition-colors hover:text-acento hover:underline"
+        >
+          LZdev
+        </a>
       </span>
-    </a>
+    </p>
   )
 }

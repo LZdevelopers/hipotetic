@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { flushSync } from 'react-dom'
 
 /**
  * Preferências guardadas no navegador (localStorage). Sempre com try/catch:
@@ -28,17 +29,35 @@ export function gravar(chave, valor) {
 const ouvintesTema = new Set()
 
 function temaAtual() {
-  return typeof document === 'undefined' ? 'light' : document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+  return typeof document === 'undefined' ? 'dark' : document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
 }
 
-export function definirTema(tema) {
-  const raiz = document.documentElement
-  raiz.classList.add('trocando-tema')
-  raiz.dataset.theme = tema
+function aplicarTema(tema) {
+  document.documentElement.dataset.theme = tema
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tema === 'dark' ? '#0b0b0d' : '#ffffff')
   gravar(CHAVES.tema, tema)
-  setTimeout(() => raiz.classList.remove('trocando-tema'), 300)
-  ouvintesTema.forEach((f) => f())
+  // Síncrono: a transição tira a "foto" do tema novo logo depois deste callback.
+  flushSync(() => ouvintesTema.forEach((f) => f()))
+}
+
+/**
+ * Troca o tema com uma animação: o tema novo se abre em círculo a partir de
+ * (x, y) — normalmente o botão clicado — usando View Transitions. Sem
+ * suporte do navegador, ou com "reduzir movimento", a troca é instantânea.
+ */
+export function definirTema(tema, origem) {
+  const reduzir = matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (!document.startViewTransition || reduzir) return aplicarTema(tema)
+  const x = origem?.x ?? innerWidth - 40
+  const y = origem?.y ?? 30
+  const raio = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
+  const transicao = document.startViewTransition(() => aplicarTema(tema))
+  transicao.ready.then(() => {
+    document.documentElement.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${raio}px at ${x}px ${y}px)`] },
+      { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', pseudoElement: '::view-transition-new(root)' },
+    )
+  })
 }
 
 export function useTema() {
@@ -48,7 +67,7 @@ export function useTema() {
       return () => ouvintesTema.delete(f)
     },
     temaAtual,
-    () => 'light',
+    () => 'dark',
   )
 }
 

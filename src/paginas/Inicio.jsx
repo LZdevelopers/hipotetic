@@ -3,7 +3,7 @@ import { CartaoFerramenta, GradeFerramentas } from '../componentes/CartaoFerrame
 import { Icone } from '../componentes/Icone'
 import { ListaResultados, useBuscaTeclado } from '../componentes/layout/Busca'
 import { SeloCategoria } from '../componentes/ui'
-import { caminhoDa, categoriasComFerramentas, ferramentaPorSlug, ferramentas, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
+import { caminhoDa, categoriasComFerramentas, ferramentaPorSlug, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
 import { useRecentes } from '../nucleo/preferencias'
 import { Link, useRota } from '../nucleo/roteador'
 import { inicio, textos } from '../textos'
@@ -86,7 +86,7 @@ export function Inicio() {
 
   return (
     <div className="container-pagina">
-      <section className="flex flex-col items-center pt-14 pb-4 text-center sm:pt-20">
+      <section className="flex flex-col items-center pt-14 pb-2 text-center sm:pt-20">
         <h1 className="max-w-4xl text-[clamp(2rem,5.4vw,3.6rem)] leading-[1.05] font-extrabold tracking-[-0.035em]">
           {inicio.titulo[0]} <span className="text-fraca">{inicio.titulo[1]}</span>
         </h1>
@@ -110,52 +110,41 @@ export function Inicio() {
 
       <Recentes />
 
-      <section aria-labelledby="titulo-categorias" className="mt-14">
+      <section aria-labelledby="titulo-categorias" className="mt-16">
         <h2 id="titulo-categorias" className="sr-only">
           {inicio.categorias}
         </h2>
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {cats.map((c) => {
-            const lista = ferramentasDaCategoria(c.id)
-            return (
-              <li key={c.id}>
-                <Link
-                  para={`/${c.id}`}
-                  className="group cartao flex h-full flex-col gap-4 p-5 transition-[border-color,box-shadow] duration-200 hover:border-borda-forte hover:shadow-[var(--shadow-cartao)]"
-                >
-                  <div className="flex items-center justify-between">
-                    <SeloCategoria categoria={c.id} icone={c.icone} tamanho="g" />
-                    <span className="text-xs text-fraca tabular-nums">
-                      {lista.length} {lista.length === 1 ? 'ferramenta' : 'ferramentas'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="flex items-center gap-1.5 font-display text-lg font-bold text-tinta">
-                      {c.nome}
-                      <Icone nome="seta" tamanho={16} className="text-fraca transition-transform duration-200 group-hover:translate-x-0.5" />
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-[0.8125rem] leading-snug text-suave">{c.descricao}</p>
-                  </div>
-                </Link>
-              </li>
-            )
-          })}
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cats.map((c) => (
+            <li key={c.id} className="cartao flex flex-col p-5">
+              <Link para={`/${c.id}`} className="group flex items-center gap-3">
+                <SeloCategoria categoria={c.id} icone={c.icone} />
+                <span className="flex items-center gap-1.5 font-display text-lg font-bold text-tinta">
+                  {c.nome}
+                  <Icone nome="seta" tamanho={16} className="text-fraca transition-transform duration-200 group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+              <ul className="mt-4 flex flex-col">
+                {ferramentasDaCategoria(c.id).map((f) => (
+                  <li key={f.slug}>
+                    <Link para={caminhoDa(f)} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm text-suave transition-colors hover:bg-superficie-2 hover:text-tinta">
+                      {f.nome}
+                      {f.servidor ? <Icone nome="servidor" tamanho={13} className="text-fraca" aria-label="usa o servidor" /> : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
         </ul>
       </section>
 
-      <section aria-labelledby="titulo-populares" className="mt-16">
-        <h2 id="titulo-populares" className="mb-4 text-lg">
-          {textos.maisUsadas}
-        </h2>
-        <GradeFerramentas lista={populares().slice(0, 12)} mostrarCategoria />
-      </section>
-
-      <section aria-labelledby="titulo-como" className="mt-20 grid gap-10 border-y border-borda py-14 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <section aria-labelledby="titulo-como" className="mt-20 grid gap-10 border-t border-borda pt-14 lg:grid-cols-[18rem_minmax(0,1fr)]">
         <div>
           <h2 id="titulo-como" className="text-2xl">
             {inicio.comoFunciona.titulo}
           </h2>
-          <p className="mt-2 text-sm text-suave">{ferramentas.length} ferramentas, todas gratuitas.</p>
+          <p className="mt-2 text-sm text-suave">Grátis, sem cadastro e, quase sempre, sem enviar seus arquivos para ninguém.</p>
         </div>
         <ol className="grid gap-8 sm:grid-cols-3">
           {inicio.comoFunciona.passos.map((p, i) => (
@@ -169,43 +158,6 @@ export function Inicio() {
             </li>
           ))}
         </ol>
-      </section>
-
-      <section aria-label="Princípios" className="mt-14 grid gap-8 sm:grid-cols-3">
-        {inicio.principios.map((p) => (
-          <div key={p.titulo} className="flex gap-3.5">
-            <Icone nome={p.icone} tamanho={20} className="mt-0.5 text-tinta" />
-            <div>
-              <h3 className="text-base">{p.titulo}</h3>
-              <p className="mt-1.5 text-sm text-suave">{p.texto}</p>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section aria-labelledby="titulo-todas" className="mt-20">
-        <h2 id="titulo-todas" className="text-2xl">
-          {textos.todasAsFerramentas}
-        </h2>
-        <div className="mt-8 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-          {cats.map((c) => (
-            <div key={c.id}>
-              <Link para={`/${c.id}`} className="flex items-center gap-2.5 text-sm font-semibold text-tinta hover:underline">
-                <SeloCategoria categoria={c.id} icone={c.icone} tamanho="p" />
-                {c.nome}
-              </Link>
-              <ul className="mt-3 flex flex-col gap-1.5 border-l border-borda pl-4">
-                {ferramentasDaCategoria(c.id).map((f) => (
-                  <li key={f.slug}>
-                    <Link para={caminhoDa(f)} className="text-sm text-suave transition-colors hover:text-tinta">
-                      {f.nome}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
       </section>
     </div>
   )

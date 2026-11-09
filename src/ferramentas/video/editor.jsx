@@ -2,19 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
-import { Aviso, Botao, Caixa, Campo, Grupo, Progresso, Segmentado, Seletor } from '../../componentes/ui'
-import { DESCRICAO_VIDEO, EXTENSOES_VIDEO, LIMITE_VIDEO, infoMidia, processarVideo } from '../../motores/midia'
+import { Aviso, Botao, Campo, Deslizante, Grupo, Progresso, Segmentado, Seletor } from '../../componentes/ui'
+import { DESCRICAO_AUDIO, DESCRICAO_VIDEO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_VIDEO, infoMidia, processarVideo } from '../../motores/midia'
 import { formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
+import { aplicarTrilha } from './_trilha'
 import { useTarefa } from '../../nucleo/tarefa'
 import { EscolhaFormatoVideo, Resolucao, medidasPara, nomeMotor } from './_comum'
-
-const DICAS = {
-  cortar: 'Arraste os marcadores azuis na barra abaixo do vídeo para escolher o trecho que fica.',
-  girar: 'Use “Girar” até o vídeo ficar em pé. Espelhar corrige vídeos de câmera frontal.',
-  proporcao: 'Escolha a proporção (9:16 para Reels e TikTok, 1:1 para o feed) e arraste o enquadramento.',
-  silenciar: 'O áudio já está marcado para sair. Exporte, ou ajuste outras coisas antes.',
-  velocidade: 'Escolha a velocidade ao lado: 0,5× para câmera lenta, 2× para acelerar.',
-}
 
 const PROPORCOES = [
   { id: 'original', rotulo: 'Original', valor: null },
@@ -111,7 +104,7 @@ function Trilho({ duracao, inicio, fim, atual, aoMudar, aoBuscar }) {
   )
 }
 
-function Editor({ arquivo, aoTrocar, foco }) {
+function Editor({ arquivo, aoTrocar }) {
   const url = useMemo(() => URL.createObjectURL(arquivo), [arquivo])
   useEffect(() => () => URL.revokeObjectURL(url), [url])
   const video = useRef(null)
@@ -119,7 +112,8 @@ function Editor({ arquivo, aoTrocar, foco }) {
   const [info, setInfo] = useState(null)
   const [erroPrevia, setErroPrevia] = useState(false)
   const [atual, setAtual] = useState(0)
-  const [o, setO] = useState({ inicio: 0, fim: 0, girar: 0, espelhar: false, proporcao: 'original', modoProporcao: 'cortar', recorte: null, resolucao: 0, velocidade: foco === 'velocidade' ? 2 : 1, semAudio: foco === 'silenciar', formato: 'mp4' })
+  const [o, setO] = useState({ inicio: 0, fim: 0, girar: 0, espelhar: false, proporcao: 'original', modoProporcao: 'cortar', recorte: null, resolucao: 0, velocidade: 1, som: 'original', volumeTrilha: 100, volumeOriginal: 60, formato: 'mp4' })
+  const [trilha, setTrilha] = useState([])
   const tarefa = useTarefa()
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
@@ -142,8 +136,8 @@ function Editor({ arquivo, aoTrocar, foco }) {
     const v = video.current
     if (!v) return
     v.playbackRate = o.velocidade
-    v.muted = o.semAudio
-  }, [o.velocidade, o.semAudio])
+    v.muted = o.som === 'mudo' || o.som === 'trocar'
+  }, [o.velocidade, o.som])
   const aoTempo = () => {
     const v = video.current
     setAtual(v.currentTime)
@@ -203,7 +197,7 @@ function Editor({ arquivo, aoTrocar, foco }) {
         qualidade: 'alta',
         girar: o.girar,
         espelhar: o.espelhar,
-        semAudio: o.semAudio,
+        semAudio: o.som === 'mudo' || o.som === 'trocar',
         velocidade: o.velocidade,
         inicio: cortou ? o.inicio : undefined,
         fim: cortou ? o.fim : undefined,
@@ -228,7 +222,10 @@ function Editor({ arquivo, aoTrocar, foco }) {
         const deitado = o.girar === 90 || o.girar === 270
         Object.assign(opcoes, medidasPara(deitado ? { largura: H, altura: W } : info, o.resolucao))
       }
-      const { blob, motor } = await processarVideo(arquivo, opcoes, ctx)
+      let { blob, motor } = await processarVideo(arquivo, opcoes, ctx)
+      if ((o.som === 'trocar' || o.som === 'misturar') && trilha[0]) {
+        blob = await aplicarTrilha(blob, o.formato, trilha[0].arquivo, { modo: o.som === 'misturar' ? 'misturar' : 'substituir', volume: o.volumeTrilha, volumeOriginal: o.volumeOriginal }, ctx)
+      }
       return [{ nome: trocarExtensao(arquivo.name, o.formato, '-editado'), blob, original: arquivo.size, detalhe: nomeMotor(motor) }]
     }, 'Preparando')
 
@@ -238,12 +235,11 @@ function Editor({ arquivo, aoTrocar, foco }) {
   const processando = tarefa.fase === 'processando'
   const duracao = info?.duracao ?? 0
   const pct = (v, total) => `${(v / total) * 100}%`
-  const mudouAlgo = o.inicio > 0.05 || (duracao && o.fim < duracao - 0.05) || o.girar || o.espelhar || o.proporcao !== 'original' || o.resolucao || o.velocidade !== 1 || o.semAudio || o.formato !== 'mp4'
+  const mudouAlgo = o.inicio > 0.05 || (duracao && o.fim < duracao - 0.05) || o.girar || o.espelhar || o.proporcao !== 'original' || o.resolucao || o.velocidade !== 1 || o.som !== 'original' || o.formato !== 'mp4'
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <div className="flex min-w-0 flex-col gap-4">
-        {DICAS[foco] ? <p className="text-sm text-suave">{DICAS[foco]}</p> : null}
         <div className="grid min-h-64 place-items-center overflow-hidden rounded-[var(--radius-cartao)] bg-black p-2">
           <div
             ref={caixa}
@@ -349,7 +345,27 @@ function Editor({ arquivo, aoTrocar, foco }) {
             opcoes={[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map((v) => ({ valor: String(v), rotulo: v === 1 ? 'Normal (1×)' : `${v.toLocaleString('pt-BR')}×` }))}
             dica={o.velocidade !== 1 ? 'Mudar a velocidade usa o WebAssembly: é mais demorado.' : undefined}
           />
-          <Caixa rotulo="Silenciar (remover o áudio)" marcado={o.semAudio} aoMudar={(v) => mudar({ semAudio: v })} />
+          <Grupo titulo="Som">
+            <div className="flex flex-col gap-3">
+              <Seletor
+                valor={o.som}
+                aoMudar={(v) => mudar({ som: v })}
+                opcoes={[
+                  { valor: 'original', rotulo: 'Manter o som original' },
+                  { valor: 'mudo', rotulo: 'Sem som (silenciar)' },
+                  { valor: 'trocar', rotulo: 'Trocar por uma música' },
+                  { valor: 'misturar', rotulo: 'Misturar com uma música' },
+                ]}
+              />
+              {o.som === 'trocar' || o.som === 'misturar' ? (
+                <>
+                  <SeletorArquivos arquivos={trilha} aoMudar={setTrilha} multiplos={false} extensoes={EXTENSOES_AUDIO} descricaoFormatos={DESCRICAO_AUDIO} compacto />
+                  <Deslizante rotulo="Volume da música" valor={o.volumeTrilha} aoMudar={(v) => mudar({ volumeTrilha: v })} min={0} max={200} formatar={(v) => `${v}%`} />
+                  {o.som === 'misturar' ? <Deslizante rotulo="Volume do som original" valor={o.volumeOriginal} aoMudar={(v) => mudar({ volumeOriginal: v })} min={0} max={200} formatar={(v) => `${v}%`} /> : null}
+                </>
+              ) : null}
+            </div>
+          </Grupo>
           <EscolhaFormatoVideo valor={o.formato} aoMudar={(v) => mudar({ formato: v })} />
         </div>
         {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
@@ -360,7 +376,7 @@ function Editor({ arquivo, aoTrocar, foco }) {
             <Botao variante="secundario" onClick={aoTrocar}>
               Trocar
             </Botao>
-            <Botao className="flex-1" icone="baixar" onClick={exportar} disabled={!info || !mudouAlgo}>
+            <Botao className="flex-1" icone="baixar" onClick={exportar} disabled={!info || !mudouAlgo || ((o.som === 'trocar' || o.som === 'misturar') && !trilha.length)}>
               Exportar vídeo
             </Botao>
           </div>
@@ -376,9 +392,9 @@ function Editor({ arquivo, aoTrocar, foco }) {
   )
 }
 
-/** Editor de vídeo. `foco` vem das páginas específicas (ex.: "silenciar"). */
-export default function EditorVideo({ foco }) {
+/** Editor de vídeo: trecho, proporção, girar, resolução, velocidade, som e formato numa página só. */
+export default function EditorVideo() {
   const [arquivos, setArquivos] = useState([])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={EXTENSOES_VIDEO} descricaoFormatos={DESCRICAO_VIDEO} limiteBytes={LIMITE_VIDEO} />
-  return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} foco={foco} aoTrocar={() => setArquivos([])} />
+  return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
 }
