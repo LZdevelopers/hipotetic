@@ -12,8 +12,11 @@ página avisa: o download por link e a conversão de documentos (LibreOffice).
 ## Ferramentas
 
 O catálogo (`src/ferramentas/catalogo.js`) é a fonte única: navegação, busca,
-páginas de categoria, SEO, sitemap e pré-renderização saem dele. **Uma
+o índice da página inicial, SEO, sitemap e pré-renderização saem dele. **Uma
 ferramenta só entra no catálogo quando funciona** — não existe “em breve”.
+Não há páginas de categoria: as categorias são âncoras do índice (`/#audio`…).
+As ferramentas não têm "Como usar" — precisam se explicar sozinhas. Nos
+editores, com um arquivo aberto, a página mostra só o editor (`useEmEdicao`).
 
 **Conversão é uma página só** (`/converter`, como no Convertio): a pessoa solta
 qualquer arquivo, o tipo real é reconhecido pelos bytes e cada arquivo mostra
@@ -33,7 +36,7 @@ operações em abas ou opções.
 | Demais ferramentas | Páginas | Motor |
 |---|---|---|
 | Vídeo | baixar (YouTube/TikTok) · comprimir · editor (trecho, proporção, girar, resolução, velocidade, som: silenciar, trocar ou misturar música) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
-| Áudio | editor (cortar com forma de onda, fades, volume/normalizar, remover silêncio, velocidade) · juntar | ffmpeg.wasm |
+| Áudio | editor (player próprio, prévia ao vivo, velocidade livre, desfazer) · gravador de voz · limpar e melhorar voz (ruído, zumbido, clareza, volume padrão; também em vídeo) · juntar e dividir (inclusive nas pausas) · tags e capa | Web Audio + MediaRecorder + ffmpeg.wasm |
 | Imagens | comprimir · editor (recortar, girar, tamanho/redes sociais, cores e filtros, formato) · metadados (ver EXIF/GPS e remover sem recomprimir) · favicon · miniatura · paleta de cores | Web Workers + OffscreenCanvas + jSquash |
 | PDF | unir · dividir · organizar · editar e assinar · comprimir · OCR · numerar e marca d’água · senha (colocar/remover) · comparar · metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
 | Documentos | visualizar DOCX · texto e contagem · metadados · Markdown→HTML/PDF | navegador + função LibreOffice |
