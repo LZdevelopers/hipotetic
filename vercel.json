@@ -52,37 +52,37 @@
     },
     {
       "source": "/video",
-      "destination": "/#video",
+      "destination": "/ferramentas#video",
       "permanent": true
     },
     {
       "source": "/audio",
-      "destination": "/#audio",
+      "destination": "/ferramentas#audio",
       "permanent": true
     },
     {
       "source": "/imagem",
-      "destination": "/#imagem",
+      "destination": "/ferramentas#imagem",
       "permanent": true
     },
     {
       "source": "/pdf",
-      "destination": "/#pdf",
+      "destination": "/ferramentas#pdf",
       "permanent": true
     },
     {
       "source": "/documentos",
-      "destination": "/#documentos",
+      "destination": "/ferramentas#documentos",
       "permanent": true
     },
     {
       "source": "/compactados",
-      "destination": "/#compactados",
+      "destination": "/ferramentas#compactados",
       "permanent": true
     },
     {
       "source": "/utilitarios",
-      "destination": "/#utilitarios",
+      "destination": "/ferramentas#utilitarios",
       "permanent": true
     },
     {

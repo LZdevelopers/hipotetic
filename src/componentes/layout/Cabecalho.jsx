@@ -57,12 +57,16 @@ function MenuCelular({ aberto, aoFechar }) {
           <SeloCategoria categoria="conversor" icone="substituir" tamanho="p" />
           Conversor de arquivos
         </Link>
+        <Link para="/ferramentas" className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
+          <SeloCategoria categoria="utilitarios" icone="lista" tamanho="p" />
+          Todas as ferramentas
+        </Link>
         {categoriasComFerramentas().map((c) => (
           <div key={c.id}>
-            <Link para={`/#${c.id}`} className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
+            <p className="flex items-center gap-2.5 py-1 text-sm font-semibold text-tinta">
               <SeloCategoria categoria={c.id} icone={c.icone} tamanho="p" />
               {c.nome}
-            </Link>
+            </p>
             <ul className="mt-1.5 ml-[2.6rem] flex flex-col">
               {ferramentasDaCategoria(c.id).map((f) => (
                 <li key={f.slug}>
@@ -97,9 +101,17 @@ function MenuCategoria({ categoria, ativo }) {
     timer.current = setTimeout(() => setAberto(false), atraso)
   }
   useEffect(() => () => clearTimeout(timer.current), [])
+  const caixa = useRef(null)
+  useEffect(() => {
+    if (!aberto) return undefined
+    const fora = (e) => !caixa.current?.contains(e.target) && setAberto(false)
+    document.addEventListener('pointerdown', fora)
+    return () => document.removeEventListener('pointerdown', fora)
+  }, [aberto])
 
   return (
     <div
+      ref={caixa}
       className="relative"
       onMouseEnter={abrir}
       onMouseLeave={() => fechar()}
@@ -107,17 +119,19 @@ function MenuCategoria({ categoria, ativo }) {
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && fechar(0)}
       onKeyDown={(e) => e.key === 'Escape' && fechar(0)}
     >
-      <Link
-        para={`/#${categoria.id}`}
-        aria-current={ativo ? 'page' : undefined}
+      <button
+        type="button"
         aria-expanded={aberto}
         aria-haspopup="true"
-        onClick={() => fechar(0)}
+        onClick={() => {
+          clearTimeout(timer.current)
+          setAberto((a) => !a)
+        }}
         className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${ativo || aberto ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'}`}
       >
         {categoria.nome}
         <Icone nome="setaBaixo" tamanho={14} className={`text-fraca transition-transform duration-200 ${aberto ? 'rotate-180' : ''}`} />
-      </Link>
+      </button>
       <div
         className={`absolute top-full left-1/2 z-50 w-[22rem] -translate-x-1/2 pt-2 transition-[opacity,translate] duration-200 ${aberto ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'}`}
       >
@@ -135,6 +149,10 @@ function MenuCategoria({ categoria, ativo }) {
               </li>
             ))}
           </ul>
+          <Link para="/ferramentas" onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-center justify-between border-t border-borda bg-fundo-suave px-4 py-2.5 text-xs font-semibold text-suave hover:text-tinta">
+            Todas as ferramentas
+            <Icone nome="seta" tamanho={14} />
+          </Link>
         </div>
       </div>
     </div>

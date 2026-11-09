@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Cabecalho } from './componentes/layout/Cabecalho'
 import { Rodape } from './componentes/layout/Rodape'
 import { Ferramenta } from './paginas/Ferramenta'
+import { Ferramentas } from './paginas/Ferramentas'
 import { Inicio } from './paginas/Inicio'
 import { NaoEncontrada, Texto } from './paginas/Outras'
 import { metadadosDa, resolverRota } from './nucleo/rotas'
@@ -30,6 +31,8 @@ function Conteudo() {
   switch (rota.tipo) {
     case 'inicio':
       return <Inicio />
+    case 'ferramentas':
+      return <Ferramentas />
     case 'ferramenta':
       return <Ferramenta key={rota.ferramenta.slug} ferramenta={rota.ferramenta} />
     case 'texto':

@@ -21,9 +21,14 @@ export function Rodape() {
                 Converter arquivos
               </Link>
             </li>
+            <li>
+              <Link para="/ferramentas" className="text-sm text-suave transition-colors hover:text-tinta">
+                Todas as ferramentas
+              </Link>
+            </li>
             {categoriasComFerramentas().map((c) => (
               <li key={c.id}>
-                <Link para={`/#${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
+                <Link para={`/ferramentas#${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
                   {c.nome}
                 </Link>
               </li>

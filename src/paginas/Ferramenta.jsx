@@ -71,7 +71,7 @@ export function Ferramenta({ ferramenta }) {
             <>
               <li aria-hidden="true">/</li>
               <li>
-                <Link para={`/#${categoria.id}`} className="hover:text-tinta">
+                <Link para={`/ferramentas#${categoria.id}`} className="hover:text-tinta">
                   {categoria.nome}
                 </Link>
               </li>

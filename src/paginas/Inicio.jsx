@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { Icone } from '../componentes/Icone'
-import { Indice, Pilulas } from '../componentes/ListaFerramentas'
+import { Pilulas } from '../componentes/ListaFerramentas'
 import { ListaResultados, useBuscaTeclado } from '../componentes/layout/Busca'
 import { SeloCategoria } from '../componentes/ui'
 import { caminhoDa, ferramentaPorSlug, ferramentas, populares } from '../ferramentas/catalogo'
@@ -124,15 +124,18 @@ export function Inicio() {
 
       <Recentes />
 
-      <section id="ferramentas" aria-labelledby="titulo-ferramentas" className="mt-16 scroll-mt-24">
-        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-          <h2 id="titulo-ferramentas" className="text-2xl">
-            Todas as ferramentas
-          </h2>
-          <p className="text-sm text-fraca">{ferramentas.length} ferramentas · grátis, sem cadastro e sem marca d’água</p>
-        </div>
-        <Indice />
-      </section>
+      <Link
+        para="/ferramentas"
+        className="group mt-14 flex items-center justify-between gap-4 border-y border-borda py-6 transition-colors hover:border-borda-forte"
+      >
+        <span>
+          <span className="block font-display text-xl font-bold text-tinta">Ver todas as {ferramentas.length} ferramentas</span>
+          <span className="mt-1 block text-sm text-suave">Vídeo, áudio, imagens, PDF, documentos, compactados e utilitários.</span>
+        </span>
+        <span className="grid size-11 shrink-0 place-items-center rounded-full border border-borda-forte text-tinta transition-transform group-hover:translate-x-1">
+          <Icone nome="seta" tamanho={18} />
+        </span>
+      </Link>
 
       <ul className="mt-20 grid gap-8 border-t border-borda pt-12 sm:grid-cols-3">
         {inicio.principios.map((p) => (

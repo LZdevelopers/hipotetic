@@ -15,6 +15,7 @@ export function resolverRota(caminhoBruto) {
   const partes = caminho.slice(1).split('/')
   if (partes.length === 1) {
     if (paginas[partes[0]]) return { tipo: 'texto', caminho, pagina: partes[0] }
+    if (partes[0] === 'ferramentas') return { tipo: 'ferramentas', caminho }
     const geral = ferramentaPorSlug(partes[0])
     if (geral) return { tipo: 'ferramenta', caminho, ferramenta: geral }
   }
@@ -29,6 +30,7 @@ export function resolverRota(caminhoBruto) {
 export function todasAsRotas() {
   return [
     '/',
+    '/ferramentas',
     ...ferramentas.map(caminhoDa),
     ...Object.keys(paginas).map((p) => `/${p}`),
   ]
@@ -60,6 +62,14 @@ export function metadadosDa(rota) {
     }
   }
 
+  if (rota.tipo === 'ferramentas') {
+    return {
+      ...base,
+      titulo: `Todas as ferramentas${sufixo}`,
+      descricao: `${ferramentas.length} ferramentas grátis para vídeo, áudio, imagens, PDF, documentos e arquivos compactados. Sem cadastro e, quase sempre, sem enviar nada.`,
+    }
+  }
+
   if (rota.tipo === 'ferramenta') {
     const f = rota.ferramenta
     const c = categoriaDa(f)
@@ -68,7 +78,7 @@ export function metadadosDa(rota) {
       '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'Início', item: `${produto.url}/` },
-        ...(c ? [{ '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/#${c.id}` }] : []),
+        ...(c ? [{ '@type': 'ListItem', position: 2, name: c.nome, item: `${produto.url}/ferramentas#${c.id}` }] : []),
         { '@type': 'ListItem', position: c ? 3 : 2, name: f.nome, item: url },
       ],
     }
