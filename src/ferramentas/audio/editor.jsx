@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
@@ -24,7 +24,153 @@ const lerTempo = (texto) => {
   return p.reduce((total, n) => total * 60 + n, 0)
 }
 
-const VELOCIDADES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+const VEL_MIN = 0.1
+const VEL_MAX = 10
+
+/**
+ * Posição `t` do original convertida para o tempo do RESULTADO: conta só o
+ * que está dentro do trecho, desconta o silêncio removido e divide pela
+ * velocidade. tempoNoResultado(o.fim) é a duração final.
+ */
+function tempoNoResultado(t, o, regioes) {
+  const ate = Math.min(Math.max(t, o.inicio), o.fim)
+  let d = ate - o.inicio
+  for (const [a, b] of regioes) d -= Math.max(0, Math.min(b, ate) - Math.max(a, o.inicio))
+  return Math.max(0, d) / o.velocidade
+}
+
+/**
+ * Velocidade livre: controle deslizante (0,25× a 4×, com 1× no meio) e um
+ * campo onde dá para digitar qualquer valor de 0,1× a 10×.
+ */
+function Velocidade({ valor, aoMudar }) {
+  const [texto, setTexto] = useState(null)
+  const id = useId()
+  const posicao = Math.log2(Math.min(Math.max(valor, 0.25), 4))
+  const fixar = (v) => aoMudar(Math.round(Math.min(Math.max(v, VEL_MIN), VEL_MAX) * 100) / 100)
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-[0.8125rem] font-semibold text-tinta">
+          Velocidade
+        </label>
+        <div className="flex items-center gap-1.5">
+          <input
+            id={id}
+            inputMode="decimal"
+            value={texto ?? valor.toLocaleString('pt-BR')}
+            onFocus={(e) => {
+              setTexto(valor.toLocaleString('pt-BR'))
+              e.currentTarget.select()
+            }}
+            onChange={(e) => {
+              setTexto(e.target.value)
+              const v = Number(e.target.value.replace(',', '.'))
+              if (e.target.value.trim() && Number.isFinite(v) && v >= VEL_MIN && v <= VEL_MAX) fixar(v)
+            }}
+            onBlur={() => {
+              const v = Number(String(texto ?? '').replace(',', '.'))
+              if (Number.isFinite(v) && v > 0) fixar(v)
+              setTexto(null)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            className="h-8 w-16 rounded-lg border border-borda-forte bg-superficie px-2 text-right text-sm font-semibold text-tinta tabular-nums focus:border-acento focus:outline-none"
+          />
+          <span className="text-sm font-semibold text-suave">×</span>
+          {valor !== 1 ? (
+            <button type="button" onClick={() => aoMudar(1)} className="ml-1 text-xs font-semibold text-suave hover:text-tinta">
+              Normal
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={-2}
+        max={2}
+        step={0.01}
+        value={posicao}
+        aria-label="Velocidade (0,25× a 4×)"
+        aria-valuetext={`${valor.toLocaleString('pt-BR')}×`}
+        onChange={(e) => fixar(2 ** Number(e.target.value))}
+        onDoubleClick={() => aoMudar(1)}
+        className="deslizante"
+        style={{ '--preenchido': `${((posicao + 2) / 4) * 100}%` }}
+      />
+      <div className="flex justify-between text-[0.6875rem] text-fraca tabular-nums">
+        <span>0,25×</span>
+        <span>1×</span>
+        <span>4×</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Histórico para desfazer/refazer. Mudanças seguidas (arrastar um controle)
+ * viram um passo só: o estado é registrado quando para de mudar por 350 ms.
+ */
+function useHistorico(estado, definir, ativo) {
+  const h = useRef({ base: null, passado: [], futuro: [], timer: 0, aplicando: false })
+  const [, atualizar] = useState(0)
+
+  useEffect(() => {
+    const x = h.current
+    if (!ativo) return undefined
+    if (x.base === null) {
+      x.base = estado
+      return undefined
+    }
+    if (x.aplicando) {
+      x.aplicando = false
+      x.base = estado
+      return undefined
+    }
+    clearTimeout(x.timer)
+    x.timer = setTimeout(() => {
+      if (estado === x.base) return
+      x.passado.push(x.base)
+      if (x.passado.length > 200) x.passado.shift()
+      x.base = estado
+      x.futuro = []
+      atualizar((n) => n + 1)
+    }, 350)
+    return () => clearTimeout(x.timer)
+  }, [estado, ativo])
+
+  /** Registra na hora o que ainda estava esperando os 350 ms. */
+  const consolidar = () => {
+    const x = h.current
+    clearTimeout(x.timer)
+    if (x.base !== null && estado !== x.base) {
+      x.passado.push(x.base)
+      x.base = estado
+      x.futuro = []
+    }
+  }
+  const desfazer = () => {
+    consolidar()
+    const x = h.current
+    if (!x.passado.length) return
+    x.futuro.push(x.base)
+    x.base = x.passado.pop()
+    x.aplicando = true
+    definir(x.base)
+    atualizar((n) => n + 1)
+  }
+  const refazer = () => {
+    consolidar()
+    const x = h.current
+    if (!x.futuro.length) return
+    x.passado.push(x.base)
+    x.base = x.futuro.pop()
+    x.aplicando = true
+    definir(x.base)
+    atualizar((n) => n + 1)
+  }
+  const x = h.current
+  return { desfazer, refazer, podeDesfazer: x.passado.length > 0 || (x.base !== null && estado !== x.base), podeRefazer: x.futuro.length > 0 && estado === x.base }
+}
 
 /**
  * Ganho da prévia num instante: dentro do trecho aplica volume e fades; fora
@@ -122,27 +268,33 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
     return Math.min(Math.max(((clientX - r.left) / r.width) * duracao, 0), duracao)
   }
 
-  // Clique: posiciona. Arrastar no fundo: seleciona um novo trecho.
+  // Clicar ou segurar e arrastar na onda: percorre o áudio (a cabeça de
+  // leitura segue o mouse). O corte só muda pelas alças azuis.
   const aoApertar = (e) => {
     if (e.button !== 0) return
     const alvo = e.currentTarget
     alvo.setPointerCapture(e.pointerId)
-    const x0 = e.clientX
-    const t0 = deX(x0)
-    let selecionando = false
+    aoBuscar(deX(e.clientX))
+    let pendente = null
+    let quadro = 0
     const mover = (ev) => {
-      if (!selecionando && Math.abs(ev.clientX - x0) < 5) return
-      selecionando = true
-      const t = deX(ev.clientX)
-      aoTrecho({ inicio: Math.min(t0, t), fim: Math.max(Math.max(t0, t), Math.min(t0, t) + 0.1) })
+      pendente = ev.clientX
+      if (quadro) return
+      quadro = requestAnimationFrame(() => {
+        quadro = 0
+        if (pendente != null) aoBuscar(deX(pendente))
+      })
     }
     const soltar = () => {
+      cancelAnimationFrame(quadro)
+      if (pendente != null) aoBuscar(deX(pendente))
       alvo.removeEventListener('pointermove', mover)
       alvo.removeEventListener('pointerup', soltar)
-      if (!selecionando) aoBuscar(t0)
+      alvo.removeEventListener('pointercancel', soltar)
     }
     alvo.addEventListener('pointermove', mover)
     alvo.addEventListener('pointerup', soltar)
+    alvo.addEventListener('pointercancel', soltar)
   }
 
   const arrastarAlca = (qual) => (e) => {
@@ -167,7 +319,7 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
   return (
     <div
       ref={area}
-      className="group relative h-44 cursor-crosshair touch-none rounded-xl bg-fundo-suave select-none sm:h-52"
+      className="group relative h-44 cursor-pointer touch-none rounded-xl bg-fundo-suave select-none sm:h-52"
       onPointerDown={aoApertar}
       onPointerMove={(e) => {
         if (!dica.current || !duracao) return
@@ -175,7 +327,7 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
         dica.current.style.left = `${e.clientX - r.left}px`
         dica.current.firstChild.textContent = tempo(deX(e.clientX))
       }}
-      aria-label="Forma de onda: clique para posicionar, arraste para escolher o trecho"
+      aria-label="Forma de onda: clique ou arraste para percorrer o áudio"
     >
       {analise ? <canvas ref={canvas} className="absolute inset-0 size-full" /> : <div className="esqueleto absolute inset-0 rounded-xl" />}
 
@@ -226,6 +378,14 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
   )
 }
 
+function BotaoAcao({ rotulo, icone, ...props }) {
+  return (
+    <button type="button" aria-label={rotulo} title={rotulo} className="grid size-8 place-items-center rounded-lg text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-30 disabled:hover:bg-transparent" {...props}>
+      <Icone nome={icone} tamanho={16} />
+    </button>
+  )
+}
+
 /** Campo de tempo (m:ss.s) que só aplica ao sair ou apertar Enter. */
 function CampoTempo({ rotulo, valor, aoMudar }) {
   const [texto, setTexto] = useState(tempo(valor))
@@ -258,7 +418,8 @@ function CampoTempo({ rotulo, valor, aoMudar }) {
 
 function Editor({ arquivo, aoTrocar }) {
   const formatoInicial = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'aac'].includes(extensaoDe(arquivo.name)) ? extensaoDe(arquivo.name) : 'mp3'
-  const [o, setO] = useState({ inicio: 0, fim: 0, fadeIn: 0, fadeOut: 0, formato: formatoInicial, bitrate: 192, volume: 'manter', ganho: 6, silencio: false, silencioOnde: 'pontas', limiar: -45, velocidade: 1, tom: false })
+  const padrao = (fim) => ({ inicio: 0, fim, fadeIn: 0, fadeOut: 0, formato: formatoInicial, bitrate: 192, volume: 'manter', ganho: 6, silencio: false, silencioOnde: 'pontas', limiar: -45, velocidade: 1, tom: false })
+  const [o, setO] = useState(() => padrao(0))
   const [analise, setAnalise] = useState(null)
   const [erro, setErro] = useState(null)
   const [preparo, setPreparo] = useState(null)
@@ -276,6 +437,7 @@ function Editor({ arquivo, aoTrocar }) {
 
   const url = useUrlObjeto(analise?.tocar)
   const duracao = analise?.duracao ?? 0
+  const historico = useHistorico(o, setO, Boolean(analise))
 
   // Lê o arquivo uma vez: forma de onda, energia e o que tocar.
   useEffect(() => {
@@ -309,10 +471,16 @@ function Editor({ arquivo, aoTrocar }) {
   const atual = useRef({})
   atual.current = { o, fator, regioes, repetir, duracao }
 
+  // Cabeça de leitura na posição do original; relógio no tempo do resultado.
+  // Lê de `atual` porque o laço de animação guarda a função da 1ª renderização.
   const mostrar = (t) => {
-    if (cabeca.current) cabeca.current.style.left = `${duracao ? (t / duracao) * 100 : 0}%`
-    if (relogio.current) relogio.current.textContent = tempo(t)
+    const { o: oo, regioes: rs, duracao: d } = atual.current
+    if (cabeca.current) cabeca.current.style.left = `${d ? (t / d) * 100 : 0}%`
+    if (relogio.current) relogio.current.textContent = tempo(tempoNoResultado(t, oo, rs))
   }
+  useEffect(() => {
+    if (audio.current) mostrar(audio.current.currentTime)
+  })
 
   // Velocidade e tom: aplicados direto no player.
   useEffect(() => {
@@ -351,16 +519,15 @@ function Editor({ arquivo, aoTrocar }) {
       el.currentTime = r[1]
       t = r[1]
     }
-    // Chegou ao fim do trecho tocando de dentro dele: repete ou para.
-    if (dentro.current && (t >= oo.fim - 0.005 || (r && r[1] >= oo.fim - 0.03))) {
-      if (rep) {
-        el.currentTime = oo.inicio
-        t = oo.inicio
-      } else {
-        el.pause()
-        el.currentTime = oo.inicio
-        t = oo.inicio
-      }
+    // Entrou no trecho (começou a tocar antes dele): a partir daqui vale o fim do trecho.
+    if (!dentro.current && t >= oo.inicio && t < oo.fim) dentro.current = true
+    // Chegou ao fim do trecho: repete do início ou para (e volta para o início).
+    if (dentro.current && (t >= oo.fim - 0.01 || (r && r[1] >= oo.fim - 0.03))) {
+      el.currentTime = oo.inicio
+      t = oo.inicio
+      m.ganho.gain.cancelScheduledValues(m.ctx.currentTime)
+      m.ganho.gain.setValueAtTime(envelope(t, oo, f), m.ctx.currentTime)
+      if (!rep) el.pause()
     }
     m.ganho.gain.setTargetAtTime(envelope(t, oo, f), m.ctx.currentTime, 0.012)
     mostrar(t)
@@ -402,13 +569,33 @@ function Editor({ arquivo, aoTrocar }) {
     dentro.current = t >= o.inicio - 0.01 && t < o.fim
     mostrar(t)
   }
+  /** Volta tudo como estava ao abrir o arquivo (e pode ser desfeito com Ctrl+Z). */
+  const redefinir = () => {
+    pausar()
+    setRepetir(false)
+    setO(padrao(duracao))
+    buscar(0)
+  }
   const inicioAqui = () => mudar((x) => ({ inicio: Math.min(audio.current?.currentTime ?? 0, x.fim - 0.1) }))
   const fimAqui = () => mudar((x) => ({ fim: Math.max(audio.current?.currentTime ?? 0, x.inicio + 0.1) }))
 
   // Atalhos: espaço toca/pausa, I/O marcam início/fim, setas andam 1 s (Shift: 5 s).
   const teclas = useRef(null)
   teclas.current = (e) => {
-    if (e.target.closest?.('input, textarea, select, button, [role=slider], [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return
+    // Ctrl+Z desfaz; Ctrl+Shift+Z ou Ctrl+Y refaz (menos dentro de campos de texto, que têm o próprio desfazer).
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      if (e.target.closest?.('input:not([type=range]):not([type=checkbox]), textarea, [contenteditable]')) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        historico.desfazer()
+      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+        e.preventDefault()
+        historico.refazer()
+      }
+      return
+    }
+    if (e.target.closest?.('input, textarea, select, button, [role=slider], [contenteditable]') || e.altKey) return
     if (e.code === 'Space') {
       e.preventDefault()
       alternar()
@@ -470,20 +657,27 @@ function Editor({ arquivo, aoTrocar }) {
 
   const processando = tarefa.fase === 'processando'
   const removido = regioes.reduce((s, [a, b]) => s + (b - a), 0)
-  const resultado = Math.max(0, (o.fim - o.inicio - removido) / o.velocidade)
+  const duracaoFinal = tempoNoResultado(o.fim, o, regioes)
   const maxFade = Math.max(0.5, Math.min(10, Math.floor((o.fim - o.inicio) * 2) / 4))
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
       <div className="flex min-w-0 flex-col gap-4">
         <section aria-label="Player" className="cartao p-4 sm:p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <p className="min-w-0 truncate text-sm font-semibold text-tinta" title={arquivo.name}>
               {arquivo.name}
             </p>
-            <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar}>
-              Trocar arquivo
-            </Botao>
+            <div className="flex shrink-0 items-center gap-1">
+              <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer} />
+              <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer} />
+              <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={redefinir} disabled={!analise}>
+                Redefinir tudo
+              </Botao>
+              <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar}>
+                Trocar arquivo
+              </Botao>
+            </div>
           </div>
 
           {analise ? (
@@ -530,7 +724,7 @@ function Editor({ arquivo, aoTrocar }) {
             </button>
             <p className="ml-1 text-sm font-semibold text-tinta tabular-nums">
               <span ref={relogio}>0:00.0</span>
-              <span className="font-normal text-fraca"> / {tempo(duracao)}</span>
+              <span className="font-normal text-fraca" title="Duração do áudio final"> / {tempo(duracaoFinal)}</span>
             </p>
             {o.velocidade !== 1 ? <span className="rounded-full bg-cat-audio/15 px-2 py-0.5 text-xs font-bold text-cat-audio tabular-nums">{o.velocidade.toLocaleString('pt-BR')}×</span> : null}
             <div className="ml-auto flex gap-2">
@@ -547,7 +741,8 @@ function Editor({ arquivo, aoTrocar }) {
             <CampoTempo rotulo="Início" valor={o.inicio} aoMudar={(t) => mudar((x) => ({ inicio: Math.min(Math.max(0, t), x.fim - 0.1) }))} />
             <CampoTempo rotulo="Fim" valor={o.fim} aoMudar={(t) => mudar((x) => ({ fim: Math.max(Math.min(duracao, t), x.inicio + 0.1) }))} />
             <p className="pb-2 text-sm text-suave">
-              Resultado: <strong className="font-semibold text-tinta tabular-nums">{formatarDuracao(resultado)}</strong>
+              Duração final: <strong className="font-semibold text-tinta tabular-nums">{tempo(duracaoFinal)}</strong>
+              {o.velocidade !== 1 ? <span className="text-fraca"> · a {o.velocidade.toLocaleString('pt-BR')}×</span> : null}
               {removido > 0.05 ? <span className="text-fraca"> · {formatarDuracao(removido)} de silêncio a menos</span> : null}
             </p>
             {o.inicio > 0.05 || o.fim < duracao - 0.05 ? (
@@ -556,7 +751,7 @@ function Editor({ arquivo, aoTrocar }) {
               </button>
             ) : null}
           </div>
-          <p className="mt-3 text-xs text-fraca">Arraste na onda para escolher o trecho, ou as alças azuis para ajustar. Atalhos: espaço toca/pausa · I e O marcam início e fim · setas andam 1 s.</p>
+          <p className="mt-3 text-xs text-fraca">Clique ou arraste na onda para percorrer o áudio. Para cortar, arraste as alças azuis (ou use Início/Fim aqui). Atalhos: espaço toca/pausa · I e O marcam início e fim · setas andam 1 s · Ctrl+Z desfaz.</p>
 
           {/* Elemento de áudio sem controles: quem manda é o player acima. */}
           <audio
@@ -574,7 +769,15 @@ function Editor({ arquivo, aoTrocar }) {
               cancelAnimationFrame(quadro.current)
               mostrar(audio.current?.currentTime ?? 0)
             }}
-            onEnded={() => setTocando(false)}
+            onEnded={(e) => {
+              // O arquivo acabou antes de o laço ver o fim do trecho (trecho até o final).
+              const el = e.currentTarget
+              const { o: oo, repetir: rep } = atual.current
+              el.currentTime = oo.inicio
+              dentro.current = true
+              if (rep) el.play().catch(() => {})
+              else setTocando(false)
+            }}
             onSeeked={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
             onTimeUpdate={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
           />
@@ -587,10 +790,10 @@ function Editor({ arquivo, aoTrocar }) {
           Tudo o que você ajustar já toca no player.
         </p>
         <div className={processando ? 'pointer-events-none flex flex-col gap-6 opacity-60' : 'flex flex-col gap-6'} inert={processando ? true : undefined}>
-          <Grupo titulo="Velocidade">
-            <Segmentado valor={o.velocidade} aoMudar={(v) => mudar({ velocidade: v })} opcoes={VELOCIDADES.map((v) => ({ valor: v, rotulo: `${v.toLocaleString('pt-BR')}×` }))} />
-            <Caixa className="mt-3" rotulo="Mudar o tom junto" dica="Desmarcado, a voz continua natural (sem efeito esquilo)." marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} />
-          </Grupo>
+          <div className="flex flex-col gap-3">
+            <Velocidade valor={o.velocidade} aoMudar={(v) => mudar({ velocidade: v })} />
+            {o.velocidade !== 1 ? <Caixa rotulo="Mudar tom" marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} /> : null}
+          </div>
 
           <Grupo titulo="Volume">
             <Segmentado
