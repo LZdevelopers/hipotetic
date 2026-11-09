@@ -186,7 +186,7 @@ export function Cabecalho() {
             className="hidden h-9 items-center gap-2 rounded-lg border border-borda bg-fundo-suave pr-1.5 pl-3 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex"
           >
             <Icone nome="buscar" tamanho={16} />
-            <span className="w-28 text-left lg:w-36 xl:hidden 2xl:inline">{textos.buscarFerramenta}</span>
+            <span className="w-28 text-left lg:w-36 xl:hidden">{textos.buscarFerramenta}</span>
             <kbd className="rounded border border-borda bg-superficie px-1.5 py-px font-sans text-[0.6875rem]">{mac ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           <button
