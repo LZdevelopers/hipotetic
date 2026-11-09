@@ -318,6 +318,22 @@ export default [
     },
   },
   {
+    nome: 'audio/editor: aparece antes do arquivo e junta vários áudios',
+    pagina: '/audio/editor',
+    async executar(t) {
+      // Antes de escolher: o editor (player e ajustes) já está na tela.
+      assert.ok(await t.js("return Boolean(document.querySelector('main section[aria-label=Player] button[aria-label=Tocar]') && document.querySelector('main section[aria-label=Ajustes]'))"), 'o editor deveria aparecer vazio')
+      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'parte 2.wav'), __t.arquivo(__t.wav([{ s: 1, hz: 660 }]), 'parte 1.wav')])`)
+      await t.aguardar("document.querySelector('main canvas') && document.querySelector('main').innerText.includes('2 áudios em sequência')", 20000)
+      // Ordem natural pelo nome: "parte 1" primeiro.
+      assert.equal(await t.js("return document.querySelector('main ol[aria-label=\"Ordem dos áudios\"] li').textContent.includes('parte 1.wav')"), true)
+      await t.aguardar("document.querySelector('[title=\"Duração do áudio final\"]').textContent.includes('0:03.0')", 5000)
+      await t.clicar('Aplicar e baixar')
+      await t.aguardarResultado(120000)
+      perto((await t.js('return await __t.midia()')).duracao, 3, 0.15, 'duração dos dois juntos')
+    },
+  },
+  {
     nome: 'audio/editor: cortar trecho com fade',
     pagina: '/audio/editor',
     async executar(t) {

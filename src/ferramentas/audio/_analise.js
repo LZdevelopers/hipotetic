@@ -155,3 +155,76 @@ export function ganhoNormalizar(analise, inicio, fim) {
   const alvo = 10 ** ((-14 - db(soma / n)) / 20)
   return Math.min(alvo, 0.89 / Math.max(pico, 1e-6))
 }
+
+/** PCM estéreo (Float32) → WAV 16 bits. */
+function wav16(esquerdo, direito, taxa) {
+  const n = esquerdo.length
+  const buf = new ArrayBuffer(44 + n * 4)
+  const v = new DataView(buf)
+  const txt = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)))
+  txt(0, 'RIFF')
+  v.setUint32(4, 36 + n * 4, true)
+  txt(8, 'WAVE')
+  txt(12, 'fmt ')
+  v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true)
+  v.setUint16(22, 2, true)
+  v.setUint32(24, taxa, true)
+  v.setUint32(28, taxa * 4, true)
+  v.setUint16(32, 4, true)
+  v.setUint16(34, 16, true)
+  txt(36, 'data')
+  v.setUint32(40, n * 4, true)
+  let o = 44
+  for (let i = 0; i < n; i += 1) {
+    v.setInt16(o, Math.max(-1, Math.min(1, esquerdo[i])) * 0x7fff, true)
+    v.setInt16(o + 2, Math.max(-1, Math.min(1, direito[i])) * 0x7fff, true)
+    o += 4
+  }
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
+const MAX_JUNTOS = 40 * 60 // segundos: acima disso a memória do navegador não dá conta
+
+/**
+ * Vários arquivos tocados em sequência viram UM áudio (WAV 44,1 kHz estéreo,
+ * sem perda), com a análise e as `fronteiras` (onde cada arquivo começa).
+ * Com um arquivo só, é o mesmo que analisar().
+ */
+export async function analisarVarios(arquivos, ctx) {
+  if (arquivos.length === 1) return { ...(await analisar(arquivos[0], ctx)), fronteiras: [] }
+  const TAXA = 44100
+  const buffers = []
+  for (let i = 0; i < arquivos.length; i += 1) {
+    ctx?.progresso?.(i / arquivos.length, `Juntando os arquivos (${i + 1} de ${arquivos.length})`)
+    let buf
+    try {
+      buf = await decodificar(arquivos[i], TAXA)
+    } catch {
+      // Formato que o navegador não lê: o ffmpeg converte para WAV antes.
+      const wav = await processarAudio(arquivos[i], { formato: 'wav', canais: 2, taxa: TAXA }, { sinal: ctx?.sinal, progresso: () => {} })
+      buf = await decodificar(wav, TAXA)
+    }
+    buffers.push(buf)
+  }
+  const total = buffers.reduce((s, b) => s + b.length, 0)
+  if (total / TAXA > MAX_JUNTOS) {
+    const { ErroAmigavel } = await import('../../nucleo/tarefa')
+    throw new ErroAmigavel('Juntos, os arquivos passam de 40 minutos — é mais do que o navegador consegue editar de uma vez. Use menos arquivos.')
+  }
+  const esquerdo = new Float32Array(total)
+  const direito = new Float32Array(total)
+  const fronteiras = []
+  let pos = 0
+  for (const b of buffers) {
+    const l = b.getChannelData(0)
+    esquerdo.set(l, pos)
+    direito.set(b.numberOfChannels > 1 ? b.getChannelData(1) : l, pos)
+    pos += b.length
+    fronteiras.push(pos / TAXA)
+  }
+  fronteiras.pop()
+  const media = new Float32Array(total)
+  for (let i = 0; i < total; i += 1) media[i] = (esquerdo[i] + direito[i]) / 2
+  return { tocar: new File([wav16(esquerdo, direito, TAXA)], 'juntos.wav', { type: 'audio/wav' }), fronteiras, ...medir(media, TAXA) }
+}

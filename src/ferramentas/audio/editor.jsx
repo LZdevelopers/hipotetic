@@ -1,14 +1,13 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
-import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
 import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
 import { useTema } from '../../nucleo/preferencias'
 import { useTarefa } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
-import { analisar, ganhoNormalizar, silencios } from './_analise'
+import { analisarVarios, ganhoNormalizar, silencios } from './_analise'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { receber } from '../../nucleo/entrega'
 
@@ -120,6 +119,7 @@ function useHistorico(estado, definir, ativo) {
     if (!ativo) return undefined
     if (x.base === null) {
       x.base = estado
+      x.aplicando = false
       return undefined
     }
     if (x.aplicando) {
@@ -169,8 +169,17 @@ function useHistorico(estado, definir, ativo) {
     definir(x.base)
     atualizar((n) => n + 1)
   }
+  /** Esquece tudo: o próximo estado vira a base. */
+  const reiniciar = () => {
+    const x = h.current
+    clearTimeout(x.timer)
+    x.base = null
+    x.passado = []
+    x.futuro = []
+    atualizar((n) => n + 1)
+  }
   const x = h.current
-  return { desfazer, refazer, podeDesfazer: x.passado.length > 0 || (x.base !== null && estado !== x.base), podeRefazer: x.futuro.length > 0 && estado === x.base }
+  return { desfazer, refazer, reiniciar, podeDesfazer: x.passado.length > 0 || (x.base !== null && estado !== x.base), podeRefazer: x.futuro.length > 0 && estado === x.base }
 }
 
 /**
@@ -188,6 +197,7 @@ function envelope(t, o, fator) {
 /* ─── Forma de onda ──────────────────────────────────────────────────────── */
 
 function desenhar(canvas, { analise, duracao, o, fator, regioes }) {
+  const { fronteiras = [] } = analise
   const dpr = window.devicePixelRatio || 1
   const w = canvas.clientWidth
   const h = canvas.clientHeight
@@ -228,6 +238,23 @@ function desenhar(canvas, { analise, duracao, o, fator, regioes }) {
     c.fillRect(i * passo, meio - hh / 2, 2, hh)
   }
   c.globalAlpha = 1
+
+  // Onde cada arquivo começa (vários áudios juntos).
+  if (fronteiras.length) {
+    c.strokeStyle = corLinha
+    c.globalAlpha = 0.35
+    c.lineWidth = 1
+    c.setLineDash([3, 4])
+    for (const f of fronteiras) {
+      const x = Math.round((f / duracao) * w) + 0.5
+      c.beginPath()
+      c.moveTo(x, 0)
+      c.lineTo(x, h)
+      c.stroke()
+    }
+    c.setLineDash([])
+    c.globalAlpha = 1
+  }
 
   // Contorno dos fades: mostra onde o volume sobe e desce.
   if (o.fadeIn > 0 || o.fadeOut > 0) {
@@ -456,9 +483,32 @@ function CampoTempo({ rotulo, valor, aoMudar }) {
 
 /* ─── Editor ─────────────────────────────────────────────────────────────── */
 
-function Editor({ arquivo, aoTrocar }) {
-  useEmEdicao()
-  const formatoInicial = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'aac'].includes(extensaoDe(arquivo.name)) ? extensaoDe(arquivo.name) : 'mp3'
+const ACEITOS = [...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]
+/** "parte 2" antes de "parte 10". */
+const ordemNatural = (a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' })
+let proximoId = 0
+
+function Editor({ arquivos, aoMudarArquivos }) {
+  const vazio = arquivos.length === 0
+  useEmEdicao(!vazio)
+  const primeiro = arquivos[0]?.arquivo
+  const formatoInicial = primeiro && ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'aac'].includes(extensaoDe(primeiro.name)) ? extensaoDe(primeiro.name) : 'mp3'
+  const aoTrocar = () => aoMudarArquivos([])
+  const entradaArquivos = useRef(null)
+  const [recusados, setRecusados] = useState(0)
+  const adicionar = (lista) => {
+    const novos = [...(lista ?? [])].sort(ordemNatural)
+    const validos = novos.filter((a) => a.size && ACEITOS.includes(extensaoDe(a.name)))
+    setRecusados(novos.length - validos.length)
+    if (validos.length) aoMudarArquivos([...arquivos, ...validos.map((arquivo) => ({ id: `f${(proximoId += 1)}`, arquivo }))])
+  }
+  const mover = (i, d) => {
+    const j = i + d
+    if (j < 0 || j >= arquivos.length) return
+    const copia = [...arquivos]
+    ;[copia[i], copia[j]] = [copia[j], copia[i]]
+    aoMudarArquivos(copia)
+  }
   const padrao = (fim) => ({ inicio: 0, fim, fadeIn: 0, fadeOut: 0, formato: formatoInicial, bitrate: 192, volume: 'manter', ganho: 6, silencio: false, silencioOnde: 'pontas', limiar: -45, velocidade: 1, tom: false })
   const [o, setO] = useState(() => padrao(0))
   const [analise, setAnalise] = useState(null)
@@ -481,19 +531,26 @@ function Editor({ arquivo, aoTrocar }) {
   const duracao = analise?.duracao ?? 0
   const historico = useHistorico(o, setO, Boolean(analise))
 
-  // Lê o arquivo uma vez: forma de onda, energia e o que tocar.
+  // Lê os arquivos (juntos, em sequência): forma de onda, energia e o que tocar.
+  const chave = arquivos.map((a) => a.id).join('|')
   useEffect(() => {
+    setAnalise(null)
+    setErro(null)
+    setPreparo(null)
+    if (!arquivos.length) return undefined
     let vivo = true
     const controle = new AbortController()
-    analisar(arquivo, { sinal: controle.signal, progresso: (v, r) => vivo && setPreparo({ v, r }) })
+    const lista = arquivos.map((a) => a.arquivo)
+    analisarVarios(lista, { sinal: controle.signal, progresso: (v, r) => vivo && setPreparo({ v, r }) })
       .then(async (a) => {
         if (!vivo) return
-        // A duração do contêiner é mais exata que a das amostras decodificadas.
-        const info = await infoMidia(arquivo).catch(() => ({}))
+        // Com um arquivo, a duração do contêiner é mais exata que a das amostras decodificadas.
+        const info = lista.length === 1 ? await infoMidia(lista[0]).catch(() => ({})) : {}
         const d = info.duracao && Math.abs(info.duracao - a.duracao) < 1 ? info.duracao : a.duracao
         if (!vivo) return
         setAnalise({ ...a, duracao: d })
-        setO((x) => ({ ...x, inicio: 0, fim: d }))
+        setO((x) => ({ ...x, inicio: 0, fim: d, fadeIn: Math.min(x.fadeIn, d / 2), fadeOut: Math.min(x.fadeOut, d / 2) }))
+        historico.reiniciar()
       })
       .catch((e) => {
         if (!vivo) return
@@ -504,7 +561,8 @@ function Editor({ arquivo, aoTrocar }) {
       vivo = false
       controle.abort()
     }
-  }, [arquivo])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave])
 
   const regioes = useMemo(() => (o.silencio && analise ? silencios(analise, { inicio: o.inicio, fim: o.fim, limiar: o.limiar, modo: o.silencioOnde }) : []), [analise, o.silencio, o.inicio, o.fim, o.limiar, o.silencioOnde])
   const fator = useMemo(() => (o.volume === 'ganho' ? 10 ** (o.ganho / 20) : o.volume === 'normalizar' ? ganhoNormalizar(analise, o.inicio, o.fim) : 1), [o.volume, o.ganho, analise, o.inicio, o.fim])
@@ -695,29 +753,15 @@ function Editor({ arquivo, aoTrocar }) {
         .filter(Boolean)
         .join(',')
       const inteiro = o.inicio < 0.05 && o.fim > duracao - 0.05
-      return processarAudio(arquivo, { formato: o.formato, bitrate: o.bitrate, inicio: inteiro ? undefined : o.inicio, fim: inteiro ? undefined : o.fim, filtros: filtros || undefined }, ctx, trecho / v).then(async (blob) => {
+      const fonte = arquivos.length > 1 ? analise.tocar : primeiro
+      return processarAudio(fonte, { formato: o.formato, bitrate: o.bitrate, inicio: inteiro ? undefined : o.inicio, fim: inteiro ? undefined : o.fim, filtros: filtros || undefined }, ctx, trecho / v).then(async (blob) => {
         const final = await infoMidia(new File([blob], `x.${o.formato}`)).catch(() => ({}))
-        return [{ nome: trocarExtensao(arquivo.name, o.formato, '-editado'), blob, detalhe: final.duracao ? `${formatarDuracao(final.duracao)} de áudio` : undefined }]
+        return [{ nome: arquivos.length > 1 ? `audios-juntos-editado.${o.formato}` : trocarExtensao(primeiro.name, o.formato, '-editado'), blob, detalhe: final.duracao ? `${formatarDuracao(final.duracao)} de áudio` : undefined }]
       })
     }, 'Processando')
 
   if (tarefa.fase === 'pronto') return <Resultados itens={tarefa.resultado} duracao={tarefa.duracao} aoAjustar={tarefa.reiniciar} aoReiniciar={aoTrocar} rotuloNovo="Outro áudio" />
 
-  if (erro) {
-    return (
-      <Aviso
-        tom="erro"
-        titulo="Não deu para abrir este áudio"
-        acao={
-          <Botao variante="secundario" tamanho="p" onClick={aoTrocar}>
-            Escolher outro
-          </Botao>
-        }
-      >
-        {erro}
-      </Aviso>
-    )
-  }
 
   const processando = tarefa.fase === 'processando'
   const removido = regioes.reduce((s, [a, b]) => s + (b - a), 0)
@@ -735,19 +779,34 @@ function Editor({ arquivo, aoTrocar }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
           <SeloCategoria categoria="audio" icone="arquivoAudio" tamanho="p" />
           <div className="min-w-0 flex-1 basis-40">
-            <p className="truncate text-sm font-semibold text-tinta" title={arquivo.name}>
-              {arquivo.name}
+            <p className="truncate text-sm font-semibold text-tinta" title={arquivos.map((a) => a.arquivo.name).join(' + ')}>
+              {vazio ? 'Nenhum áudio aberto' : arquivos.length === 1 ? primeiro.name : `${arquivos.length} áudios em sequência`}
             </p>
-            <p className="text-xs text-fraca tabular-nums">{tempo(duracao)} no original</p>
+            <p className="text-xs text-fraca tabular-nums">{vazio ? 'Escolha um arquivo para começar' : analise ? `${tempo(duracao)} no original` : 'Lendo…'}</p>
           </div>
+          <input
+            ref={entradaArquivos}
+            type="file"
+            multiple
+            accept={ACEITOS.map((e) => `.${e}`).join(',')}
+            className="sr-only"
+            tabIndex={-1}
+            onChange={(e) => {
+              adicionar(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <Botao variante="secundario" tamanho="p" icone="arquivoMais" onClick={() => entradaArquivos.current?.click()} disabled={processando}>
+            {vazio ? 'Escolher áudio' : 'Adicionar áudio'}
+          </Botao>
           <div className="flex items-center gap-0.5">
             <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || processando} />
             <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer || processando} />
             <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={redefinir} disabled={!analise || processando}>
               Redefinir tudo
             </Botao>
-            <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar} disabled={processando}>
-              Trocar arquivo
+            <Botao variante="fantasma" tamanho="p" icone="refazer" onClick={aoTrocar} disabled={processando || vazio}>
+              Recomeçar
             </Botao>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -777,12 +836,61 @@ function Editor({ arquivo, aoTrocar }) {
           {analise ? (
             <Onda analise={analise} duracao={duracao} o={o} fator={fator} regioes={regioes} aoBuscar={buscar} aoTrecho={mudar} cabeca={cabeca} />
           ) : (
-            <div className="grid h-44 place-items-center rounded-xl bg-fundo-suave sm:h-[clamp(11rem,30vh,17rem)]">
-              <div className="w-56">
-                <Progresso valor={preparo?.v ?? null} rotulo={preparo?.r ?? 'Lendo o áudio'} />
-              </div>
+            <div
+              className={`grid h-44 place-items-center rounded-xl sm:h-[clamp(11rem,30vh,17rem)] ${vazio ? 'border-2 border-dashed border-borda-forte bg-fundo-suave' : 'bg-fundo-suave'}`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                adicionar(e.dataTransfer.files)
+              }}
+            >
+              {erro ? (
+                <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
+                  <p className="text-sm text-perigo">{erro}</p>
+                  <Botao variante="secundario" tamanho="p" onClick={aoTrocar}>
+                    Escolher outro
+                  </Botao>
+                </div>
+              ) : vazio ? (
+                <div className="flex flex-col items-center gap-3 px-4 text-center">
+                  <Icone nome="onda" tamanho={30} className="text-fraca" />
+                  <p className="text-sm font-semibold text-tinta">Solte aqui um ou mais áudios</p>
+                  <Botao icone="arquivoMais" onClick={() => entradaArquivos.current?.click()}>
+                    Escolher áudio
+                  </Botao>
+                  <p className="text-xs text-fraca">{DESCRICAO_AUDIO} ou vídeo · vários arquivos tocam em sequência</p>
+                </div>
+              ) : (
+                <div className="w-56">
+                  <Progresso valor={preparo?.v ?? null} rotulo={preparo?.r ?? 'Lendo o áudio'} />
+                </div>
+              )}
             </div>
           )}
+          {recusados ? <p className="mt-2 text-xs text-alerta">{recusados === 1 ? 'Um arquivo não é de áudio nem vídeo e foi ignorado.' : `${recusados} arquivos não são de áudio nem vídeo e foram ignorados.`}</p> : null}
+
+          {/* Vários arquivos: a ordem em que tocam */}
+          {arquivos.length > 1 ? (
+            <ol className="mt-3 flex flex-wrap gap-2" aria-label="Ordem dos áudios">
+              {arquivos.map((a, i) => (
+                <li key={a.id} className="flex h-8 max-w-64 items-center gap-1 rounded-full border border-borda bg-superficie pr-1 pl-3 text-xs">
+                  <span className="font-bold text-fraca tabular-nums">{i + 1}</span>
+                  <span className="truncate font-medium text-tinta" title={a.arquivo.name}>
+                    {a.arquivo.name}
+                  </span>
+                  <button type="button" onClick={() => mover(i, -1)} disabled={i === 0 || processando} aria-label={`Mover ${a.arquivo.name} para antes`} className="grid size-6 place-items-center rounded-full text-fraca hover:bg-superficie-2 hover:text-tinta disabled:opacity-30">
+                    <Icone nome="setaBaixo" tamanho={13} className="rotate-90" />
+                  </button>
+                  <button type="button" onClick={() => mover(i, 1)} disabled={i === arquivos.length - 1 || processando} aria-label={`Mover ${a.arquivo.name} para depois`} className="grid size-6 place-items-center rounded-full text-fraca hover:bg-superficie-2 hover:text-tinta disabled:opacity-30">
+                    <Icone nome="setaBaixo" tamanho={13} className="-rotate-90" />
+                  </button>
+                  <button type="button" onClick={() => aoMudarArquivos(arquivos.filter((x) => x.id !== a.id))} disabled={processando} aria-label={`Tirar ${a.arquivo.name}`} className="grid size-6 place-items-center rounded-full text-fraca hover:bg-superficie-2 hover:text-perigo disabled:opacity-30">
+                    <Icone nome="fechar" tamanho={13} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : null}
         </div>
 
         {/* Player próprio */}
@@ -849,7 +957,7 @@ function Editor({ arquivo, aoTrocar }) {
       {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
 
       {/* Ajustes: tudo o que muda aqui já toca no player */}
-      <section aria-label="Ajustes" className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-4 ${processando ? 'pointer-events-none opacity-60' : ''}`} inert={processando ? true : undefined}>
+      <section aria-label="Ajustes" className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-4 ${processando || !analise ? 'pointer-events-none opacity-50' : ''}`} inert={processando || !analise ? true : undefined}>
         <Painel>
           <Velocidade valor={o.velocidade} aoMudar={(v) => mudar({ velocidade: v })} />
           {o.velocidade !== 1 ? <Caixa rotulo="Mudar tom" marcado={o.tom} aoMudar={(v) => mudar({ tom: v })} /> : null}
@@ -938,6 +1046,5 @@ export default function EditorAudio() {
     const entregue = receber('audio/editor')
     return entregue ? [{ id: 'entregue', arquivo: entregue }] : []
   })
-  if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={[...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]} descricaoFormatos={`${DESCRICAO_AUDIO} (ou vídeo)`} limiteBytes={LIMITE_AUDIO} />
-  return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
+  return <Editor arquivos={arquivos} aoMudarArquivos={setArquivos} />
 }
