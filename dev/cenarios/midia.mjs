@@ -25,11 +25,26 @@ const escolher = (t, valor) =>
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(valor)})
     s.dispatchEvent(new Event('change', { bubbles: true }))`)
 
-/** Editor de vídeo: um arquivo só, vai direto para a edição (sem lista). */
-async function abrirNoEditor(t) {
-  await t.js(`__t.enviar([${usar('mp4')}])`)
-  await t.aguardar('document.querySelector(\'input[aria-label="Início (minutos:segundos)"]\')', 20000)
+/** Editor de vídeo: abre os arquivos como clipes e espera aparecerem na linha do tempo. */
+async function abrirNoEditor(t, extra = '', n = 1) {
+  await t.js(`__t.enviar([${usar('mp4')}${extra}], 'main input[aria-label="Escolher clipes"]')`)
+  await t.aguardar(`document.querySelectorAll('main [aria-label^="Clipe "]').length === ${n}`, 30000)
 }
+/** Campo de tempo (aplica ao sair do campo). */
+const campoTempo = (t, rotulo, valor, n = 0) =>
+  t.js(`const l = [...document.querySelectorAll('main aside label')].filter((x) => x.firstChild?.textContent?.trim() === ${JSON.stringify(rotulo)})[${n}]
+    const el = l.querySelector('input'); el.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(valor)})
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    // Sem foco de janela (navegador de teste), blur() não dispara o evento: dispara à mão.
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); el.blur()`)
+/** Campo numérico do recorte (em %). */
+const campoRecorte = (t, rotulo, valor) =>
+  t.js(`const el = document.querySelector('main input[aria-label="${rotulo} do recorte em %"]')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '${valor}')
+    el.dispatchEvent(new Event('input', { bubbles: true }))`)
+/** Aba do painel de propriedades. */
+const aba = (t, nome) => t.js(`[...document.querySelectorAll('main aside [role=radio]')].find((b) => b.textContent.trim() === '${nome}').click()`)
 
 export default [
   // ─── Vídeo ────────────────────────────────────────────────────────────────
@@ -80,42 +95,64 @@ export default [
     },
   },
   {
-    nome: 'video/editor: cortar trecho de 1 s a 2,5 s',
+    nome: 'video/editor: aparece vazio, junta 2 vídeos e corta um trecho',
     pagina: '/video/editor',
     async executar(t) {
-      await abrirNoEditor(t)
-      await t.js(`for (const [rotulo, valor] of [['Início (minutos:segundos)', '0:01'], ['Fim (minutos:segundos)', '0:02.5']]) {
-          const el = document.querySelector('input[aria-label="' + rotulo + '"]')
-          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, valor)
-          el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
-        }`)
-      await t.aguardar('document.querySelector("main").innerText.includes("0:01.0 → 0:02.5")')
-      await t.clicar('Exportar vídeo')
-      await t.aguardarResultado(240000)
-      perto((await t.js('return await __t.midia()')).duracao, 1.5, 0.35, 'duração do trecho')
-    },
-  },
-  {
-    nome: 'video/editor: proporção 16:9 → vertical 9:16',
-    pagina: '/video/editor',
-    async executar(t) {
-      await abrirNoEditor(t)
-      await t.js(`[...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === '9:16').click()`)
-      await t.clicar('Exportar vídeo')
-      await t.aguardarResultado(240000)
-      const m = await t.js('return await __t.midia()')
-      perto(m.largura / m.altura, 9 / 16, 0.02, 'proporção')
-    },
-  },
-  {
-    nome: 'video/editor: velocidade 2× pelo ffmpeg (metade da duração)',
-    pagina: '/video/editor',
-    async executar(t) {
-      await abrirNoEditor(t)
-      await t.js(`__t.digitar('Velocidade', '2')`)
+      assert.ok(await t.js("return Boolean(document.querySelector('main section[aria-label=Player] button[aria-label=Tocar]') && document.querySelector('main aside[aria-label=Propriedades]'))"), 'o editor deveria aparecer antes do arquivo')
+      await abrirNoEditor(t, `, __t.arquivo(await __t.gravarVideo(2, 640, 360), 'zz-segunda.webm')`, 2)
+      await t.aguardar("document.querySelector('main').innerText.includes('2 clipes em sequência')", 5000)
+      // Clipe 1 (3 s): usa só de 0:01 a 0:02.5 → 1,5 s + 2 s do segundo.
+      await t.js("document.querySelector('main [aria-label^=\"Clipe 1\"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))")
+      await aba(t, 'Clipe')
+      await campoTempo(t, 'De', '0:01')
+      await campoTempo(t, 'Até', '0:02.5')
+      await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:03.5')", 5000)
       await t.clicar('Exportar vídeo')
       await t.aguardarResultado(300000)
-      perto((await t.js('return await __t.midia()')).duracao, 1.5, 0.35, 'duração a 2×')
+      const m = await t.js('return await __t.midia()')
+      perto(m.duracao, 3.5, 0.4, 'duração dos dois clipes')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+    },
+  },
+  {
+    nome: 'video/editor: recorte livre e velocidade 2×',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.clicar('Recortar')
+      await t.aguardar("document.querySelector('main [aria-label=\"Área do recorte\"]')", 5000)
+      await campoRecorte(t, 'Esquerda', 25)
+      await campoRecorte(t, 'Largura', 50)
+      await campoRecorte(t, 'Topo', 0)
+      await campoRecorte(t, 'Altura', 100)
+      await t.clicar('Aplicar recorte')
+      await aba(t, 'Clipe')
+      await t.js("__t.digitar('Velocidade', '2')")
+      await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:01.5')", 5000)
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [320, 360], 'recorte de metade da largura')
+      perto(m.duracao, 1.5, 0.35, 'duração a 2×')
+    },
+  },
+  {
+    nome: 'video/editor: texto, imagem, desfoque e música',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.clicar('Texto')
+      await t.js("__t.digitar('Texto', 'Olá, mundo')")
+      await t.clicar('Desfoque')
+      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(200, 100), 'logo.png')], 'main input[aria-label="Escolher imagem"]')`)
+      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')], 'main input[aria-label="Escolher musica"]')`)
+      await t.aguardar("document.querySelectorAll('main [aria-label^=\"Camada \"][role=button]').length === 3 && document.querySelector('main').innerText.includes('musica.wav')", 20000)
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, 3, 0.5, 'duração')
+      assert.ok(temTrilhaDeAudio(await bytes(t)), 'sem trilha de áudio')
     },
   },
   {
@@ -170,21 +207,6 @@ export default [
       const rs = await t.js('return await __t.resultados()')
       assert.ok(rs.length >= 2, `${rs.length} parte(s)`)
       assert.ok(rs.every((r) => r.tipo === 'mp4'))
-    },
-  },
-  {
-    nome: 'video/editor: trocar o som por uma música',
-    pagina: '/video/editor',
-    async executar(t) {
-      await abrirNoEditor(t)
-      await escolher(t, 'trocar')
-      await t.aguardar('document.querySelector("main aside input[type=file]")')
-      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')], 'main aside input[type=file]')`)
-      await t.clicar('Exportar vídeo')
-      await t.aguardarResultado(240000)
-      const b = await bytes(t)
-      assert.ok(temTrilhaDeAudio(b), 'sem trilha de áudio')
-      perto((await t.js('return await __t.midia()')).duracao, 3, 0.6, 'duração do vídeo mantida')
     },
   },
 

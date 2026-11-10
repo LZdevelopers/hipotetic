@@ -14,7 +14,7 @@ página avisa: o download por link e a conversão de documentos (LibreOffice).
 O catálogo (`src/ferramentas/catalogo.js`) é a fonte única: navegação, busca,
 o índice da página inicial, SEO, sitemap e pré-renderização saem dele. **Uma
 ferramenta só entra no catálogo quando funciona** — não existe “em breve”.
-Não há páginas de categoria: as categorias são âncoras do índice (`/#audio`…).
+Não há páginas de categoria: `/ferramentas` mostra tudo (abas, busca) e `/ferramentas#audio` abre na categoria; no topo, as categorias só abrem o menu.
 As ferramentas não têm "Como usar" — precisam se explicar sozinhas. Nos
 editores, com um arquivo aberto, a página mostra só o editor (`useEmEdicao`).
 
@@ -35,7 +35,7 @@ operações em abas ou opções.
 
 | Demais ferramentas | Páginas | Motor |
 |---|---|---|
-| Vídeo | baixar (YouTube/TikTok) · comprimir · editor (trecho, proporção, girar, resolução, velocidade, som: silenciar, trocar ou misturar música) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
+| Vídeo | baixar (YouTube/TikTok) · comprimir · editor (vários clipes em sequência, aparar/dividir/duplicar, recorte livre, velocidade livre, girar/espelhar, cores, fades, camadas de texto, imagem, vídeo por cima e desfoque, música; player e linha do tempo próprios) · juntar e dividir | Mediabunny (WebCodecs) + ffmpeg.wasm |
 | Áudio | editor (player próprio, prévia ao vivo, velocidade livre, desfazer) · gravador de voz · limpar e melhorar voz (ruído, zumbido, clareza, volume padrão; também em vídeo) · juntar e dividir (inclusive nas pausas) · tags e capa | Web Audio + MediaRecorder + ffmpeg.wasm |
 | Imagens | comprimir · editor (recortar, girar, tamanho/redes sociais, cores e filtros, formato) · metadados (ver EXIF/GPS e remover sem recomprimir) · favicon · miniatura · paleta de cores | Web Workers + OffscreenCanvas + jSquash |
 | PDF | unir · dividir · organizar · editar e assinar · comprimir · OCR · numerar e marca d’água · senha (colocar/remover) · comparar · metadados | pdf-lib, pdf.js, qpdf-wasm, tesseract.js |
