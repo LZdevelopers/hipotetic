@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BotaoAcao, CampoTempo, SeletorCompacto, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
+import { MenuContexto } from '../../componentes/editor/MenuContexto'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
@@ -356,6 +357,7 @@ export default function EditorVideo() {
   const relogio = useRef(null)
   const cabeca = useRef(null)
   const larguraLinha = useRef(null)
+  const escalaLinha = useRef(1)
   const raiz = useRef(null)
   const entradas = { clipes: useRef(null), imagem: useRef(null), videoCamada: useRef(null), musica: useRef(null) }
 
@@ -378,7 +380,7 @@ export default function EditorVideo() {
   const pAtual = useRef(p)
   pAtual.current = p
   const aoTempo = (t) => {
-    const T = duracaoTotal(pAtual.current)
+    const T = escalaLinha.current || duracaoTotal(pAtual.current)
     if (relogio.current) relogio.current.textContent = tempo(t)
     if (cabeca.current) cabeca.current.style.left = `${T ? (t / T) * 100 : 0}%`
   }
@@ -433,13 +435,16 @@ export default function EditorVideo() {
     }
   }
 
-  const novaCamada = (tipo) => {
+  const novaCamada = (tipo, { t = agora(), pos } = {}) => {
     if (vazio) return
-    const t = agora()
-    const ini = Math.min(t, Math.max(0, total - 3))
+    const ini = Math.min(t, Math.max(0, total - 1))
     const id = novoId('k')
-    if (tipo === 'texto') mudar((x) => ({ camadas: [...x.camadas, { id, tipo, inicio: ini, fim: Math.min(total, ini + 3), x: 0.1, y: 0.72, w: 0.8, h: 0.15, texto: 'Seu texto aqui', tamanho: 0.07, cor: '#ffffff', negrito: true, alinhar: 'centro', fundo: true, corFundo: '#000000', opacidadeFundo: 0.55, opacidade: 1 }] }))
-    else mudar((x) => ({ camadas: [...x.camadas, { id, tipo: 'desfoque', inicio: 0, fim: total, x: 0.35, y: 0.3, w: 0.3, h: 0.3 }] }))
+    if (tipo === 'texto') {
+      const x0 = pos ? Math.min(Math.max(0, pos.x - 0.3), 0.4) : 0.1
+      mudar((x) => ({ camadas: [...x.camadas, { id, tipo, inicio: ini, fim: Math.min(total, ini + 3), x: x0, y: pos ? Math.min(pos.y, 0.9) : 0.72, w: pos ? 0.6 : 0.8, h: 0.15, texto: 'Seu texto aqui', tamanho: 0.07, cor: '#ffffff', negrito: true, alinhar: 'centro', fundo: true, corFundo: '#000000', opacidadeFundo: 0.55, opacidade: 1 }] }))
+    } else {
+      mudar((x) => ({ camadas: [...x.camadas, { id, tipo: 'desfoque', inicio: pos ? 0 : ini, fim: total, x: pos ? Math.min(Math.max(0, pos.x - 0.15), 0.7) : 0.35, y: pos ? Math.min(Math.max(0, pos.y - 0.15), 0.7) : 0.3, w: 0.3, h: 0.3 }] }))
+    }
     setSelecao({ tipo: 'camada', id })
     setAba('camada')
   }
@@ -490,6 +495,106 @@ export default function EditorVideo() {
       else if (s.tipo === 'musica') mudar({ musica: null })
       setSelecao(null)
     },
+  }
+
+  const duplicarCamada = (id) => {
+    const nova = novoId('k')
+    mudar((x) => ({ camadas: x.camadas.flatMap((c) => (c.id === id ? [c, { ...c, id: nova, x: Math.min(c.x + 0.03, 0.95), y: Math.min(c.y + 0.03, 0.95) }] : [c])) }))
+    selecionar({ tipo: 'camada', id: nova })
+  }
+
+  const [menu, setMenu] = useState(null)
+  const fecharMenu = useCallback(() => setMenu(null), [])
+  /** Monta o menu conforme o que foi clicado com o botão direito. */
+  const abrirMenu = (e, alvo) => {
+    if (vazio && alvo.tipo !== 'palco') return
+    let titulo
+    let itens
+    if (alvo.tipo === 'clipe') {
+      const i = p.clipes.findIndex((c) => c.id === alvo.id)
+      const c = p.clipes[i]
+      if (!c) return
+      selecionar({ tipo: 'clipe', id: c.id })
+      titulo = `Clipe ${i + 1}`
+      itens = [
+        {
+          rotulo: 'Dividir aqui',
+          icone: 'cortar',
+          atalho: 'S',
+          acao: () => {
+            palco.current?.buscar(alvo.t)
+            acoes.dividir()
+          },
+        },
+        { rotulo: 'Velocidade, volume e trecho…', icone: 'ajustar', acao: () => selecionar({ tipo: 'clipe', id: c.id }) },
+        { rotulo: c.mudo ? 'Devolver o som' : 'Tirar o som', icone: 'semAudio', acao: () => mudarClipe(c.id, { mudo: !c.mudo }), desativado: !fontes[c.fonte]?.temAudio },
+        { rotulo: 'Duplicar', icone: 'copiar', acao: () => acoes.duplicar(c.id) },
+        { rotulo: 'Mover para antes', acao: () => acoes.mover(c.id, -1), desativado: i === 0 },
+        { rotulo: 'Mover para depois', acao: () => acoes.mover(c.id, 1), desativado: i === p.clipes.length - 1 },
+        '-',
+        { rotulo: 'Excluir clipe', icone: 'apagar', atalho: 'Del', perigo: true, acao: () => acoes.remover({ tipo: 'clipe', id: c.id }) },
+      ]
+    } else if (alvo.tipo === 'camada') {
+      const c = p.camadas.find((x) => x.id === alvo.id)
+      if (!c) return
+      selecionar({ tipo: 'camada', id: c.id })
+      const cursor = agora()
+      titulo = c.tipo === 'texto' ? c.texto.split('\n')[0] || 'Texto' : { imagem: 'Imagem', video: 'Vídeo por cima', desfoque: 'Desfoque' }[c.tipo]
+      itens = [
+        { rotulo: 'Editar', icone: 'caneta', acao: () => selecionar({ tipo: 'camada', id: c.id }) },
+        { rotulo: 'Duplicar', icone: 'copiar', acao: () => duplicarCamada(c.id) },
+        '-',
+        { rotulo: 'Começar no cursor', icone: 'tempo', acao: () => mudarCamada(c.id, { inicio: Math.min(cursor, c.fim - 0.2) }), desativado: cursor >= c.fim - 0.2 },
+        { rotulo: 'Terminar no cursor', icone: 'tempo', acao: () => mudarCamada(c.id, { fim: Math.max(cursor, c.inicio + 0.2) }), desativado: cursor <= c.inicio + 0.2 },
+        { rotulo: 'Aparecer no vídeo todo', acao: () => mudarCamada(c.id, { inicio: 0, fim: total }) },
+        '-',
+        { rotulo: 'Trazer para frente', icone: 'camadas', acao: () => acoes.ordem(c.id, 1) },
+        { rotulo: 'Enviar para trás', acao: () => acoes.ordem(c.id, -1) },
+        '-',
+        { rotulo: 'Excluir camada', icone: 'apagar', atalho: 'Del', perigo: true, acao: () => acoes.remover({ tipo: 'camada', id: c.id }) },
+      ]
+    } else if (alvo.tipo === 'musica') {
+      selecionar({ tipo: 'musica' })
+      titulo = 'Música'
+      itens = [
+        { rotulo: 'Volume e opções…', icone: 'ajustar', acao: () => selecionar({ tipo: 'musica' }) },
+        { rotulo: p.musica?.repetir ? 'Não repetir' : 'Repetir até o fim', icone: 'repetir', acao: () => mudar((x) => ({ musica: { ...x.musica, repetir: !x.musica.repetir } })) },
+        { rotulo: 'Trocar música', icone: 'musica', acao: () => entradas.musica.current?.click() },
+        '-',
+        { rotulo: 'Excluir música', icone: 'apagar', perigo: true, acao: () => acoes.remover({ tipo: 'musica' }) },
+      ]
+    } else if (alvo.tipo === 'palco') {
+      if (vazio) {
+        itens = [{ rotulo: 'Escolher vídeos', icone: 'arquivoMais', acao: () => entradas.clipes.current?.click() }]
+      } else {
+        itens = [
+          { rotulo: palco.current?.tocando() ? 'Pausar' : 'Tocar', icone: palco.current?.tocando() ? 'pausa' : 'play', atalho: 'Espaço', acao: () => palco.current?.alternar() },
+          '-',
+          { rotulo: 'Texto aqui', icone: 'texto', acao: () => novaCamada('texto', { pos: alvo.pos }) },
+          { rotulo: 'Desfoque aqui', icone: 'borracha', acao: () => novaCamada('desfoque', { pos: alvo.pos }) },
+          { rotulo: 'Imagem ou logo', icone: 'imagem', acao: () => entradas.imagem.current?.click() },
+          '-',
+          { rotulo: 'Recortar o vídeo', icone: 'recortar', acao: acoesRecorte.abrir },
+          { rotulo: 'Girar 90°', icone: 'girar', acao: () => mudar((x) => ({ girar: (x.girar + 90) % 360, recorte: null })) },
+          { rotulo: 'Dividir no cursor', icone: 'cortar', atalho: 'S', acao: acoes.dividir },
+        ]
+      }
+    } else {
+      itens = [
+        { rotulo: 'Ir para cá', icone: 'seta', acao: () => palco.current?.buscar(alvo.t) },
+        {
+          rotulo: 'Dividir aqui',
+          icone: 'cortar',
+          acao: () => {
+            palco.current?.buscar(alvo.t)
+            acoes.dividir()
+          },
+        },
+        { rotulo: 'Texto aqui', icone: 'texto', acao: () => novaCamada('texto', { t: alvo.t }) },
+        { rotulo: 'Desfoque aqui', icone: 'borracha', acao: () => novaCamada('desfoque', { t: alvo.t }) },
+      ]
+    }
+    setMenu({ x: e.clientX, y: e.clientY, titulo, itens })
   }
 
   const acoesRecorte = {
@@ -672,9 +777,9 @@ export default function EditorVideo() {
         <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* Palco + controles */}
           <div className="flex min-w-0 flex-col">
-            <div className="relative mx-4 mt-4 h-[clamp(12rem,37vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5">
+            <div className="relative mx-4 mt-4 h-[clamp(11rem,34vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5">
               {vazio ? (
-                <div className="absolute inset-0 grid place-items-center border-2 border-dashed border-borda-forte bg-fundo-suave">
+                <div className="absolute inset-0 z-10 grid place-items-center border-2 border-dashed border-borda-forte bg-fundo-suave">
                   <div className="flex flex-col items-center gap-3 px-4 text-center">
                     {lendo ? (
                       <div className="w-60">
@@ -703,6 +808,7 @@ export default function EditorVideo() {
                 recortando={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null}
                 aoTempo={aoTempo}
                 aoTocando={setTocando}
+                aoMenu={abrirMenu}
                 vazio={vazio}
               />
               {lendo && !vazio ? (
@@ -712,8 +818,15 @@ export default function EditorVideo() {
               ) : null}
             </div>
 
-            {/* Player próprio */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-5">
+            {/* Player próprio: controles no centro, tempo à esquerda */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 pt-3 sm:px-5">
+              <p className="font-display text-lg leading-none font-bold text-tinta tabular-nums sm:text-xl">
+                <span ref={relogio}>0:00.0</span>
+                <span className="text-sm font-semibold text-fraca" title="Duração do vídeo final">
+                  {' '}
+                  / {tempo(total)}
+                </span>
+              </p>
               <div className="flex items-center gap-1.5">
                 <button type="button" onClick={() => palco.current?.buscar(0)} disabled={vazio} aria-label="Voltar ao início" title="Voltar ao início" className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
                   <Icone nome="voltarInicio" tamanho={19} />
@@ -728,42 +841,38 @@ export default function EditorVideo() {
                 >
                   <Icone nome={tocando ? 'pausa' : 'play'} tamanho={22} className={tocando ? '' : 'translate-x-0.5'} fill="currentColor" />
                 </button>
-              </div>
-              <p className="font-display text-xl leading-none font-bold text-tinta tabular-nums">
-                <span ref={relogio}>0:00.0</span>
-                <span className="text-sm font-semibold text-fraca" title="Duração do vídeo final">
-                  {' '}
-                  / {tempo(total)}
-                </span>
-              </p>
-              <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                <button type="button" className={botaoAdd} onClick={() => entradas.clipes.current?.click()} disabled={processando}>
-                  <Icone nome="arquivoVideo" tamanho={15} /> Vídeo
-                </button>
-                <button type="button" className={botaoAdd} onClick={() => novaCamada('texto')} disabled={vazio}>
-                  <Icone nome="texto" tamanho={15} /> Texto
-                </button>
-                <button type="button" className={botaoAdd} onClick={() => entradas.imagem.current?.click()} disabled={vazio}>
-                  <Icone nome="imagem" tamanho={15} /> Imagem
-                </button>
-                <button type="button" className={botaoAdd} onClick={() => entradas.videoCamada.current?.click()} disabled={vazio} title="Vídeo por cima (picture-in-picture)">
-                  <Icone nome="camadas" tamanho={15} /> Vídeo por cima
-                </button>
-                <button type="button" className={botaoAdd} onClick={() => novaCamada('desfoque')} disabled={vazio} title="Esconder rosto, placa ou dados">
-                  <Icone nome="borracha" tamanho={15} /> Desfoque
-                </button>
-                <button type="button" className={botaoAdd} onClick={() => entradas.musica.current?.click()} disabled={vazio}>
-                  <Icone nome="musica" tamanho={15} /> Música
-                </button>
-                <button type="button" className={botaoAdd} onClick={acoes.dividir} disabled={vazio} title="Dividir o clipe no cursor (S)">
-                  <Icone nome="cortar" tamanho={15} /> Dividir
+                <button type="button" onClick={acoes.dividir} disabled={vazio} aria-label="Dividir no cursor" title="Dividir o clipe no cursor (S)" className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
+                  <Icone nome="cortar" tamanho={18} />
                 </button>
               </div>
+              <span />
+            </div>
+
+            {/* Adicionar */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 px-4 pt-2.5 pb-3 sm:px-5">
+              <button type="button" className={botaoAdd} onClick={() => entradas.clipes.current?.click()} disabled={processando}>
+                <Icone nome="arquivoVideo" tamanho={15} /> Vídeo
+              </button>
+              <button type="button" className={botaoAdd} onClick={() => novaCamada('texto')} disabled={vazio}>
+                <Icone nome="texto" tamanho={15} /> Texto
+              </button>
+              <button type="button" className={botaoAdd} onClick={() => entradas.imagem.current?.click()} disabled={vazio}>
+                <Icone nome="imagem" tamanho={15} /> Imagem
+              </button>
+              <button type="button" className={botaoAdd} onClick={() => entradas.videoCamada.current?.click()} disabled={vazio} title="Vídeo por cima (picture-in-picture)">
+                <Icone nome="camadas" tamanho={15} /> Vídeo por cima
+              </button>
+              <button type="button" className={botaoAdd} onClick={() => novaCamada('desfoque')} disabled={vazio} title="Esconder rosto, placa ou dados">
+                <Icone nome="borracha" tamanho={15} /> Desfoque
+              </button>
+              <button type="button" className={botaoAdd} onClick={() => entradas.musica.current?.click()} disabled={vazio}>
+                <Icone nome="musica" tamanho={15} /> Música
+              </button>
             </div>
           </div>
 
           {/* Propriedades */}
-          <aside aria-label="Propriedades" className={`flex min-h-0 flex-col border-t border-borda lg:max-h-[calc(clamp(12rem,37vh,30rem)+5.5rem)] lg:border-t-0 lg:border-l ${vazio || processando ? 'pointer-events-none opacity-50' : ''}`} inert={vazio || processando ? true : undefined}>
+          <aside aria-label="Propriedades" className={`flex min-h-0 flex-col border-t border-borda lg:max-h-[calc(clamp(11rem,34vh,30rem)+8.5rem)] lg:border-t-0 lg:border-l ${vazio || processando ? 'pointer-events-none opacity-50' : ''}`} inert={vazio || processando ? true : undefined}>
             <div className="border-b border-borda p-3">
               <Segmentado valor={aba} aoMudar={setAba} opcoes={ABAS} />
             </div>
@@ -778,9 +887,11 @@ export default function EditorVideo() {
 
         {/* Linha do tempo */}
         <div className="border-t border-borda py-2 pr-4 sm:pr-5">
-          <LinhaDoTempo p={p} fontes={fontes} selecao={selecao} aoSelecionar={selecionar} aoBuscar={(t) => palco.current?.buscar(t)} aoMudarClipe={mudarClipe} aoMudarCamada={mudarCamada} cabeca={cabeca} larguraRef={larguraLinha} />
+          <LinhaDoTempo p={p} fontes={fontes} selecao={selecao} aoSelecionar={selecionar} aoBuscar={(t) => palco.current?.buscar(t)} aoMudarClipe={mudarClipe} aoMudarCamada={mudarCamada} aoMenu={abrirMenu} agora={agora} cabeca={cabeca} larguraRef={larguraLinha} escalaRef={escalaLinha} />
         </div>
       </section>
+
+      <MenuContexto menu={menu} aoFechar={fecharMenu} />
 
       {aviso ? (
         <Aviso tom="alerta" aoFechar={() => setAviso(null)}>
@@ -791,7 +902,7 @@ export default function EditorVideo() {
 
       <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fraca">
         <span className="size-1.5 rounded-full bg-sucesso" />
-        Tudo o que você muda já aparece no player. Arraste textos e imagens no vídeo; na linha do tempo, arraste as camadas e as pontas dos clipes. Atalhos: espaço toca/pausa · S divide · Delete apaga · Ctrl+Z desfaz.
+        Tudo o que você muda já aparece no player. Arraste textos e imagens no vídeo; na linha do tempo, arraste as camadas e as pontas dos clipes (elas grudam no cursor). Botão direito mostra as opções de cada item. Atalhos: espaço toca/pausa · S divide · Delete apaga · Ctrl+Z desfaz.
       </p>
     </div>
   )

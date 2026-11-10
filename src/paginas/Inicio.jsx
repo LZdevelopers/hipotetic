@@ -1,8 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { Icone } from '../componentes/Icone'
-import { Pilulas } from '../componentes/ListaFerramentas'
+import { GradeCartoes, Pilulas } from '../componentes/ListaFerramentas'
 import { ListaResultados, useBuscaTeclado } from '../componentes/layout/Busca'
-import { SeloCategoria } from '../componentes/ui'
 import { caminhoDa, ferramentaPorSlug, ferramentas, populares } from '../ferramentas/catalogo'
 import { useRecentes } from '../nucleo/preferencias'
 import { Link, useRota } from '../nucleo/roteador'
@@ -80,6 +79,9 @@ function Recentes() {
   )
 }
 
+/** As principais, em cartões, logo abaixo das recentes. */
+const DESTAQUES = ['converter', 'video/editor', 'audio/editor', 'video/baixar', 'audio/gravador', 'video/comprimir', 'pdf/unir', 'imagem/comprimir']
+
 export function Inicio() {
   const atalhos = populares().slice(0, 6)
 
@@ -107,35 +109,20 @@ export function Inicio() {
         </ul>
       </section>
 
-      <Link
-        para="/converter"
-        className="group mt-12 flex flex-col items-start gap-5 rounded-[var(--radius-cartao)] border border-borda bg-superficie p-6 transition-[border-color,box-shadow] duration-200 hover:border-borda-forte hover:shadow-[var(--shadow-cartao)] sm:flex-row sm:items-center sm:p-7"
-      >
-        <SeloCategoria categoria="conversor" icone="substituir" tamanho="g" />
-        <span className="min-w-0 flex-1">
-          <span className="block font-display text-xl font-bold text-tinta">Conversor de arquivos</span>
-          <span className="mt-1 block text-sm text-suave">Solte qualquer arquivo — vídeo, áudio, imagem, PDF, documento ou compactado — e escolha para qual formato converter.</span>
-        </span>
-        <span className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-marca px-5 text-sm font-semibold text-sobre-marca transition-colors group-hover:bg-marca-hover">
-          Converter arquivos
-          <Icone nome="seta" tamanho={16} />
-        </span>
-      </Link>
-
       <Recentes />
 
-      <Link
-        para="/ferramentas"
-        className="group mt-14 flex items-center justify-between gap-4 border-y border-borda py-6 transition-colors hover:border-borda-forte"
-      >
-        <span>
-          <span className="block font-display text-xl font-bold text-tinta">Ver todas as {ferramentas.length} ferramentas</span>
-          <span className="mt-1 block text-sm text-suave">Vídeo, áudio, imagens, PDF, documentos, compactados e utilitários.</span>
-        </span>
-        <span className="grid size-11 shrink-0 place-items-center rounded-full border border-borda-forte text-tinta transition-transform group-hover:translate-x-1">
-          <Icone nome="seta" tamanho={18} />
-        </span>
-      </Link>
+      <section aria-labelledby="titulo-destaques" className="mt-14">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <h2 id="titulo-destaques" className="text-2xl">
+            Ferramentas em destaque
+          </h2>
+          <Link para="/ferramentas" className="group inline-flex items-center gap-1.5 text-sm font-semibold text-suave transition-colors hover:text-tinta">
+            Ver todas as {ferramentas.length} ferramentas
+            <Icone nome="seta" tamanho={15} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+        <GradeCartoes lista={DESTAQUES.map(ferramentaPorSlug).filter(Boolean)} rotulo="Ferramentas em destaque" />
+      </section>
 
       <ul className="mt-20 grid gap-8 border-t border-borda pt-12 sm:grid-cols-3">
         {inicio.principios.map((p) => (

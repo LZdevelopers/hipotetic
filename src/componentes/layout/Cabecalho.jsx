@@ -127,7 +127,7 @@ function MenuCategoria({ categoria, ativo }) {
           clearTimeout(timer.current)
           setAberto((a) => !a)
         }}
-        className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${ativo || aberto ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'}`}
+        className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors 2xl:px-2.5 ${ativo || aberto ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'}`}
       >
         {categoria.nome}
         <Icone nome="setaBaixo" tamanho={14} className={`text-fraca transition-transform duration-200 ${aberto ? 'rotate-180' : ''}`} />
@@ -174,15 +174,16 @@ export function Cabecalho() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-borda bg-fundo/85 backdrop-blur-md supports-[not(backdrop-filter:blur(0))]:bg-fundo">
-      <div className="container-pagina flex h-15 items-center gap-4">
-        <Marca className="mr-2" />
+      {/* Logo à esquerda, categorias no centro, busca e tema à direita. */}
+      <div className="mx-auto flex h-15 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:gap-6">
+        <Marca className="shrink-0 xl:justify-self-start" />
 
-        <nav aria-label="Categorias" className="hidden min-w-0 flex-1 items-center gap-0.5 xl:flex">
+        <nav aria-label="Categorias" className="hidden items-center gap-0.5 xl:flex">
           <Link
             para="/converter"
             aria-current={caminho === '/converter' ? 'page' : undefined}
             title="Converter arquivos"
-            className={`mr-1 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${caminho === '/converter' ? 'bg-superficie-2 text-tinta' : 'text-tinta hover:bg-superficie-2'}`}
+            className={`mr-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold transition-colors 2xl:px-2.5 ${caminho === '/converter' ? 'bg-superficie-2 text-tinta' : 'text-tinta hover:bg-superficie-2'}`}
           >
             <Icone nome="substituir" tamanho={15} className="text-acento" />
             Converter
@@ -192,16 +193,16 @@ export function Cabecalho() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5 xl:ml-0">
           <button
             type="button"
             onClick={abrirBusca}
             aria-label={textos.buscarFerramenta}
-            className="hidden h-9 items-center gap-2 rounded-lg border border-borda bg-fundo-suave pr-1.5 pl-3 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex"
+            className="hidden h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-borda bg-fundo-suave pr-2 pl-3.5 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex sm:max-w-sm xl:max-w-[24rem]"
           >
-            <Icone nome="buscar" tamanho={16} />
-            <span className="w-28 text-left lg:w-36 xl:hidden">{textos.buscarFerramenta}</span>
-            <kbd className="rounded border border-borda bg-superficie px-1.5 py-px font-sans text-[0.6875rem]">{mac ? '⌘K' : 'Ctrl K'}</kbd>
+            <Icone nome="buscar" tamanho={17} />
+            <span className="min-w-0 flex-1 truncate text-left">{textos.buscarFerramenta}</span>
+            <kbd className="rounded border border-borda bg-superficie px-1.5 py-px font-sans text-[0.6875rem] xl:hidden 2xl:inline">{mac ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           <button
             type="button"

@@ -1,35 +1,24 @@
-import { categoriasComFerramentas } from '../../ferramentas/catalogo'
 import { Link } from '../../nucleo/roteador'
 import { rodape } from '../../textos'
 import { AssinaturaLzdev, Marca } from './Marca'
 
-/** Rodapé enxuto: marca, categorias e links legais (as ferramentas ficam no menu do topo). */
+const LINKS = [{ rotulo: 'Converter arquivos', para: '/converter' }, { rotulo: 'Todas as ferramentas', para: '/ferramentas' }, ...rodape.links]
+
+/** Rodapé compacto: marca e assinatura de um lado, links do outro. */
 export function Rodape() {
   return (
-    <footer className="mt-24 border-t border-borda bg-fundo-suave">
-      <div className="container-pagina flex flex-col gap-10 py-12 md:flex-row md:items-start md:justify-between">
-        <div className="flex flex-col items-start gap-4">
+    <footer className="mt-20 border-t border-borda bg-fundo-suave">
+      <div className="container-pagina flex flex-col gap-4 py-6 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <Marca />
-          <p className="max-w-xs text-sm text-suave">{rodape.frase}</p>
           <AssinaturaLzdev />
         </div>
-        <nav aria-label="Categorias">
-          <p className="text-sm font-semibold text-tinta">Ferramentas</p>
-          <ul className="mt-3 grid grid-cols-2 gap-x-10 gap-y-2">
-            <li>
-              <Link para="/converter" className="text-sm text-suave transition-colors hover:text-tinta">
-                Converter arquivos
-              </Link>
-            </li>
-            <li>
-              <Link para="/ferramentas" className="text-sm text-suave transition-colors hover:text-tinta">
-                Todas as ferramentas
-              </Link>
-            </li>
-            {categoriasComFerramentas().map((c) => (
-              <li key={c.id}>
-                <Link para={`/ferramentas#${c.id}`} className="text-sm text-suave transition-colors hover:text-tinta">
-                  {c.nome}
+        <nav aria-label="Rodapé">
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {LINKS.map((l) => (
+              <li key={l.para}>
+                <Link para={l.para} className="text-suave transition-colors hover:text-tinta">
+                  {l.rotulo}
                 </Link>
               </li>
             ))}
@@ -37,18 +26,9 @@ export function Rodape() {
         </nav>
       </div>
       <div className="border-t border-borda">
-        <div className="container-pagina flex flex-wrap items-center justify-between gap-3 py-5 text-xs text-fraca">
-          <p>© {new Date().getFullYear()} LZdev. Grátis, sem anúncios e sem cadastro.</p>
-          <ul className="flex gap-5">
-            {rodape.links.map((l) => (
-              <li key={l.para}>
-                <Link para={l.para} className="hover:text-tinta">
-                  {l.rotulo}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <p className="container-pagina py-3 text-xs text-fraca">
+          © {new Date().getFullYear()} LZdev · {rodape.frase} Grátis, sem anúncios e sem cadastro.
+        </p>
       </div>
     </footer>
   )

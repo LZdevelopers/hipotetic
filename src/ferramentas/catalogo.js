@@ -20,6 +20,7 @@
  *   servidor   true quando o arquivo vai ao servidor (a página avisa)
  *   servidorDetalhe  o que exatamente passa pelo servidor (opcional)
  *   popular    aparece em "Mais usadas" na página inicial
+ *   novo       mostra o selo "Novo" no cartão
  *   perguntas  perguntas frequentes da página [{ p, r }]
  *   requer     recurso de infraestrutura necessário (ex.: 'documentos' = serviço
  *              LibreOffice). Sem o recurso ativo no build, a ferramenta NÃO aparece.
@@ -138,6 +139,7 @@ const TODAS = [
     slug: 'video/editor',
     modulo: 'video/editor',
     nome: 'Editor de vídeo',
+    novo: true,
     titulo: 'Editor de vídeo online: juntar, cortar, recortar, texto e música',
     resumo: 'Vários clipes, recorte livre, texto, imagem, desfoque e música.',
     descricao: 'Junte e corte clipes, recorte do jeito que quiser, mude a velocidade, ponha texto, logo, vídeo por cima, desfoque e música. Prévia ao vivo, no navegador.',
@@ -172,6 +174,7 @@ const TODAS = [
     slug: 'audio/gravador',
     modulo: 'audio/gravador',
     nome: 'Gravador de voz',
+    novo: true,
     titulo: 'Gravador de voz online',
     resumo: 'Grave do microfone com redução de ruído e baixe em MP3.',
     descricao: 'Grave sua voz pelo microfone com redução de ruído e de eco, pause quando quiser e baixe em MP3, WAV ou M4A. Grátis, sem cadastro e sem enviar nada.',
@@ -183,6 +186,7 @@ const TODAS = [
     slug: 'audio/melhorar-voz',
     modulo: 'audio/melhorar-voz',
     nome: 'Limpar e melhorar voz',
+    novo: true,
     titulo: 'Remover ruído e melhorar a voz de áudios e vídeos',
     resumo: 'Tire chiado e zumbido, deixe a voz clara e no volume certo.',
     descricao: 'Remova ruído de fundo, chiado e zumbido, deixe a voz mais clara e o volume no padrão de podcasts. Compare antes e depois. Funciona com áudio e vídeo.',
@@ -203,6 +207,7 @@ const TODAS = [
     slug: 'audio/tags',
     modulo: 'audio/tags',
     nome: 'Tags e capa',
+    novo: true,
     titulo: 'Editar tags de música: título, artista, álbum e capa',
     resumo: 'Título, artista, álbum, ano e capa de MP3, M4A e FLAC.',
     descricao: 'Edite as tags de músicas MP3, M4A, FLAC e OGG: título, artista, álbum, ano, faixa, gênero e capa do álbum, sem recomprimir o áudio.',

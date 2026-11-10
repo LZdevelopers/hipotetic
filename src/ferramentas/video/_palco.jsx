@@ -111,7 +111,7 @@ function Recorte({ valor, aoMudar, largura, altura }) {
  * Expõe (ref): tocar(), pausar(), alternar(), buscar(t), tempo(), tocando().
  * Chama aoTempo(t) a cada quadro (sem re-renderizar o editor).
  */
-export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSelecionar, aoMudarCamada, recortando, aoTempo, aoTocando, vazio }, ref) {
+export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSelecionar, aoMudarCamada, recortando, aoTempo, aoTocando, aoMenu, vazio }, ref) {
   const caixa = useRef(null)
   const [tamCaixa, setTamCaixa] = useState({ w: 0, h: 0 })
   const videos = useRef({})
@@ -305,10 +305,12 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   // ─── Camadas: mover e redimensionar arrastando no palco ───────────────────
   const moverCamada = (cam) => (e) => {
     aoSelecionar({ tipo: 'camada', id: cam.id })
+    if (e.button !== 0) return
     const c0 = { ...cam }
     arrastar(e, (dx, dy) => aoMudarCamada(cam.id, { x: Math.min(Math.max(-c0.w * 0.8, c0.x + dx / palco.w), 1 - c0.w * 0.2), y: Math.min(Math.max(-0.1, c0.y + dy / palco.h), 0.98) }))
   }
   const redimensionar = (cam) => (e) => {
+    if (e.button !== 0) return
     const c0 = { ...cam }
     arrastar(e, (dx, dy) => {
       const w = Math.max(0.04, c0.w + dx / palco.w)
@@ -321,7 +323,17 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   return (
     <div ref={caixa} className="relative grid size-full place-items-center">
       {vazio ? null : (
-        <div className="relative overflow-hidden bg-black shadow-[0_10px_40px_-15px_rgb(0_0_0/0.6)]" style={{ width: palco.w, height: palco.h }} onPointerDown={() => !recortando && aoSelecionar(null)}>
+        <div
+          className="relative overflow-hidden bg-black shadow-[0_10px_40px_-15px_rgb(0_0_0/0.6)]"
+          style={{ width: palco.w, height: palco.h }}
+          onPointerDown={(e) => e.button === 0 && !recortando && aoSelecionar(null)}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            if (recortando) return
+            const r = e.currentTarget.getBoundingClientRect()
+            aoMenu?.(e, { tipo: 'palco', pos: { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height } })
+          }}
+        >
           {p.clipes.map((c) => {
             const fonte = fontes[c.fonte]
             if (!fonte?.url) return null
@@ -382,6 +394,12 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
                     key={cam.id}
                     ref={(el) => (el ? (camadasEl.current[cam.id] = el) : delete camadasEl.current[cam.id])}
                     onPointerDown={moverCamada(cam)}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      aoSelecionar({ tipo: 'camada', id: cam.id })
+                      aoMenu?.(e, { tipo: 'camada', id: cam.id })
+                    }}
                     className={`absolute cursor-move ${sel ? 'outline-2 outline-offset-2 outline-acento' : 'hover:outline-1 hover:outline-white/60'}`}
                     style={{ ...caixaCam, visibility: 'hidden' }}
                     aria-label={`Camada: ${cam.tipo}`}
