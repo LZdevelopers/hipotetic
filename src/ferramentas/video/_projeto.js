@@ -64,6 +64,9 @@ export function tamanhoFinal(p, fontes) {
   return { w: Math.max(2, Math.round(w / 2) * 2), h: Math.max(2, Math.round(h / 2) * 2) }
 }
 
+/** Opções de uma camada que nem toda camada tem (as antigas, por exemplo). */
+export const PADRAO_CAMADA = { girar: 0, espelharH: false, espelharV: false, ajuste: { brilho: 0, contraste: 1, saturacao: 1 }, opacidade: 1, fadeIn: 0, fadeOut: 0, recorte: null, semFundo: null, tolerancia: 0.15 }
+
 /* ─── Texto → imagem (a camada de texto vira PNG na exportação) ─────────── */
 
 /** Quebra o texto em linhas que cabem em `largura` (respeitando as quebras do usuário). */
@@ -220,40 +223,68 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
     v = 'vq'
   }
 
-  // 3. Camadas, na ordem (a última por cima).
+  // 3. Camadas, na ordem (a última por cima). Cada uma: recorte → tamanho →
+  //    espelho → cores → sem fundo → opacidade → giro → fades, posicionada pelo centro.
   const sons = []
   for (let i = 0; i < p.camadas.length; i += 1) {
-    const c = p.camadas[i]
-    const x = Math.round(c.x * W)
-    const y = Math.round(c.y * H)
+    const c = { ...PADRAO_CAMADA, ...p.camadas[i] }
     const quando = `enable='between(t,${fixo(c.inicio)},${fixo(c.fim)})'`
     const saida = `vl${i}`
     if (c.tipo === 'desfoque') {
+      const x = Math.round(c.x * W)
+      const y = Math.round(c.y * H)
       const cw = par(c.w * W)
       const ch = par(c.h * H)
       f.push(`[${v}]split[b${i}a][b${i}b]`, `[b${i}b]crop=${cw}:${ch}:${x}:${y},boxblur=${Math.max(4, Math.round(Math.min(cw, ch) / 8))}:3[b${i}c]`, `[b${i}a][b${i}c]overlay=${x}:${y}:${quando}[${saida}]`)
-    } else if (c.tipo === 'texto') {
+      v = saida
+      continue
+    }
+    let origem
+    let alturaPx
+    const parado = ['-loop', '1', '-framerate', '30', '-t', String(fixo(T))]
+    if (c.tipo === 'texto') {
       const png = await textoParaPng(c, quadro, familia)
-      const k = entrada(`t${c.id}.png`, png.blob)
-      f.push(`[${k}:v]format=rgba${c.opacidade < 1 ? `,colorchannelmixer=aa=${fixo(c.opacidade)}` : ''}[o${i}]`, `[${v}][o${i}]overlay=${x}:${y}:${quando}[${saida}]`)
-    } else if (c.tipo === 'imagem') {
+      origem = `[${entrada(`t${c.id}.png`, png.blob, parado)}:v]`
+      alturaPx = png.altura
+    } else {
       const fonte = fontes[c.fonte]
-      const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo)
-      f.push(`[${k}:v]scale=${par(c.w * W)}:${par(c.h * H)},format=rgba${c.opacidade < 1 ? `,colorchannelmixer=aa=${fixo(c.opacidade)}` : ''}[o${i}]`, `[${v}][o${i}]overlay=${x}:${y}:${quando}[${saida}]`)
-    } else if (c.tipo === 'video') {
-      const fonte = fontes[c.fonte]
-      const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo)
-      const d = Math.min(c.fim - c.inicio, fonte.duracao || c.fim - c.inicio)
-      f.push(
-        `[${k}:v]trim=0:${fixo(d)},setpts=PTS-STARTPTS+${fixo(c.inicio)}/TB,scale=${par(c.w * W)}:${par(c.h * H)},format=yuva420p${c.opacidade < 1 ? `,colorchannelmixer=aa=${fixo(c.opacidade)}` : ''}[o${i}]`,
-        `[${v}][o${i}]overlay=${x}:${y}:eof_action=pass:${quando}[${saida}]`,
-      )
-      if (fonte.temAudio && c.volume > 0) {
-        const atraso = Math.round(c.inicio * 1000)
-        f.push(`[${k}:a]atrim=0:${fixo(d)},asetpts=PTS-STARTPTS,volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${atraso}|${atraso}[s${i}]`)
-        sons.push(`[s${i}]`)
+      if (!fonte) continue
+      alturaPx = par(c.h * H)
+      if (c.tipo === 'imagem') origem = `[${entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, parado)}:v]`
+      else {
+        const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo)
+        const d = Math.min(c.fim - c.inicio, fonte.duracao || c.fim - c.inicio)
+        origem = `[${k}:v]trim=0:${fixo(d)},setpts=PTS-STARTPTS+${fixo(c.inicio)}/TB,`
+        if (fonte.temAudio && c.volume > 0) {
+          const atraso = Math.round(c.inicio * 1000)
+          f.push(`[${k}:a]atrim=0:${fixo(d)},asetpts=PTS-STARTPTS,volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${atraso}|${atraso}[s${i}]`)
+          sons.push(`[s${i}]`)
+        }
       }
-    } else continue
+    }
+    const cadeia = []
+    if (c.tipo !== 'texto') {
+      const r = c.recorte
+      if (r && (r.w < 0.999 || r.h < 0.999)) cadeia.push(`crop=trunc(iw*${fixo(r.w)}):trunc(ih*${fixo(r.h)}):trunc(iw*${fixo(r.x)}):trunc(ih*${fixo(r.y)})`)
+      cadeia.push(`scale=${par(c.w * W)}:${alturaPx}`)
+    }
+    if (c.espelharH) cadeia.push('hflip')
+    if (c.espelharV) cadeia.push('vflip')
+    const cor = c.ajuste
+    if (c.tipo !== 'texto' && (cor.brilho !== 0 || cor.contraste !== 1 || cor.saturacao !== 1)) cadeia.push('format=yuva420p', `eq=brightness=${fixo(cor.brilho * 0.4)}:contrast=${fixo(cor.contraste)}:saturation=${fixo(cor.saturacao)}`)
+    cadeia.push('format=rgba')
+    if (c.tipo !== 'texto' && c.semFundo) cadeia.push(`colorkey=${c.semFundo === 'preto' ? '0x000000' : '0xFFFFFF'}:${fixo(Math.max(0.01, c.tolerancia))}:0.08`)
+    if (c.opacidade < 1) cadeia.push(`colorchannelmixer=aa=${fixo(c.opacidade)}`)
+    if (c.girar) {
+      const rad = fixo((c.girar * Math.PI) / 180)
+      cadeia.push(`rotate=${rad}:c=none:ow=rotw(${rad}):oh=roth(${rad})`)
+    }
+    if (c.fadeIn) cadeia.push(`fade=t=in:st=${fixo(c.inicio)}:d=${fixo(c.fadeIn)}:alpha=1`)
+    if (c.fadeOut) cadeia.push(`fade=t=out:st=${fixo(Math.max(c.inicio, c.fim - c.fadeOut))}:d=${fixo(c.fadeOut)}:alpha=1`)
+    // Posição pelo centro: girar muda o tamanho do retângulo, não o centro.
+    const cx = fixo(c.x * W + (c.w * W) / 2)
+    const cy = fixo(c.y * H + alturaPx / 2)
+    f.push(`${origem}${cadeia.join(',')}[o${i}]`, `[${v}][o${i}]overlay=x=${cx}-overlay_w/2:y=${cy}-overlay_h/2:eof_action=pass:${quando}[${saida}]`)
     v = saida
   }
 

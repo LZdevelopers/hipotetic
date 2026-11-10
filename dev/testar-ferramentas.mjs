@@ -200,6 +200,8 @@ for (const cenario of lista) {
   errosJs.length = 0
   consoleErros.length = 0
   try {
+    // Cada cenário começa sem rascunhos dos editores (IndexedDB) de cenários anteriores.
+    await s.enviar("Storage.clearDataForOrigin", { origin: BASE, storageTypes: "indexeddb" }).catch(() => {})
     await navegar(s, BASE + cenario.pagina)
     // Espera a hidratação: antes dela, o HTML pré-renderizado ignora eventos.
     await s.aguardar('document.documentElement.dataset.pronto === "sim"')

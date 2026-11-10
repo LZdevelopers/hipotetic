@@ -1,0 +1,285 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { PADRAO_CAMADA, estiloTexto } from './_projeto'
+
+const IMA_CENTRO = 7 // px: distância para grudar no centro do vídeo
+
+const hexRgba = (hex, a) => {
+  const n = parseInt(String(hex).slice(1), 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+}
+
+function arrastar(e, mover, fim) {
+  e.preventDefault()
+  e.stopPropagation()
+  const alvo = e.currentTarget
+  try {
+    alvo.setPointerCapture(e.pointerId)
+  } catch {
+    /* evento sintético: segue sem captura */
+  }
+  const x0 = e.clientX
+  const y0 = e.clientY
+  const aoMover = (ev) => mover(ev.clientX - x0, ev.clientY - y0, ev)
+  const soltar = () => {
+    alvo.removeEventListener('pointermove', aoMover)
+    alvo.removeEventListener('pointerup', soltar)
+    alvo.removeEventListener('pointercancel', soltar)
+    fim?.()
+  }
+  alvo.addEventListener('pointermove', aoMover)
+  alvo.addEventListener('pointerup', soltar)
+  alvo.addEventListener('pointercancel', soltar)
+}
+
+/**
+ * Imagem sem fundo branco/preto para a prévia (a exportação faz o mesmo
+ * com o colorkey do ffmpeg). Devolve a URL da imagem tratada, ou null.
+ */
+function useSemFundo(fonte, modo, tolerancia) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => {
+    if (!fonte?.arquivo || !modo) {
+      setUrl(null)
+      return undefined
+    }
+    let vivo = true
+    let criada = null
+    ;(async () => {
+      const bmp = await createImageBitmap(fonte.arquivo)
+      const lado = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
+      const cv = new OffscreenCanvas(Math.round(bmp.width * lado), Math.round(bmp.height * lado))
+      const ctx = cv.getContext('2d')
+      ctx.drawImage(bmp, 0, 0, cv.width, cv.height)
+      bmp.close()
+      const img = ctx.getImageData(0, 0, cv.width, cv.height)
+      const d = img.data
+      const alvo = modo === 'preto' ? 0 : 255
+      const limite = tolerancia * 441
+      const suave = 0.08 * 441
+      for (let i = 0; i < d.length; i += 4) {
+        const dist = Math.hypot(d[i] - alvo, d[i + 1] - alvo, d[i + 2] - alvo)
+        if (dist < limite) d[i + 3] = 0
+        else if (dist < limite + suave) d[i + 3] = Math.round((d[i + 3] * (dist - limite)) / suave)
+      }
+      ctx.putImageData(img, 0, 0)
+      const blob = await cv.convertToBlob({ type: 'image/png' })
+      if (!vivo) return
+      criada = URL.createObjectURL(blob)
+      setUrl(criada)
+    })().catch(() => vivo && setUrl(null))
+    return () => {
+      vivo = false
+      if (criada) URL.revokeObjectURL(criada)
+    }
+  }, [fonte, modo, tolerancia])
+  return url
+}
+
+/**
+ * Uma camada no palco: conteúdo (texto, imagem, vídeo, desfoque) com recorte,
+ * espelho, cores e giro; quando selecionada, alças nos 8 lados e de girar.
+ */
+export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVideo, aoSelecionar, aoMudar, aoMenu, aoGuias }) {
+  const c = { ...PADRAO_CAMADA, ...cam }
+  const caixa = useRef(null)
+  const [alturaTexto, setAlturaTexto] = useState(0)
+  const semFundoUrl = useSemFundo(c.tipo === 'imagem' ? fonte : null, c.semFundo, c.tolerancia)
+
+  // Altura do texto: depende da quebra de linhas, então é medida.
+  useLayoutEffect(() => {
+    if (c.tipo !== 'texto' || !caixa.current) return
+    const h = caixa.current.offsetHeight
+    if (Math.abs(h - alturaTexto) > 0.5) setAlturaTexto(h)
+  })
+
+  const W = palco.w
+  const H = palco.h
+  const largura = c.w * W
+  const altura = c.tipo === 'texto' ? alturaTexto : c.h * H
+  const giro = c.girar ? `rotate(${c.girar}deg)` : undefined
+  const geometria = { left: c.x * W, top: c.y * H, width: largura, height: c.tipo === 'texto' ? undefined : altura, transform: giro }
+
+  // Deltas do mouse levados para dentro da camada girada.
+  const paraDentro = (dx, dy) => {
+    const a = (-c.girar * Math.PI) / 180
+    return [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)]
+  }
+
+  const mover = (e) => {
+    aoSelecionar()
+    if (e.button !== 0) return
+    const c0 = { ...c }
+    const alt0 = altura / H
+    arrastar(
+      e,
+      (dx, dy) => {
+        let x = c0.x + dx / W
+        let y = c0.y + dy / H
+        // Gruda no centro do vídeo (na horizontal e na vertical).
+        const v = Math.abs(x + c0.w / 2 - 0.5) * W < IMA_CENTRO
+        const h = Math.abs(y + alt0 / 2 - 0.5) * H < IMA_CENTRO
+        if (v) x = 0.5 - c0.w / 2
+        if (h) y = 0.5 - alt0 / 2
+        aoGuias({ v, h })
+        aoMudar({ x, y })
+      },
+      () => aoGuias(null),
+    )
+  }
+
+  const redimensionar = (sx, sy) => (e) => {
+    if (e.button !== 0) return
+    const c0 = { ...c }
+    const w0 = largura
+    const h0 = altura || 1
+    arrastar(e, (dx, dy) => {
+      const [lx, ly] = paraDentro(dx, dy)
+      let w = w0
+      let h = h0
+      if (sx && sy) {
+        if (c.tipo === 'desfoque') {
+          w = w0 + sx * lx
+          h = h0 + sy * ly
+        } else {
+          // Canto: escala por igual (no texto, o tamanho da letra acompanha).
+          const f = Math.abs(lx) / w0 >= Math.abs(ly) / h0 ? (w0 + sx * lx) / w0 : (h0 + sy * ly) / h0
+          w = w0 * Math.max(0.08, f)
+          h = h0 * Math.max(0.08, f)
+        }
+      } else if (sx) w = w0 + sx * lx
+      else if (sy) h = h0 + sy * ly
+      w = Math.max(14, w)
+      h = Math.max(14, h)
+      // O lado oposto fica parado.
+      const dxPos = sx < 0 ? w0 - w : sx > 0 ? 0 : (w0 - w) / 2
+      const dyPos = sy < 0 ? h0 - h : sy > 0 ? 0 : (h0 - h) / 2
+      const patch = { x: c0.x + dxPos / W, y: c0.y + dyPos / H, w: w / W }
+      if (c.tipo === 'texto') {
+        if (sx && sy) patch.tamanho = Math.max(0.01, c0.tamanho * (w / w0))
+      } else patch.h = h / H
+      aoMudar(patch)
+    })
+  }
+
+  const girar = (e) => {
+    if (e.button !== 0) return
+    const r = caixa.current.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const cy = r.top + r.height / 2
+    arrastar(e, (_, __, ev) => {
+      let a = (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180) / Math.PI + 90
+      if (a > 180) a -= 360
+      // Gruda em 0°, 90°, 180° e −90°.
+      const reto = Math.round(a / 90) * 90
+      if (Math.abs(a - reto) < 4) a = reto === -180 ? 180 : reto
+      aoMudar({ girar: Math.round(a) })
+    })
+  }
+
+  // ─── Conteúdo ─────────────────────────────────────────────────────────────
+  const filtro = c.tipo === 'imagem' || c.tipo === 'video' ? `brightness(${1 + c.ajuste.brilho}) contrast(${c.ajuste.contraste}) saturate(${c.ajuste.saturacao})` : undefined
+  const espelho = c.espelharH || c.espelharV ? `scale(${c.espelharH ? -1 : 1}, ${c.espelharV ? -1 : 1})` : undefined
+  const r = c.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
+  const midia = { position: 'absolute', maxWidth: 'none', width: largura / r.w, height: altura / r.h, left: (-r.x * largura) / r.w, top: (-r.y * altura) / r.h, objectFit: 'fill' }
+
+  let conteudo = null
+  if (c.tipo === 'texto') {
+    const e = estiloTexto(c, H)
+    conteudo = (
+      <div
+        style={{
+          fontSize: e.tamanho,
+          lineHeight: `${e.linha}px`,
+          padding: e.padding,
+          fontWeight: e.peso,
+          color: c.cor,
+          textAlign: c.alinhar === 'esquerda' ? 'left' : c.alinhar === 'direita' ? 'right' : 'center',
+          background: c.fundo ? hexRgba(c.corFundo, c.opacidadeFundo) : 'transparent',
+          borderRadius: c.fundo ? e.tamanho * 0.35 : 0,
+          WebkitTextStroke: c.fundo ? undefined : `${Math.max(2, e.tamanho * 0.12)}px rgba(0,0,0,0.75)`,
+          paintOrder: 'stroke fill',
+          whiteSpace: 'pre-wrap',
+          transform: espelho,
+        }}
+      >
+        {c.texto || ' '}
+      </div>
+    )
+  } else if (c.tipo === 'imagem') {
+    conteudo = (
+      <div className="relative size-full overflow-hidden" style={{ transform: espelho, filter: filtro }}>
+        <img src={semFundoUrl ?? fonte?.url} alt="" draggable={false} style={midia} />
+      </div>
+    )
+  } else if (c.tipo === 'video') {
+    conteudo = (
+      <div className="relative size-full overflow-hidden" style={{ transform: espelho, filter: filtro }}>
+        <video ref={registrarVideo} src={fonte?.url} muted playsInline preload="auto" style={midia} />
+      </div>
+    )
+  } else if (c.tipo === 'desfoque') {
+    const raio = Math.max(6, Math.min(largura, altura) / 8)
+    conteudo = <div className="size-full" style={{ backdropFilter: `blur(${raio}px)`, WebkitBackdropFilter: `blur(${raio}px)` }} />
+  }
+
+  // Vídeo sem fundo na prévia: mistura (multiplicar tira o branco, "tela" tira o preto).
+  const mistura = c.tipo === 'video' && c.semFundo ? (c.semFundo === 'preto' ? 'screen' : 'multiply') : undefined
+  const ALCAS = [
+    [-1, -1, 'nwse'],
+    [0, -1, 'ns'],
+    [1, -1, 'nesw'],
+    [1, 0, 'ew'],
+    [1, 1, 'nwse'],
+    [0, 1, 'ns'],
+    [-1, 1, 'nesw'],
+    [-1, 0, 'ew'],
+  ].filter(([sx, sy]) => !(c.tipo === 'texto' && sx === 0))
+
+  return (
+    <>
+      <div
+        ref={(el) => {
+          caixa.current = el
+          registrar(el)
+        }}
+        onPointerDown={mover}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          aoSelecionar()
+          aoMenu?.(e)
+        }}
+        className={`absolute cursor-move ${sel ? '' : 'hover:outline-1 hover:outline-white/60'}`}
+        style={{ ...geometria, visibility: 'hidden', mixBlendMode: mistura }}
+        aria-label={`Camada: ${c.tipo}`}
+      >
+        {conteudo}
+      </div>
+
+      {/* Moldura e alças (fora da camada, para não herdarem a mistura) */}
+      {sel ? (
+        <div className="pointer-events-none absolute z-20" style={{ ...geometria, height: altura }}>
+          <div className="absolute -inset-px border-2 border-acento" />
+          {ALCAS.map(([sx, sy, cursor]) => (
+            <span
+              key={`${sx}${sy}`}
+              onPointerDown={redimensionar(sx, sy)}
+              className={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 border-2 border-acento bg-white shadow ${sx && sy ? 'size-3.5 rounded-full' : sx ? 'h-5 w-2 rounded-full' : 'h-2 w-5 rounded-full'}`}
+              style={{ left: `${(sx + 1) * 50}%`, top: `${(sy + 1) * 50}%`, cursor: `${cursor}-resize` }}
+              aria-label="Redimensionar"
+            />
+          ))}
+          {c.tipo !== 'desfoque' ? (
+            <>
+              <span className="absolute -top-6 left-1/2 h-6 w-px -translate-x-1/2 bg-acento" />
+              <span onPointerDown={girar} className="pointer-events-auto absolute -top-9 left-1/2 grid size-6 -translate-x-1/2 cursor-grab place-items-center rounded-full border-2 border-acento bg-white text-[0.625rem] font-bold text-acento shadow active:cursor-grabbing" aria-label="Girar" title="Arraste para girar">
+                ↻
+              </span>
+              {c.girar ? <span className="absolute -top-9 left-[calc(50%+1.25rem)] rounded bg-black/70 px-1 text-[0.625rem] font-semibold text-white tabular-nums">{c.girar}°</span> : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  )
+}

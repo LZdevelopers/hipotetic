@@ -156,6 +156,47 @@ export default [
     },
   },
   {
+    nome: 'video/editor: camada girada, espelhada, sem fundo e com entrada suave',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      // Logo com fundo branco (um círculo vermelho num quadrado branco).
+      await t.js(`const c = document.createElement('canvas'); c.width = 200; c.height = 200; const x = c.getContext('2d')
+        x.fillStyle = '#fff'; x.fillRect(0, 0, 200, 200); x.fillStyle = '#e11d48'; x.beginPath(); x.arc(100, 100, 70, 0, 7); x.fill()
+        const b = await new Promise((ok) => c.toBlob(ok, 'image/png'))
+        __t.enviar([new File([b], 'logo-branco.png', { type: 'image/png' })], 'main input[aria-label="Escolher imagem"]')`)
+      await t.aguardar("document.querySelector('main [aria-label^=\"Camada Imagem\"][role=button]')", 10000)
+      await t.js("document.querySelector('main [aria-label^=\"Camada Imagem\"][role=button]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))")
+      await aba(t, 'Camada')
+      await t.js("__t.digitar('Ângulo', '30')")
+      await t.js("document.querySelector('main button[aria-label=\"Espelhar na horizontal\"]').click()")
+      await t.clicar('Branco')
+      await t.js("__t.digitar('Aparecer aos poucos', '0.5')")
+      // Na prévia: a camada gira e o fundo branco some.
+      await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"]')?.style.transform.includes('rotate(30deg)')", 5000)
+      await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"] img')?.src.startsWith('blob:')", 5000)
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, 3, 0.5, 'duração')
+    },
+  },
+  {
+    nome: 'video/editor: recupera a edição ao voltar para a página',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.clicar('Texto')
+      await t.esperar(1200)
+      await t.navegar('/video/editor')
+      await t.aguardar("document.querySelectorAll('main [aria-label^=\"Clipe \"]').length === 1 && document.querySelector('main').innerText.includes('Recuperamos a edição')", 30000)
+      assert.ok(await t.js("return Boolean(document.querySelector('main [aria-label^=\"Camada Texto\"][role=button]'))"), 'o texto deveria ter voltado')
+      await t.clicar('Começar do zero')
+      await t.aguardar("document.querySelector('main').innerText.includes('Nenhum vídeo aberto')", 5000)
+    },
+  },
+  {
     nome: 'converter: trecho de vídeo vira GIF animado',
     pagina: '/converter',
     async executar(t) {
@@ -368,6 +409,19 @@ export default [
       await t.clicar('Aplicar e baixar')
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração do trecho')
+    },
+  },
+  {
+    nome: 'audio/editor: recupera a edição ao voltar para a página',
+    pagina: '/audio/editor',
+    async executar(t) {
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }]), 'aula.wav')`, '0:04.0')
+      await t.js("__t.digitar('Velocidade', '2')")
+      await t.esperar(1200)
+      await t.navegar('/audio/editor')
+      await t.aguardar("document.querySelector('main canvas') && document.querySelector('main').innerText.includes('Recuperamos a edição')", 30000)
+      await t.aguardar("document.querySelector('[title=\"Duração do áudio final\"]')?.textContent.includes('0:02.0')", 10000)
+      assert.equal(await t.js("return document.querySelector('main audio').playbackRate"), 2)
     },
   },
   // ─── Áudio: ferramentas novas ─────────────────────────────────────────────

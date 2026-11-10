@@ -58,9 +58,22 @@ export function Ferramenta({ ferramenta }) {
 
   useEffect(() => registrarUso(ferramenta.slug), [ferramenta.slug])
 
+  // Editores: ocupam a largura toda, com um título compacto.
+  const cheia = Boolean(ferramenta.telaCheia)
+
   return (
-    <div className="container-pagina">
-      <nav aria-label="Você está em" className="pt-6 text-[0.8125rem] text-fraca">
+    <div className={cheia ? 'w-full px-3 sm:px-4' : 'container-pagina'}>
+      {cheia ? (
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+          <SeloCategoria categoria={corDa(ferramenta)} icone={ferramenta.icone} tamanho="p" />
+          <h1 className="text-base sm:text-lg">{ferramenta.titulo}</h1>
+          <p className={`inline-flex items-center gap-1.5 text-xs font-medium ${ferramenta.servidor ? 'text-alerta' : 'text-sucesso'}`} title={textos.noNavegadorDetalhe}>
+            <Icone nome={ferramenta.servidor ? 'servidor' : 'seguro'} tamanho={13} />
+            {ferramenta.servidor ? textos.noServidor : textos.noNavegador}
+          </p>
+        </header>
+      ) : null}
+      <nav aria-label="Você está em" className={`pt-6 text-[0.8125rem] text-fraca ${cheia ? 'hidden' : ''}`}>
         <ol className="flex flex-wrap items-center gap-1.5">
           <li>
             <Link para="/" className="hover:text-tinta">
@@ -84,7 +97,7 @@ export function Ferramenta({ ferramenta }) {
         </ol>
       </nav>
 
-      <header className="mt-6 mb-8 flex flex-col gap-4 sm:flex-row sm:items-start">
+      <header className={`mt-6 mb-8 flex flex-col gap-4 sm:flex-row sm:items-start ${cheia ? 'hidden' : ''}`}>
         <SeloCategoria categoria={corDa(ferramenta)} icone={ferramenta.icone} tamanho="g" />
         <div className="min-w-0 flex-1">
           <h1 className="text-[clamp(1.6rem,3.4vw,2.25rem)]">{ferramenta.titulo}</h1>
@@ -112,7 +125,7 @@ export function Ferramenta({ ferramenta }) {
 
       {/* Antes de começar (ou fora dos editores): perguntas e ferramentas relacionadas. Editando: só a ferramenta. */}
       {!emEdicao && ferramenta.perguntas?.length ? (
-        <section aria-labelledby="titulo-perguntas" className="mt-20 max-w-3xl">
+        <section aria-labelledby="titulo-perguntas" className={`mt-20 max-w-3xl ${cheia ? 'container-pagina' : ''}`}>
           <h2 id="titulo-perguntas" className="text-xl">
             {textos.perguntas}
           </h2>
@@ -131,7 +144,7 @@ export function Ferramenta({ ferramenta }) {
       ) : null}
 
       {!emEdicao && relacionadas.length ? (
-        <section aria-labelledby="titulo-relacionadas" className="mt-16">
+        <section aria-labelledby="titulo-relacionadas" className={`mt-16 ${cheia ? 'container-pagina' : ''}`}>
           <h2 id="titulo-relacionadas" className="mb-4 text-xl">
             {textos.relacionadas}
           </h2>

@@ -48,6 +48,9 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
   const inicios = iniciosNaLinha(p)
   const [congelado, setCongelado] = useState(null)
   const [guia, setGuia] = useState(null)
+  // Aparando um clipe: as posições ficam como estavam até soltar (a ponta arrastada segue o mouse).
+  const [fixos, setFixos] = useState(null)
+  const [arrastando, setArrastando] = useState(null)
   const comprimento = congelado ?? Math.max(total, ...p.camadas.map((c) => c.fim), 0.001)
   escalaRef.current = comprimento
   const pct = (t) => `${(t / comprimento) * 100}%`
@@ -75,6 +78,16 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
   const soltar = () => {
     setCongelado(null)
     setGuia(null)
+    setFixos(null)
+    setArrastando(null)
+  }
+  /** Onde o clipe i aparece (durante um aparo, a partir das posições congeladas). */
+  const posicao = (i, c) => {
+    const dur = duracaoClipe(c)
+    if (!fixos) return { left: inicios[i], dur }
+    const base = fixos.inicios[i] ?? inicios[i]
+    if (c.id === fixos.id && fixos.lado === 'inicio') return { left: base + (fixos.dur - dur), dur }
+    return { left: base, dur }
   }
 
   // Clicar/arrastar na régua ou no fundo das trilhas: percorre.
@@ -92,6 +105,8 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
     const max = fontes[c.fonte]?.duracao ?? c.fim
     const lista = pontos().filter((q) => Math.abs(q - inicios[i]) > 0.05)
     congelar()
+    setFixos({ inicios: [...inicios], id: c.id, lado, dur: duracaoClipe(c) })
+    setArrastando(c.id)
     arrastar(
       e,
       (dx) => {
@@ -117,6 +132,7 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
     const k = pxPorSegundo()
     const lista = pontos(cam.id)
     congelar()
+    setArrastando(cam.id)
     arrastar(
       e,
       (dx) => {
@@ -203,7 +219,7 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                   onContextMenu={menu({ tipo: 'clipe', id: c.id })}
                   onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && aoSelecionar({ tipo: 'clipe', id: c.id })}
                   className={`group absolute top-1.5 bottom-1.5 overflow-hidden rounded-lg border-2 bg-superficie-3 ${sel ? 'z-10 border-acento' : 'border-transparent hover:border-borda-forte'}`}
-                  style={{ left: `calc(${pct(inicios[i])} + 1px)`, width: `calc(${pct(duracaoClipe(c))} - 2px)` }}
+                  style={{ left: `calc(${pct(posicao(i, c).left)} + 1px)`, width: `calc(${pct(posicao(i, c).dur)} - 2px)` }}
                 >
                   {fonte?.quadros?.length ? (
                     <div className="pointer-events-none absolute inset-0 flex opacity-80">
@@ -217,8 +233,13 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                     {c.mudo ? 'sem som · ' : ''}
                     {tempo(duracaoClipe(c))}
                   </span>
-                  <span onPointerDown={aparar(c, i, 'inicio')} className={`absolute inset-y-0 left-0 w-2.5 cursor-ew-resize bg-acento/90 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o início" />
-                  <span onPointerDown={aparar(c, i, 'fim')} className={`absolute inset-y-0 right-0 w-2.5 cursor-ew-resize bg-acento/90 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o fim" />
+                  <span onPointerDown={aparar(c, i, 'inicio')} className={`absolute inset-y-0 left-0 grid w-3.5 cursor-ew-resize place-items-center bg-acento ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o início">
+                    <span className="h-5 w-0.5 rounded-full bg-white/80" />
+                  </span>
+                  <span onPointerDown={aparar(c, i, 'fim')} className={`absolute inset-y-0 right-0 grid w-3.5 cursor-ew-resize place-items-center bg-acento ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o fim">
+                    <span className="h-5 w-0.5 rounded-full bg-white/80" />
+                  </span>
+                  {arrastando === c.id ? <span className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[0.6875rem] font-bold text-white tabular-nums">{tempo(posicao(i, c).dur)}</span> : null}
                 </div>
               )
             })}
@@ -247,8 +268,13 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                   style={{ left: pct(cam.inicio), width: pct(Math.max(0, Math.min(cam.fim, comprimento) - cam.inicio)), backgroundColor: CORES[cam.tipo] }}
                 >
                   <span className="pointer-events-none truncate">{nome}</span>
-                  <span onPointerDown={moverCamada(cam, 'inicio')} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-black/25 opacity-0 group-hover:opacity-100" aria-label="Início da camada" />
-                  <span onPointerDown={moverCamada(cam, 'fim')} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/25 opacity-0 group-hover:opacity-100" aria-label="Fim da camada" />
+                  <span onPointerDown={moverCamada(cam, 'inicio')} className={`absolute inset-y-0 left-0 grid w-3 cursor-ew-resize place-items-center bg-black/35 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Início da camada">
+                    <span className="h-3.5 w-0.5 rounded-full bg-white/90" />
+                  </span>
+                  <span onPointerDown={moverCamada(cam, 'fim')} className={`absolute inset-y-0 right-0 grid w-3 cursor-ew-resize place-items-center bg-black/35 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Fim da camada">
+                    <span className="h-3.5 w-0.5 rounded-full bg-white/90" />
+                  </span>
+                  {arrastando === cam.id ? <span className="pointer-events-none absolute right-4 rounded bg-black/70 px-1 text-[0.625rem] font-bold tabular-nums">{tempo(cam.fim - cam.inicio)}</span> : null}
                 </div>
               </div>
             </div>

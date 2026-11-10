@@ -11,6 +11,7 @@ import { analisarVarios, ganhoNormalizar, silencios } from './_analise'
 import { BotaoAcao, CampoTempo, Painel, SeletorCompacto, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { receber } from '../../nucleo/entrega'
+import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
 
 
 /**
@@ -190,7 +191,7 @@ function Onda({ analise, duracao, o, fator, regioes, aoBuscar, aoTrecho, cabeca 
   return (
     <div
       ref={area}
-      className="group relative h-44 cursor-pointer touch-none rounded-xl bg-fundo-suave select-none sm:h-[clamp(11rem,30vh,17rem)]"
+      className="group relative h-44 cursor-pointer touch-none rounded-xl bg-fundo-suave select-none sm:h-[clamp(11rem,30vh,17rem)] lg:h-auto lg:min-h-40 lg:flex-1"
       onPointerDown={aoApertar}
       onPointerMove={(e) => {
         if (!dica.current || !duracao) return
@@ -263,12 +264,17 @@ const ACEITOS = [...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO]
 const ordemNatural = (a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' })
 let proximoId = 0
 
-function Editor({ arquivos, aoMudarArquivos }) {
+function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
   const vazio = arquivos.length === 0
   useEmEdicao(!vazio)
   const primeiro = arquivos[0]?.arquivo
   const formatoInicial = primeiro && ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'opus', 'aac'].includes(extensaoDe(primeiro.name)) ? extensaoDe(primeiro.name) : 'mp3'
-  const aoTrocar = () => aoMudarArquivos([])
+  const aoTrocar = () => {
+    aoDescartarSalvo?.()
+    apagarTudo('audio:')
+    aoMudarArquivos([])
+  }
+  const oSalvo = useRef(salvo?.o ?? null)
   const entradaArquivos = useRef(null)
   const [recusados, setRecusados] = useState(0)
   const adicionar = (lista) => {
@@ -324,7 +330,9 @@ function Editor({ arquivos, aoMudarArquivos }) {
         const d = info.duracao && Math.abs(info.duracao - a.duracao) < 1 ? info.duracao : a.duracao
         if (!vivo) return
         setAnalise({ ...a, duracao: d })
-        setO((x) => ({ ...x, inicio: 0, fim: d, fadeIn: Math.min(x.fadeIn, d / 2), fadeOut: Math.min(x.fadeOut, d / 2) }))
+        const anterior = oSalvo.current
+        oSalvo.current = null
+        setO((x) => (anterior ? { ...x, ...anterior, fim: Math.min(anterior.fim || d, d) } : { ...x, inicio: 0, fim: d, fadeIn: Math.min(x.fadeIn, d / 2), fadeOut: Math.min(x.fadeOut, d / 2) }))
         historico.reiniciar()
       })
       .catch((e) => {
@@ -338,6 +346,14 @@ function Editor({ arquivos, aoMudarArquivos }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chave])
+
+  // Rascunho: salva os ajustes (os arquivos são guardados ao entrar).
+  useEffect(() => {
+    if (!analise) return undefined
+    const espera = setTimeout(() => guardar('audio:projeto', { arquivos: arquivos.map((a) => a.id), o, salvoEm: Date.now() }), 500)
+    return () => clearTimeout(espera)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o, analise])
 
   const regioes = useMemo(() => (o.silencio && analise ? silencios(analise, { inicio: o.inicio, fim: o.fim, limiar: o.limiar, modo: o.silencioOnde }) : []), [analise, o.silencio, o.inicio, o.fim, o.limiar, o.silencioOnde])
   const fator = useMemo(() => (o.volume === 'ganho' ? 10 ** (o.ganho / 20) : o.volume === 'normalizar' ? ganhoNormalizar(analise, o.inicio, o.fim) : 1), [o.volume, o.ganho, analise, o.inicio, o.fim])
@@ -548,8 +564,8 @@ function Editor({ arquivos, aoMudarArquivos }) {
   const botaoRedondo = 'grid size-11 place-items-center rounded-full transition-colors disabled:opacity-40'
 
   return (
-    <div ref={raiz} className="flex flex-col gap-3">
-      <section aria-label="Player" className="cartao">
+    <div ref={raiz} className="flex flex-col gap-3 lg:h-[calc(100dvh-5.5rem)] lg:min-h-[34rem]">
+      <section aria-label="Player" className="cartao flex min-h-0 flex-col lg:flex-1">
         {/* Barra do topo: arquivo, desfazer/refazer, redefinir, trocar e exportar */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
           <SeloCategoria categoria="audio" icone="arquivoAudio" tamanho="p" />
@@ -607,12 +623,12 @@ function Editor({ arquivos, aoMudarArquivos }) {
         </div>
 
         {/* Onda (espaço em cima para a etiqueta do tempo sob o cursor) */}
-        <div className="px-4 pt-8 sm:px-5">
+        <div className="flex min-h-0 flex-col px-4 pt-8 sm:px-5 lg:flex-1">
           {analise ? (
             <Onda analise={analise} duracao={duracao} o={o} fator={fator} regioes={regioes} aoBuscar={buscar} aoTrecho={mudar} cabeca={cabeca} />
           ) : (
             <div
-              className={`grid h-44 place-items-center rounded-xl sm:h-[clamp(11rem,30vh,17rem)] ${vazio ? 'border-2 border-dashed border-borda-forte bg-fundo-suave' : 'bg-fundo-suave'}`}
+              className={`grid h-44 place-items-center rounded-xl sm:h-[clamp(11rem,30vh,17rem)] lg:h-auto lg:min-h-40 lg:flex-1 ${vazio ? 'border-2 border-dashed border-borda-forte bg-fundo-suave' : 'bg-fundo-suave'}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault()
@@ -819,7 +835,72 @@ export default function EditorAudio() {
   // Vindo do gravador ("Editar"): já abre com a gravação.
   const [arquivos, setArquivos] = useState(() => {
     const entregue = receber('audio/editor')
-    return entregue ? [{ id: 'entregue', arquivo: entregue }] : []
+    return entregue ? [{ id: `f${(proximoId += 1)}`, arquivo: entregue }] : []
   })
-  return <Editor arquivos={arquivos} aoMudarArquivos={setArquivos} />
+  const [salvo, setSalvo] = useState(null)
+  const [pronto, setPronto] = useState(false)
+
+  // Ao abrir: recupera a edição deixada aberta (se não veio um arquivo do gravador).
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      if (arquivos.length) {
+        apagarTudo('audio:')
+        arquivos.forEach((a) => guardar(`audio:arquivo:${a.id}`, a.arquivo))
+        setPronto(true)
+        return
+      }
+      const s = await ler('audio:projeto')
+      const lista = []
+      for (const id of s?.arquivos ?? []) {
+        const arquivo = await ler(`audio:arquivo:${id}`)
+        if (arquivo) lista.push({ id, arquivo })
+      }
+      if (!vivo) return
+      lista.forEach((a) => (proximoId = Math.max(proximoId, Number(a.id.replace(/\D/g, '')) || 0)))
+      if (lista.length) {
+        setSalvo({ o: s.o, quando: s.salvoEm ?? Date.now() })
+        setArquivos(lista)
+      }
+      setPronto(true)
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const mudarArquivos = (lista) => {
+    const novos = lista.filter((a) => !arquivos.some((x) => x.id === a.id))
+    novos.forEach((a) => guardar(`audio:arquivo:${a.id}`, a.arquivo))
+    if (!lista.length) apagarTudo('audio:')
+    setArquivos(lista)
+  }
+
+  return (
+    <>
+      {salvo && salvo.aviso !== false ? (
+        <Aviso
+          tom="info"
+          className="mb-3"
+          aoFechar={() => setSalvo((s) => ({ ...s, aviso: false }))}
+          acao={
+            <Botao
+              variante="secundario"
+              tamanho="p"
+              onClick={() => {
+                setSalvo(null)
+                mudarArquivos([])
+              }}
+            >
+              Começar do zero
+            </Botao>
+          }
+        >
+          Recuperamos a edição que você deixou aberta ({haQuanto(salvo.quando)}). Ela fica salva só neste navegador.
+        </Aviso>
+      ) : null}
+      {pronto ? <Editor key={salvo ? 'salvo' : 'novo'} arquivos={arquivos} aoMudarArquivos={mudarArquivos} salvo={salvo} aoDescartarSalvo={() => setSalvo(null)} /> : <Editor arquivos={[]} aoMudarArquivos={mudarArquivos} />}
+    </>
+  )
 }

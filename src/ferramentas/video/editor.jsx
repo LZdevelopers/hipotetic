@@ -8,15 +8,18 @@ import { EXTENSOES_AUDIO, EXTENSOES_VIDEO, infoMidia, processarVideo } from '../
 import { EXTENSOES_IMAGEM } from '../../motores/imagem'
 import { extensaoDe, trocarExtensao } from '../../nucleo/arquivos'
 import { useEmEdicao } from '../../nucleo/edicao'
+import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
 import { useTarefa } from '../../nucleo/tarefa'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { duracaoTotal, exportarProjeto, localizar, tamanhoFinal } from './_projeto'
+import { PADRAO_CAMADA, duracaoTotal, exportarProjeto, localizar, tamanhoFinal } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, formato: 'mp4', resolucao: 0, qualidade: 'alta' }
 const ordemNatural = (a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' })
 let proximo = 0
 const novoId = (prefixo) => `${prefixo}${(proximo += 1)}`
+/** Depois de recuperar um rascunho, os ids novos não podem repetir os antigos. */
+const reservarIds = (ids) => ids.forEach((id) => (proximo = Math.max(proximo, Number(String(id).replace(/\D/g, '')) || 0)))
 const tipoDe = (arquivo) => {
   const ext = extensaoDe(arquivo.name)
   if (EXTENSOES_VIDEO.includes(ext) || ext === 'gif') return 'video'
@@ -155,9 +158,12 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, acoes }) {
   )
 }
 
-function PainelCamada({ camada, mudarCamada, acoes, total }) {
-  if (!camada) return <p className="text-sm text-fraca">Adicione texto, imagem, vídeo ou desfoque pelos botões abaixo do vídeo, ou clique numa camada para editar.</p>
+function PainelCamada({ camada: bruta, mudarCamada, acoes, total }) {
+  if (!bruta) return <p className="text-sm text-fraca">Adicione texto, imagem, vídeo ou desfoque pelos botões abaixo do vídeo, ou clique numa camada para editar.</p>
+  const camada = { ...PADRAO_CAMADA, ...bruta }
   const m = (d) => mudarCamada(camada.id, d)
+  const midia = camada.tipo === 'imagem' || camada.tipo === 'video'
+  const r = camada.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
   return (
     <div className="flex flex-col gap-5">
       {camada.tipo === 'texto' ? (
@@ -190,6 +196,92 @@ function PainelCamada({ camada, mudarCamada, acoes, total }) {
       ) : null}
       {camada.tipo === 'video' ? <Deslizante rotulo="Som deste vídeo" valor={Math.round((camada.volume ?? 0) * 100)} aoMudar={(v) => m({ volume: v / 100 })} min={0} max={100} formatar={(v) => (v ? `${v}%` : 'mudo')} /> : null}
       {camada.tipo === 'desfoque' ? <p className="text-xs text-fraca">Arraste a área no vídeo para cobrir rostos, placas ou dados. O canto inferior direito muda o tamanho.</p> : null}
+      <Bloco titulo="Posição">
+        <div className="grid grid-cols-2 gap-2">
+          <Botao variante="secundario" tamanho="p" onClick={() => m({ x: 0.5 - camada.w / 2 })}>
+            Centro ↔
+          </Botao>
+          <Botao variante="secundario" tamanho="p" onClick={() => m({ y: 0.5 - (camada.tipo === 'texto' ? 0.05 : camada.h / 2) })}>
+            Centro ↕
+          </Botao>
+        </div>
+      </Bloco>
+      {camada.tipo !== 'desfoque' ? (
+        <Bloco titulo="Girar e espelhar">
+          <Deslizante rotulo="Ângulo" valor={camada.girar} aoMudar={(v) => m({ girar: v })} min={-180} max={180} formatar={(v) => `${v}°`} />
+          <div className="flex gap-2">
+            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((camada.girar - 90 + 540) % 360) - 180 })}>
+              ↺ 90°
+            </Botao>
+            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((camada.girar + 90 + 540) % 360) - 180 })}>
+              ↻ 90°
+            </Botao>
+            <Botao variante={camada.espelharH ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" aria-pressed={camada.espelharH} aria-label="Espelhar na horizontal" title="Espelhar na horizontal" onClick={() => m({ espelharH: !camada.espelharH })} />
+            <Botao variante={camada.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={camada.espelharV} aria-label="Espelhar na vertical" title="Espelhar na vertical" onClick={() => m({ espelharV: !camada.espelharV })}>
+              ⇵
+            </Botao>
+          </div>
+        </Bloco>
+      ) : null}
+      {midia ? (
+        <Bloco titulo="Recortar">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ['x', 'Esquerda'],
+              ['y', 'Topo'],
+              ['w', 'Largura'],
+              ['h', 'Altura'],
+            ].map(([k, rotulo]) => (
+              <label key={k} className="flex flex-col gap-1 text-[0.6875rem] font-semibold tracking-wide text-fraca uppercase">
+                {rotulo} (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(r[k] * 100)}
+                  aria-label={`${rotulo} do recorte da camada em %`}
+                  onChange={(e) => {
+                    const n = { ...r, [k]: Math.min(Math.max(Number(e.target.value) / 100, 0), 1) }
+                    n.w = Math.min(Math.max(0.05, n.w), 1 - n.x)
+                    n.h = Math.min(Math.max(0.05, n.h), 1 - n.y)
+                    // A caixa acompanha o recorte (a imagem não estica).
+                    m({ recorte: n.x === 0 && n.y === 0 && n.w === 1 && n.h === 1 ? null : n, h: camada.h * (n.h / r.h) * (r.w / n.w) })
+                  }}
+                  className="h-9 rounded-lg border border-borda-forte bg-superficie px-2.5 text-sm font-semibold text-tinta normal-case tabular-nums focus:border-acento focus:outline-none"
+                />
+              </label>
+            ))}
+          </div>
+        </Bloco>
+      ) : null}
+      {midia ? (
+        <Bloco titulo="Remover fundo">
+          <Segmentado
+            valor={camada.semFundo ?? 'nao'}
+            aoMudar={(v) => m({ semFundo: v === 'nao' ? null : v })}
+            opcoes={[
+              { valor: 'nao', rotulo: 'Manter' },
+              { valor: 'branco', rotulo: 'Branco' },
+              { valor: 'preto', rotulo: 'Preto' },
+            ]}
+          />
+          {camada.semFundo ? <Deslizante rotulo="Tolerância" valor={Math.round(camada.tolerancia * 100)} aoMudar={(v) => m({ tolerancia: v / 100 })} min={2} max={50} formatar={(v) => `${v}%`} dica="Aumente se sobrar fundo; diminua se sumir parte da imagem." /> : null}
+        </Bloco>
+      ) : null}
+      {midia ? (
+        <Bloco titulo="Cores">
+          <Deslizante rotulo="Brilho" valor={Math.round(camada.ajuste.brilho * 100)} aoMudar={(v) => m({ ajuste: { ...camada.ajuste, brilho: v / 100 } })} min={-50} max={50} formatar={(v) => `${v > 0 ? '+' : ''}${v}`} />
+          <Deslizante rotulo="Contraste" valor={Math.round(camada.ajuste.contraste * 100)} aoMudar={(v) => m({ ajuste: { ...camada.ajuste, contraste: v / 100 } })} min={50} max={150} formatar={(v) => `${v}%`} />
+          <Deslizante rotulo="Saturação" valor={Math.round(camada.ajuste.saturacao * 100)} aoMudar={(v) => m({ ajuste: { ...camada.ajuste, saturacao: v / 100 } })} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
+        </Bloco>
+      ) : null}
+      {camada.tipo !== 'desfoque' ? (
+        <Bloco titulo="Entrada e saída suaves">
+          <Deslizante rotulo="Aparecer aos poucos" valor={camada.fadeIn} aoMudar={(v) => m({ fadeIn: v })} min={0} max={3} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+          <Deslizante rotulo="Sumir aos poucos" valor={camada.fadeOut} aoMudar={(v) => m({ fadeOut: v })} min={0} max={3} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+        </Bloco>
+      ) : null}
       {camada.tipo !== 'desfoque' ? <Deslizante rotulo="Opacidade" valor={Math.round((camada.opacidade ?? 1) * 100)} aoMudar={(v) => m({ opacidade: v / 100 })} min={10} max={100} formatar={(v) => `${v}%`} /> : null}
       <Bloco titulo="Quando aparece">
         <div className="flex gap-2">
@@ -410,6 +502,7 @@ export default function EditorVideo() {
     setLendo(null)
     if (!lidas.length) return
     setFontes((f) => ({ ...f, ...Object.fromEntries(lidas.map((x) => [x.id, x])) }))
+    lidas.forEach((l) => guardar(`video:arquivo:${l.id}`, l.arquivo))
     const t = agora()
     mudar((x) => {
       const n = { ...x, clipes: [...x.clipes], camadas: [...x.camadas] }
@@ -427,13 +520,72 @@ export default function EditorVideo() {
       }
       return n
     })
-    // Quadros da linha do tempo, sem travar a tela.
-    for (const f of lidas.filter((l) => l.tipo === 'video')) {
+    gerarQuadros(lidas)
+  }
+
+  /** Quadros da linha do tempo, sem travar a tela. */
+  const gerarQuadros = (lista) => {
+    for (const f of lista.filter((l) => l.tipo === 'video')) {
       quadrosDe(f.url, f.duracao)
         .then((quadros) => setFontes((x) => (x[f.id] ? { ...x, [f.id]: { ...x[f.id], quadros } } : x)))
         .catch(() => {})
     }
   }
+
+  // ─── Rascunho: recupera ao abrir e salva a cada mudança ───────────────────
+  const restaurando = useRef(true)
+  const [recuperado, setRecuperado] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const salvo = await ler('video:projeto')
+      if (!vivo) return
+      if (!salvo?.p?.clipes?.length) {
+        restaurando.current = false
+        return
+      }
+      setLendo('Recuperando a sua edição')
+      const novas = {}
+      for (const id of Object.keys(salvo.fontes ?? {})) {
+        const arquivo = await ler(`video:arquivo:${id}`)
+        if (!arquivo) continue
+        try {
+          novas[id] = { id, ...(await lerFonte(arquivo)) }
+        } catch {
+          /* arquivo que não abre mais: fica de fora */
+        }
+      }
+      if (!vivo) return
+      const p2 = {
+        ...PADRAO,
+        ...salvo.p,
+        clipes: salvo.p.clipes.filter((c) => novas[c.fonte]),
+        camadas: (salvo.p.camadas ?? []).filter((c) => c.tipo === 'texto' || c.tipo === 'desfoque' || novas[c.fonte]),
+        musica: salvo.p.musica && novas[salvo.p.musica.fonte] ? salvo.p.musica : null,
+      }
+      reservarIds([...Object.keys(novas), ...p2.clipes.map((c) => c.id), ...p2.camadas.map((c) => c.id)])
+      setFontes(novas)
+      setP(p2)
+      setLendo(null)
+      historico.reiniciar()
+      if (p2.clipes.length) setRecuperado(salvo.salvoEm ?? Date.now())
+      restaurando.current = false
+      gerarQuadros(Object.values(novas))
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (restaurando.current) return undefined
+    const espera = setTimeout(() => {
+      if (!p.clipes.length) return apagarTudo('video:')
+      const meta = Object.fromEntries(Object.entries(fontes).map(([id, x]) => [id, { tipo: x.tipo, nome: x.arquivo.name }]))
+      return guardar('video:projeto', { p, fontes: meta, salvoEm: Date.now() })
+    }, 500)
+    return () => clearTimeout(espera)
+  }, [p, fontes])
 
   const novaCamada = (tipo, { t = agora(), pos } = {}) => {
     if (vazio) return
@@ -621,6 +773,8 @@ export default function EditorVideo() {
   }
   const recomecar = () => {
     palco.current?.pausar()
+    setRecuperado(null)
+    apagarTudo('video:')
     Object.values(fontes).forEach((f) => f.url && URL.revokeObjectURL(f.url))
     setFontes({})
     setP(PADRAO)
@@ -708,7 +862,7 @@ export default function EditorVideo() {
   return (
     <div
       ref={raiz}
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-2 lg:h-[calc(100dvh-5.5rem)] lg:min-h-[36rem]"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault()
@@ -720,7 +874,21 @@ export default function EditorVideo() {
       {entradaArquivo('videoCamada', aceitaVideo, 'camada')}
       {entradaArquivo('musica', [...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO].map((e) => `.${e}`).join(','), 'musica')}
 
-      <section aria-label="Player" className="cartao">
+      {recuperado ? (
+        <Aviso
+          tom="info"
+          aoFechar={() => setRecuperado(null)}
+          acao={
+            <Botao variante="secundario" tamanho="p" onClick={recomecar}>
+              Começar do zero
+            </Botao>
+          }
+        >
+          Recuperamos a edição que você deixou aberta ({haQuanto(recuperado)}). Ela fica salva só neste navegador.
+        </Aviso>
+      ) : null}
+
+      <section aria-label="Player" className="cartao flex min-h-0 flex-col lg:flex-1">
         {/* Barra do topo */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
           <SeloCategoria categoria="video" icone="arquivoVideo" tamanho="p" />
@@ -774,10 +942,10 @@ export default function EditorVideo() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_21rem]">
           {/* Palco + controles */}
-          <div className="flex min-w-0 flex-col">
-            <div className="relative mx-4 mt-4 h-[clamp(11rem,34vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5">
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <div className="relative mx-4 mt-3 h-[clamp(12rem,40vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5 lg:h-auto lg:min-h-[12rem] lg:flex-1">
               {vazio ? (
                 <div className="absolute inset-0 z-10 grid place-items-center border-2 border-dashed border-borda-forte bg-fundo-suave">
                   <div className="flex flex-col items-center gap-3 px-4 text-center">
@@ -872,7 +1040,7 @@ export default function EditorVideo() {
           </div>
 
           {/* Propriedades */}
-          <aside aria-label="Propriedades" className={`flex min-h-0 flex-col border-t border-borda lg:max-h-[calc(clamp(11rem,34vh,30rem)+8.5rem)] lg:border-t-0 lg:border-l ${vazio || processando ? 'pointer-events-none opacity-50' : ''}`} inert={vazio || processando ? true : undefined}>
+          <aside aria-label="Propriedades" className={`flex min-h-0 flex-col border-t border-borda lg:border-t-0 lg:border-l ${vazio || processando ? 'pointer-events-none opacity-50' : ''}`} inert={vazio || processando ? true : undefined}>
             <div className="border-b border-borda p-3">
               <Segmentado valor={aba} aoMudar={setAba} opcoes={ABAS} />
             </div>

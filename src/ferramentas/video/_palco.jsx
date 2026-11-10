@@ -1,15 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
-import { duracaoTotal, estiloTexto, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { CamadaNoPalco } from './_camada'
+import { PADRAO_CAMADA, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
   if (!caixa.w || !caixa.h) return { w: 0, h: 0 }
   return caixa.w / caixa.h > proporcao ? { w: caixa.h * proporcao, h: caixa.h } : { w: caixa.w, h: caixa.w / proporcao }
-}
-
-const hexRgba = (hex, a) => {
-  const n = parseInt(String(hex).slice(1), 16)
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
 /** Arrasto genérico: chama mover(dx, dy) em px desde o início; fim() ao soltar. */
@@ -172,7 +168,12 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     for (const cam of pp.camadas) {
       const el = camadasEl.current[cam.id]
       const dentro = t >= cam.inicio && t <= cam.fim
-      if (el) el.style.visibility = dentro ? 'visible' : 'hidden'
+      if (el) {
+        el.style.visibility = dentro ? 'visible' : 'hidden'
+        const fi = cam.fadeIn ? Math.min(1, Math.max(0, (t - cam.inicio) / cam.fadeIn)) : 1
+        const fo = cam.fadeOut ? Math.min(1, Math.max(0, (cam.fim - t) / cam.fadeOut)) : 1
+        el.style.opacity = String((cam.opacidade ?? PADRAO_CAMADA.opacidade) * Math.min(fi, fo))
+      }
       if (cam.tipo === 'video') {
         const vc = videosCamada.current[cam.id]
         if (!vc) continue
@@ -302,23 +303,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   }
   const filtroCor = `brightness(${1 + p.cor.brilho}) contrast(${p.cor.contraste}) saturate(${p.cor.saturacao})`
 
-  // ─── Camadas: mover e redimensionar arrastando no palco ───────────────────
-  const moverCamada = (cam) => (e) => {
-    aoSelecionar({ tipo: 'camada', id: cam.id })
-    if (e.button !== 0) return
-    const c0 = { ...cam }
-    arrastar(e, (dx, dy) => aoMudarCamada(cam.id, { x: Math.min(Math.max(-c0.w * 0.8, c0.x + dx / palco.w), 1 - c0.w * 0.2), y: Math.min(Math.max(-0.1, c0.y + dy / palco.h), 0.98) }))
-  }
-  const redimensionar = (cam) => (e) => {
-    if (e.button !== 0) return
-    const c0 = { ...cam }
-    arrastar(e, (dx, dy) => {
-      const w = Math.max(0.04, c0.w + dx / palco.w)
-      if (cam.tipo === 'desfoque') aoMudarCamada(cam.id, { w, h: Math.max(0.04, c0.h + dy / palco.h) })
-      else if (cam.tipo === 'texto') aoMudarCamada(cam.id, { w })
-      else aoMudarCamada(cam.id, { w, h: c0.h * (w / c0.w) })
-    })
-  }
+  const [guias, setGuias] = useState(null)
 
   return (
     <div ref={caixa} className="relative grid size-full place-items-center">
@@ -356,59 +341,25 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
           {/* Camadas (fora do modo recorte) */}
           {recortando
             ? null
-            : p.camadas.map((cam) => {
-                const sel = selecao?.tipo === 'camada' && selecao.id === cam.id
-                const caixaCam = { left: cam.x * palco.w, top: cam.y * palco.h, width: cam.w * palco.w, opacity: cam.opacidade ?? 1 }
-                let conteudo = null
-                if (cam.tipo === 'texto') {
-                  const e = estiloTexto(cam, palco.h)
-                  conteudo = (
-                    <div
-                      style={{
-                        fontSize: e.tamanho,
-                        lineHeight: `${e.linha}px`,
-                        padding: e.padding,
-                        fontWeight: e.peso,
-                        color: cam.cor,
-                        textAlign: cam.alinhar === 'esquerda' ? 'left' : cam.alinhar === 'direita' ? 'right' : 'center',
-                        background: cam.fundo ? hexRgba(cam.corFundo, cam.opacidadeFundo) : 'transparent',
-                        borderRadius: cam.fundo ? Math.min(e.tamanho * 0.35, 9999) : 0,
-                        WebkitTextStroke: cam.fundo ? undefined : `${Math.max(2, e.tamanho * 0.12)}px rgba(0,0,0,0.75)`,
-                        paintOrder: 'stroke fill',
-                        whiteSpace: 'pre-wrap',
-                        overflowWrap: 'normal',
-                      }}
-                    >
-                      {cam.texto || ' '}
-                    </div>
-                  )
-                } else if (cam.tipo === 'imagem') {
-                  conteudo = <img src={fontes[cam.fonte]?.url} alt="" draggable={false} className="block size-full" style={{ height: cam.h * palco.h }} />
-                } else if (cam.tipo === 'video') {
-                  conteudo = <video ref={(el) => (el ? (videosCamada.current[cam.id] = el) : delete videosCamada.current[cam.id])} src={fontes[cam.fonte]?.url} muted playsInline preload="auto" className="block w-full object-fill" style={{ height: cam.h * palco.h }} />
-                } else if (cam.tipo === 'desfoque') {
-                  conteudo = <div style={{ height: cam.h * palco.h, backdropFilter: `blur(${Math.max(6, Math.min(cam.w * palco.w, cam.h * palco.h) / 8)}px)`, WebkitBackdropFilter: `blur(${Math.max(6, Math.min(cam.w * palco.w, cam.h * palco.h) / 8)}px)` }} />
-                }
-                return (
-                  <div
-                    key={cam.id}
-                    ref={(el) => (el ? (camadasEl.current[cam.id] = el) : delete camadasEl.current[cam.id])}
-                    onPointerDown={moverCamada(cam)}
-                    onContextMenu={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      aoSelecionar({ tipo: 'camada', id: cam.id })
-                      aoMenu?.(e, { tipo: 'camada', id: cam.id })
-                    }}
-                    className={`absolute cursor-move ${sel ? 'outline-2 outline-offset-2 outline-acento' : 'hover:outline-1 hover:outline-white/60'}`}
-                    style={{ ...caixaCam, visibility: 'hidden' }}
-                    aria-label={`Camada: ${cam.tipo}`}
-                  >
-                    {conteudo}
-                    {sel ? <span onPointerDown={redimensionar(cam)} className="absolute -right-2 -bottom-2 size-4 cursor-nwse-resize rounded-sm border-2 border-black/40 bg-white" aria-label="Redimensionar" /> : null}
-                  </div>
-                )
-              })}
+            : p.camadas.map((cam) => (
+                <CamadaNoPalco
+                  key={cam.id}
+                  cam={cam}
+                  fonte={fontes[cam.fonte]}
+                  palco={palco}
+                  sel={selecao?.tipo === 'camada' && selecao.id === cam.id}
+                  registrar={(el) => (el ? (camadasEl.current[cam.id] = el) : delete camadasEl.current[cam.id])}
+                  registrarVideo={(el) => (el ? (videosCamada.current[cam.id] = el) : delete videosCamada.current[cam.id])}
+                  aoSelecionar={() => aoSelecionar({ tipo: 'camada', id: cam.id })}
+                  aoMudar={(d) => aoMudarCamada(cam.id, d)}
+                  aoMenu={(e) => aoMenu?.(e, { tipo: 'camada', id: cam.id })}
+                  aoGuias={setGuias}
+                />
+              ))}
+
+          {/* Guias do centro (aparecem quando a camada gruda) */}
+          {guias?.v ? <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px -translate-x-1/2 bg-[#ff3d8b]" /> : null}
+          {guias?.h ? <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px -translate-y-1/2 bg-[#ff3d8b]" /> : null}
 
           {/* Véu dos fades */}
           <div ref={veu} className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: 0 }} />

@@ -21,6 +21,7 @@
  *   servidorDetalhe  o que exatamente passa pelo servidor (opcional)
  *   popular    aparece em "Mais usadas" na página inicial
  *   novo       mostra o selo "Novo" no cartão
+ *   telaCheia  editor que ocupa a tela inteira (largura toda, título compacto)
  *   perguntas  perguntas frequentes da página [{ p, r }]
  *   requer     recurso de infraestrutura necessário (ex.: 'documentos' = serviço
  *              LibreOffice). Sem o recurso ativo no build, a ferramenta NÃO aparece.
@@ -138,6 +139,7 @@ const TODAS = [
   {
     slug: 'video/editor',
     modulo: 'video/editor',
+    telaCheia: true,
     nome: 'Editor de vídeo',
     novo: true,
     titulo: 'Editor de vídeo online: juntar, cortar, recortar, texto e música',
@@ -162,6 +164,7 @@ const TODAS = [
   {
     slug: 'audio/editor',
     modulo: 'audio/editor',
+    telaCheia: true,
     nome: 'Editor de áudio',
     titulo: 'Editor de áudio: cortar, volume, silêncio e velocidade',
     resumo: 'Cortar com fade, volume, tirar silêncio e acelerar.',
