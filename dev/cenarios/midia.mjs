@@ -40,7 +40,7 @@ const campoTempo = (t, rotulo, valor, n = 0) =>
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); el.blur()`)
 /** Campo numérico do recorte (em %). */
 const campoRecorte = (t, rotulo, valor) =>
-  t.js(`const el = document.querySelector('main input[aria-label="${rotulo} do recorte em %"]')
+  t.js(`const el = document.querySelector('main input[aria-label="${rotulo} do crop em %"]')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '${valor}')
     el.dispatchEvent(new Event('input', { bubbles: true }))`)
 /** Aba do painel de propriedades. */
@@ -119,13 +119,13 @@ export default [
     pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
-      await t.clicar('Recortar')
+      await t.clicar('Crop')
       await t.aguardar("document.querySelector('main [aria-label=\"Área do recorte\"]')", 5000)
       await campoRecorte(t, 'Esquerda', 25)
       await campoRecorte(t, 'Largura', 50)
       await campoRecorte(t, 'Topo', 0)
       await campoRecorte(t, 'Altura', 100)
-      await t.clicar('Aplicar recorte')
+      await t.clicar('Aplicar crop')
       await aba(t, 'Clipe')
       await t.js("__t.digitar('Velocidade', '2')")
       await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:01.5')", 5000)
@@ -143,8 +143,8 @@ export default [
       await abrirNoEditor(t)
       await t.clicar('Texto')
       await t.js("__t.digitar('Texto', 'Olá, mundo')")
-      await t.clicar('Desfoque')
-      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(200, 100), 'logo.png')], 'main input[aria-label="Escolher imagem"]')`)
+      await t.clicar('Blur')
+      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(200, 100), 'logo.png')], 'main input[aria-label="Escolher camada"]')`)
       await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')], 'main input[aria-label="Escolher musica"]')`)
       await t.aguardar("document.querySelectorAll('main [aria-label^=\"Camada \"][role=button]').length === 3 && document.querySelector('main').innerText.includes('musica.wav')", 20000)
       await t.clicar('Exportar vídeo')
@@ -164,14 +164,14 @@ export default [
       await t.js(`const c = document.createElement('canvas'); c.width = 200; c.height = 200; const x = c.getContext('2d')
         x.fillStyle = '#fff'; x.fillRect(0, 0, 200, 200); x.fillStyle = '#e11d48'; x.beginPath(); x.arc(100, 100, 70, 0, 7); x.fill()
         const b = await new Promise((ok) => c.toBlob(ok, 'image/png'))
-        __t.enviar([new File([b], 'logo-branco.png', { type: 'image/png' })], 'main input[aria-label="Escolher imagem"]')`)
+        __t.enviar([new File([b], 'logo-branco.png', { type: 'image/png' })], 'main input[aria-label="Escolher camada"]')`)
       await t.aguardar("document.querySelector('main [aria-label^=\"Camada Imagem\"][role=button]')", 10000)
       await t.js("document.querySelector('main [aria-label^=\"Camada Imagem\"][role=button]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))")
       await aba(t, 'Camada')
-      await t.js("__t.digitar('Ângulo', '30')")
-      await t.js("document.querySelector('main button[aria-label=\"Espelhar na horizontal\"]').click()")
+      await t.js("__t.digitar('Rotação', '30')")
+      await t.js("document.querySelector('main button[aria-label=\"Flip horizontal\"]').click()")
       await t.clicar('Branco')
-      await t.js("__t.digitar('Aparecer aos poucos', '0.5')")
+      await t.js("__t.digitar('Fade in', '0.5')")
       // Na prévia: a camada gira e o fundo branco some.
       await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"]')?.style.transform.includes('rotate(30deg)')", 5000)
       await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"] img')?.src.startsWith('blob:')", 5000)
@@ -183,12 +183,107 @@ export default [
     },
   },
   {
+    nome: 'video/editor: imagem como clipe pelo +, reordenada para o início',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      // O + da trilha abre o seletor de clipes (vídeo, imagem ou GIF).
+      assert.ok(await t.js("return Boolean(document.querySelector('main button[aria-label=\"Adicionar vídeo, imagem ou GIF\"]'))"), 'falta o + na trilha')
+      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(640, 360), 'foto.png')], 'main input[aria-label="Escolher clipes"]')`)
+      await t.aguardar("document.querySelectorAll('main [aria-label^=\"Clipe \"]').length === 2", 15000)
+      await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:06')", 5000)
+      // Arrasta a imagem (clipe 2) para antes do vídeo.
+      await t.js(`const el = document.querySelector('main [aria-label^="Clipe 2"]'); const r = el.getBoundingClientRect(); const trilha = el.parentElement.getBoundingClientRect()
+        const ev = (tipo, x) => el.dispatchEvent(new PointerEvent(tipo, { bubbles: true, button: 0, clientX: x, clientY: r.top + 5, pointerId: 1 }))
+        ev('pointerdown', r.left + r.width / 2); ev('pointermove', r.left + r.width / 2 - 20); ev('pointermove', trilha.left + 4); ev('pointerup', trilha.left + 4)`)
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-label').includes('foto.png')", 5000)
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, 6, 0.5, 'imagem (3 s) + vídeo (3 s)')
+    },
+  },
+  {
+    nome: 'video/editor: texto com fonte, itálico, stroke e sombra; blur pixelate em elipse',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.clicar('Texto')
+      await t.js("__t.digitar('Texto', 'Fonte nova')")
+      await t.js(`const s = [...document.querySelectorAll('main aside label')].find((l) => l.firstChild?.textContent?.trim() === 'Fonte').querySelector('select')
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'georgia'); s.dispatchEvent(new Event('change', { bubbles: true }))`)
+      await t.js("document.querySelector('main aside button[aria-label=\"Itálico\"]').click()")
+      await t.js("document.querySelector('main aside button[aria-label=\"Caixa alta (maiúsculas)\"]').click()")
+      await t.js("[...document.querySelectorAll('main aside label')].find((l) => l.textContent.trim().startsWith('Drop shadow')).click()")
+      await t.aguardar("(() => { const e = document.querySelector('main [aria-label=\"Camada: texto\"] div'); return e && e.style.fontFamily.includes('Georgia') && e.style.fontStyle === 'italic' && e.textContent.includes('FONTE NOVA') })()", 5000)
+      await t.clicar('Blur')
+      await t.clicar('Pixelate')
+      await t.clicar('Elipse')
+      await t.js("__t.digitar('Intensidade', '80')")
+      await t.aguardar("document.querySelector('main [aria-label=\"Camada: desfoque\"] div')?.style.borderRadius === '50%'", 5000)
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, 3, 0.5, 'duração')
+    },
+  },
+  {
+    nome: 'video/editor: aba Áudio (noise reduction, LUFS, fades, trilha com ducking) e exportar só o áudio',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await aba(t, 'Áudio')
+      await t.clicar('Média')
+      await t.clicar('-14 LUFS')
+      await t.js("[...document.querySelectorAll('main aside label')].find((l) => l.textContent.trim().startsWith('Voice enhance')).click()")
+      await t.js("__t.digitar('Fade in do áudio', '1')")
+      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'trilha.wav')], 'main input[aria-label="Escolher musica"]')`)
+      await t.aguardar("document.querySelector('main').innerText.includes('trilha.wav')", 15000)
+      await t.js("[...document.querySelectorAll('main aside label')].find((l) => l.textContent.trim().startsWith('Ducking')).click()")
+      await t.js("__t.digitar('Fade out da trilha', '1')")
+      await t.clicar('Exportar só o áudio')
+      await t.aguardarResultado(300000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, 'mp3')
+      const m = await t.js('return await __t.midia()')
+      perto(m.duracao, 3, 0.5, 'duração do áudio')
+    },
+  },
+  {
+    nome: 'video/editor: cores do quadro saem na exportação (P&B)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.js("__t.digitar('Saturação', '0')")
+      await t.js("__t.digitar('Contraste', '120')")
+      await t.js("__t.digitar('Brilho', '10')")
+      await t.clicar('Exportar vídeo')
+      await t.aguardarResultado(300000)
+      // Um quadro do resultado: em preto e branco, R = G = B.
+      const px = await t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const v = document.createElement('video'); v.muted = true; v.src = a.href
+        await new Promise((ok) => (v.onloadeddata = ok)); v.currentTime = 1; await new Promise((ok) => (v.onseeked = ok))
+        const c = document.createElement('canvas'); c.width = 64; c.height = 36; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 64, 36)
+        return [...x.getImageData(10, 10, 1, 1).data]`)
+      assert.ok(Math.abs(px[0] - px[1]) <= 6 && Math.abs(px[1] - px[2]) <= 6, `o quadro deveria ser cinza: ${px}`)
+    },
+  },
+  {
     nome: 'video/editor: recupera a edição ao voltar para a página',
     pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
       await t.clicar('Texto')
-      await t.esperar(1200)
+      // Espera o rascunho (com o texto) chegar ao IndexedDB antes de sair.
+      const salvou = await t.js(`for (let i = 0; i < 50; i += 1) {
+          const p = await new Promise((ok) => { const r = indexedDB.open('hipotetic', 1); r.onsuccess = () => { try { const g = r.result.transaction('rascunhos').objectStore('rascunhos').get('video:projeto'); g.onsuccess = () => { ok(g.result?.p); r.result.close() }; g.onerror = () => ok(null) } catch { ok(null) } }; r.onerror = () => ok(null) })
+          if (p?.camadas?.some((c) => c.tipo === 'texto')) return true
+          await new Promise((ok) => setTimeout(ok, 200))
+        }
+        return false`)
+      assert.ok(salvou, 'o rascunho não foi salvo')
       await t.navegar('/video/editor')
       await t.aguardar("document.querySelectorAll('main [aria-label^=\"Clipe \"]').length === 1 && document.querySelector('main').innerText.includes('Recuperamos a edição')", 30000)
       assert.ok(await t.js("return Boolean(document.querySelector('main [aria-label^=\"Camada Texto\"][role=button]'))"), 'o texto deveria ter voltado')

@@ -4,7 +4,7 @@ import { tempo } from '../../componentes/editor/Comum'
 import { duracaoClipe, duracaoTotal, iniciosNaLinha } from './_projeto'
 
 const ICONES = { texto: 'texto', imagem: 'imagem', video: 'arquivoVideo', desfoque: 'borracha' }
-const NOMES = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', desfoque: 'Desfoque' }
+const NOMES = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', desfoque: 'Blur' }
 const CORES = { texto: 'var(--color-cat-documentos)', imagem: 'var(--color-cat-imagem)', video: 'var(--color-cat-video)', desfoque: 'var(--color-cat-utilitarios)' }
 const IMA = 9 // px: distância em que um item gruda no cursor (e em outras bordas)
 
@@ -43,7 +43,7 @@ function arrastar(e, mover, fim) {
  * - Camadas e pontas de clipe grudam no cursor de reprodução e nas bordas.
  * - Botão direito abre o menu do item (aoMenu).
  */
-export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoMenu, agora, cabeca, larguraRef, escalaRef }) {
+export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoReordenar, aoAdicionar, aoMenu, agora, cabeca, larguraRef, escalaRef }) {
   const total = duracaoTotal(p)
   const inicios = iniciosNaLinha(p)
   const [congelado, setCongelado] = useState(null)
@@ -51,6 +51,8 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
   // Aparando um clipe: as posições ficam como estavam até soltar (a ponta arrastada segue o mouse).
   const [fixos, setFixos] = useState(null)
   const [arrastando, setArrastando] = useState(null)
+  // Reordenando um clipe (arrastado pelo meio): { id, dx, destino }.
+  const [reordenando, setReordenando] = useState(null)
   const comprimento = congelado ?? Math.max(total, ...p.camadas.map((c) => c.fim), 0.001)
   escalaRef.current = comprimento
   const pct = (t) => `${(t / comprimento) * 100}%`
@@ -102,7 +104,7 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
     aoSelecionar({ tipo: 'clipe', id: c.id })
     const c0 = { ...c }
     const k = pxPorSegundo()
-    const max = fontes[c.fonte]?.duracao ?? c.fim
+    const max = fontes[c.fonte]?.tipo === 'imagem' ? 600 : (fontes[c.fonte]?.duracao ?? c.fim)
     const lista = pontos().filter((q) => Math.abs(q - inicios[i]) > 0.05)
     congelar()
     setFixos({ inicios: [...inicios], id: c.id, lado, dur: duracaoClipe(c) })
@@ -178,7 +180,7 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
   const rotulo = 'w-24 shrink-0 flex items-center gap-1.5 px-3 text-[0.6875rem] font-semibold text-fraca uppercase tracking-wide'
 
   return (
-    <div className="max-h-56 overflow-y-auto" onContextMenu={menu({ tipo: 'linha' })}>
+    <div className="rolagem-fina max-h-56 overflow-y-auto" onContextMenu={menu({ tipo: 'linha' })}>
       {/* Régua */}
       <div className="flex border-b border-borda">
         <div className={rotulo} />
@@ -190,19 +192,53 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
             </span>
           ))}
         </div>
+        <div className="w-12 shrink-0" />
       </div>
 
       <div className="relative">
-        {/* Trilha de vídeo */}
+        {/* Trilha de vídeo (com o + no fim, como no CapCut) */}
         <div className="flex">
           <div className={rotulo}>
             <Icone nome="filme" tamanho={13} /> Vídeo
           </div>
           <div ref={larguraRef} className="relative h-16 flex-1 cursor-pointer overflow-hidden py-1.5" onPointerDown={percorrer}>
             {p.clipes.length ? null : <p className="pointer-events-none grid h-full place-items-center rounded-lg border border-dashed border-borda text-xs text-fraca">Os vídeos aparecem aqui, em sequência</p>}
+
+            {/* Aparando: o que ficou escondido antes e depois do trecho */}
+            {fixos
+              ? (() => {
+                  const i = p.clipes.findIndex((x) => x.id === fixos.id)
+                  const c = p.clipes[i]
+                  const fonte = c && fontes[c.fonte]
+                  if (!c || fonte?.tipo !== 'video') return null
+                  const pos = posicao(i, c)
+                  const antes = c.inicio / c.velocidade
+                  const depois = Math.max(0, ((fonte.duracao ?? c.fim) - c.fim) / c.velocidade)
+                  const fantasma = 'pointer-events-none absolute top-1.5 bottom-1.5 z-20 flex items-center overflow-hidden rounded-lg border-2 border-dashed border-acento/70 bg-acento/15 text-[0.625rem] font-bold text-acento tabular-nums'
+                  return (
+                    <>
+                      {antes > 0.02 ? (
+                        <div className={`${fantasma} justify-end pr-1.5`} style={{ left: pct(pos.left - antes), width: pct(antes) }}>
+                          +{tempo(antes)}
+                        </div>
+                      ) : null}
+                      {depois > 0.02 ? (
+                        <div className={`${fantasma} justify-start pl-1.5`} style={{ left: pct(pos.left + pos.dur), width: pct(depois) }}>
+                          +{tempo(depois)}
+                        </div>
+                      ) : null}
+                    </>
+                  )
+                })()
+              : null}
+
             {p.clipes.map((c, i) => {
               const fonte = fontes[c.fonte]
               const sel = selecao?.tipo === 'clipe' && selecao.id === c.id
+              const pos = posicao(i, c)
+              const temAntes = fonte?.tipo === 'video' && c.inicio > 0.05
+              const temDepois = fonte?.tipo === 'video' && (fonte.duracao ?? c.fim) - c.fim > 0.05
+              const movendo = reordenando?.id === c.id
               return (
                 <div
                   key={c.id}
@@ -214,12 +250,43 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                     if (e.button !== 0) return
                     e.stopPropagation()
                     aoSelecionar({ tipo: 'clipe', id: c.id })
-                    percorrer(e)
+                    // Clicar: vai para o ponto. Arrastar pelo meio: muda a ordem do clipe.
+                    const alvo = e.currentTarget
+                    try {
+                      alvo.setPointerCapture(e.pointerId)
+                    } catch {
+                      /* evento sintético */
+                    }
+                    const x0 = e.clientX
+                    const t0 = tempoNoPonto(x0)
+                    let modo = null
+                    const meios = p.clipes.map((x, j) => ({ id: x.id, meio: inicios[j] + duracaoClipe(x) / 2 }))
+                    const destinoEm = (clientX) => meios.filter((m) => m.id !== c.id && m.meio < tempoNoPonto(clientX)).length
+                    const mover = (ev) => {
+                      if (!modo && Math.abs(ev.clientX - x0) > 6 && p.clipes.length > 1) {
+                        modo = 'reordenar'
+                        congelar()
+                      }
+                      if (modo) setReordenando({ id: c.id, dx: ev.clientX - x0, destino: destinoEm(ev.clientX) })
+                    }
+                    const soltarClipe = (ev) => {
+                      alvo.removeEventListener('pointermove', mover)
+                      alvo.removeEventListener('pointerup', soltarClipe)
+                      alvo.removeEventListener('pointercancel', soltarClipe)
+                      if (modo) {
+                        const d = destinoEm(ev.clientX)
+                        soltar()
+                        if (d !== i) aoReordenar(c.id, d)
+                      } else aoBuscar(t0)
+                    }
+                    alvo.addEventListener('pointermove', mover)
+                    alvo.addEventListener('pointerup', soltarClipe)
+                    alvo.addEventListener('pointercancel', soltarClipe)
                   }}
                   onContextMenu={menu({ tipo: 'clipe', id: c.id })}
                   onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && aoSelecionar({ tipo: 'clipe', id: c.id })}
-                  className={`group absolute top-1.5 bottom-1.5 overflow-hidden rounded-lg border-2 bg-superficie-3 ${sel ? 'z-10 border-acento' : 'border-transparent hover:border-borda-forte'}`}
-                  style={{ left: `calc(${pct(posicao(i, c).left)} + 1px)`, width: `calc(${pct(posicao(i, c).dur)} - 2px)` }}
+                  className={`group absolute top-1.5 bottom-1.5 overflow-hidden rounded-lg border-2 bg-superficie-3 ${movendo ? 'z-30 cursor-grabbing opacity-85 shadow-[0_8px_24px_-6px_rgb(0_0_0/0.6)]' : sel ? 'z-10 border-acento' : 'border-transparent hover:border-borda-forte'} ${movendo ? 'border-acento' : ''}`}
+                  style={{ left: `calc(${pct(pos.left)} + 2px)`, width: `calc(${pct(pos.dur)} - 4px)`, transform: movendo ? `translateX(${reordenando.dx}px)` : undefined }}
                 >
                   {fonte?.quadros?.length ? (
                     <div className="pointer-events-none absolute inset-0 flex opacity-80">
@@ -227,8 +294,28 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                         <img key={j} src={q} alt="" className="h-full min-w-0 flex-1 object-cover" />
                       ))}
                     </div>
+                  ) : fonte?.tipo === 'imagem' ? (
+                    <img src={fonte.url} alt="" className="pointer-events-none absolute inset-0 size-full object-cover opacity-80" />
                   ) : null}
-                  <span className="pointer-events-none absolute bottom-0.5 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded bg-black/60 px-1 text-[0.625rem] font-semibold text-white tabular-nums">
+                  {/* Há vídeo escondido antes/depois: marca na ponta */}
+                  {temAntes ? (
+                    <>
+                      <span className="pointer-events-none absolute inset-y-0 left-3.5 w-1 bg-[repeating-linear-gradient(180deg,white_0_3px,transparent_3px_6px)] opacity-80" />
+                      <span className="pointer-events-none absolute top-0.5 left-5 rounded bg-black/70 px-1 text-[0.5625rem] font-bold text-white tabular-nums" title="Há vídeo escondido antes: arraste a ponta para a esquerda">
+                        ‹ {tempo(c.inicio / c.velocidade)}
+                      </span>
+                    </>
+                  ) : null}
+                  {temDepois ? (
+                    <>
+                      <span className="pointer-events-none absolute inset-y-0 right-3.5 w-1 bg-[repeating-linear-gradient(180deg,white_0_3px,transparent_3px_6px)] opacity-80" />
+                      <span className="pointer-events-none absolute top-0.5 right-5 rounded bg-black/70 px-1 text-[0.5625rem] font-bold text-white tabular-nums" title="Há vídeo escondido depois: arraste a ponta para a direita">
+                        {tempo(((fonte.duracao ?? c.fim) - c.fim) / c.velocidade)} ›
+                      </span>
+                    </>
+                  ) : null}
+                  <span className="pointer-events-none absolute bottom-0.5 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-black/60 px-1 text-[0.625rem] font-semibold text-white tabular-nums">
+                    {fonte?.tipo === 'imagem' ? 'imagem · ' : ''}
                     {c.velocidade !== 1 ? `${c.velocidade.toLocaleString('pt-BR')}× · ` : ''}
                     {c.mudo ? 'sem som · ' : ''}
                     {tempo(duracaoClipe(c))}
@@ -239,17 +326,38 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                   <span onPointerDown={aparar(c, i, 'fim')} className={`absolute inset-y-0 right-0 grid w-3.5 cursor-ew-resize place-items-center bg-acento ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o fim">
                     <span className="h-5 w-0.5 rounded-full bg-white/80" />
                   </span>
-                  {arrastando === c.id ? <span className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[0.6875rem] font-bold text-white tabular-nums">{tempo(posicao(i, c).dur)}</span> : null}
+                  {arrastando === c.id ? <span className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[0.6875rem] font-bold text-white tabular-nums">{tempo(pos.dur)}</span> : null}
                 </div>
               )
             })}
+
+            {/* Onde o clipe arrastado vai entrar */}
+            {reordenando
+              ? (() => {
+                  const outros = p.clipes.map((x, j) => ({ x, j })).filter(({ x }) => x.id !== reordenando.id)
+                  const antes = outros[reordenando.destino - 1]
+                  const em = antes ? inicios[antes.j] + duracaoClipe(antes.x) : 0
+                  return <div className="pointer-events-none absolute inset-y-0 z-40 w-1 -translate-x-1/2 rounded-full bg-acento shadow-[0_0_10px_var(--color-acento)]" style={{ left: pct(em) }} />
+                })()
+              : null}
+          </div>
+          <div className="flex w-12 shrink-0 items-center justify-center">
+            <button
+              type="button"
+              onClick={aoAdicionar}
+              aria-label="Adicionar vídeo, imagem ou GIF"
+              title="Adicionar vídeo, imagem ou GIF ao fim"
+              className="grid h-12 w-9 place-items-center rounded-lg border-2 border-dashed border-borda-forte text-suave transition-colors hover:border-acento hover:bg-acento-suave hover:text-acento"
+            >
+              <Icone nome="mais" tamanho={18} />
+            </button>
           </div>
         </div>
 
         {/* Uma faixa por camada (a de cima na lista é a que fica por cima) */}
         {[...p.camadas].reverse().map((cam) => {
           const sel = selecao?.tipo === 'camada' && selecao.id === cam.id
-          const nome = cam.tipo === 'texto' ? cam.texto?.split('\n')[0] || 'Texto' : cam.tipo === 'desfoque' ? 'Desfoque' : (fontes[cam.fonte]?.arquivo.name ?? NOMES[cam.tipo])
+          const nome = cam.tipo === 'texto' ? cam.texto?.split('\n')[0] || 'Texto' : cam.tipo === 'desfoque' ? 'Blur' : (fontes[cam.fonte]?.arquivo.name ?? NOMES[cam.tipo])
           return (
             <div key={cam.id} className="flex">
               <div className={rotulo}>
@@ -277,6 +385,7 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                   {arrastando === cam.id ? <span className="pointer-events-none absolute right-4 rounded bg-black/70 px-1 text-[0.625rem] font-bold tabular-nums">{tempo(cam.fim - cam.inicio)}</span> : null}
                 </div>
               </div>
+              <div className="w-12 shrink-0" />
             </div>
           )
         })}
@@ -285,13 +394,13 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
         {p.musica ? (
           <div className="flex">
             <div className={rotulo}>
-              <Icone nome="musica" tamanho={13} /> Música
+              <Icone nome="musica" tamanho={13} /> Áudio
             </div>
             <div className="relative h-9 flex-1 cursor-pointer py-1" onPointerDown={percorrer}>
               <div
                 role="button"
                 tabIndex={0}
-                aria-label="Música"
+                aria-label="Trilha de áudio"
                 onPointerDown={(e) => {
                   if (e.button !== 0) return
                   e.stopPropagation()
@@ -308,12 +417,13 @@ export function LinhaDoTempo({ p, fontes, selecao, aoSelecionar, aoBuscar, aoMud
                 </span>
               </div>
             </div>
+            <div className="w-12 shrink-0" />
           </div>
         ) : null}
 
         {/* Cursor de reprodução (movido direto, sem re-renderizar) e guia do ímã */}
         {total ? (
-          <div className="pointer-events-none absolute inset-y-0 right-0 left-24">
+          <div className="pointer-events-none absolute inset-y-0 right-12 left-24">
             <div ref={cabeca} data-cursor="" className="absolute inset-y-0 left-0 z-20 w-0.5 -translate-x-1/2 bg-tinta">
               <span className="absolute -top-1 left-1/2 size-2.5 -translate-x-1/2 rotate-45 rounded-[2px] bg-tinta" />
             </div>

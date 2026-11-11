@@ -768,9 +768,9 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
           {o.volume === 'ganho' ? <Deslizante rotulo="Ganho" valor={o.ganho} aoMudar={(v) => mudar({ ganho: v })} min={-20} max={20} formatar={(v) => `${v > 0 ? '+' : ''}${v} dB`} /> : null}
         </Painel>
 
-        <Painel titulo="Entrada e saída suaves">
-          <Deslizante rotulo="Entrada (fade in)" valor={Math.min(o.fadeIn, maxFade)} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
-          <Deslizante rotulo="Saída (fade out)" valor={Math.min(o.fadeOut, maxFade)} aoMudar={(v) => mudar({ fadeOut: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+        <Painel titulo="Fade">
+          <Deslizante rotulo="Fade in" valor={Math.min(o.fadeIn, maxFade)} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
+          <Deslizante rotulo="Fade out" valor={Math.min(o.fadeOut, maxFade)} aoMudar={(v) => mudar({ fadeOut: v })} min={0} max={maxFade} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'desligado')} />
         </Painel>
 
         <Painel titulo="Silêncio">

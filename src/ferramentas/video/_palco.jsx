@@ -1,11 +1,51 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_CAMADA, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
   if (!caixa.w || !caixa.h) return { w: 0, h: 0 }
   return caixa.w / caixa.h > proporcao ? { w: caixa.h * proporcao, h: caixa.h } : { w: caixa.w, h: caixa.w / proporcao }
+}
+
+/**
+ * Clipe de imagem: imita a interface de um <video> (currentTime, play, pause…)
+ * com um relógio próprio, para o resto do palco tratar tudo igual.
+ */
+class ClipeImagem {
+  constructor(el) {
+    this.el = el
+    this._t = 0
+    this._marco = null
+    this.playbackRate = 1
+    this.preservesPitch = true
+    this.muted = true
+    this.volume = 0
+    this.ended = false
+  }
+  get style() {
+    return this.el.style
+  }
+  get currentTime() {
+    return this._marco == null ? this._t : this._t + (performance.now() - this._marco) / 1000
+  }
+  set currentTime(v) {
+    this._t = v
+    if (this._marco != null) this._marco = performance.now()
+  }
+  get paused() {
+    return this._marco == null
+  }
+  play() {
+    if (this._marco == null) this._marco = performance.now()
+    return Promise.resolve()
+  }
+  pause() {
+    if (this._marco != null) {
+      this._t = this.currentTime
+      this._marco = null
+    }
+  }
 }
 
 /** Arrasto genérico: chama mover(dx, dy) em px desde o início; fim() ao soltar. */
@@ -153,16 +193,23 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     const c = pp.clipes[loc.indice]
     const v = videos.current[c.id]
     // Fades: véu preto e volume.
-    let fade = 0
-    if (pp.fadeIn && t < pp.fadeIn) fade = Math.max(fade, 1 - t / pp.fadeIn)
-    if (pp.fadeOut && t > T - pp.fadeOut) fade = Math.max(fade, (t - (T - pp.fadeOut)) / pp.fadeOut)
-    if (veu.current) veu.current.style.opacity = String(Math.min(1, fade))
+    const rampa = (ini, fim) => {
+      let x = 0
+      if (ini && t < ini) x = Math.max(x, 1 - t / ini)
+      if (fim && t > T - fim) x = Math.max(x, (t - (T - fim)) / fim)
+      return Math.min(1, x)
+    }
+    const fade = rampa(pp.fadeIn, pp.fadeOut)
+    if (veu.current) veu.current.style.opacity = String(fade)
+    const au = { ...PADRAO_AUDIO, ...pp.audio }
+    const fadeSom = rampa(Math.max(pp.fadeIn, au.fadeIn), Math.max(pp.fadeOut, au.fadeOut))
+    const geral = au.mudo ? 0 : au.volume
     if (v) {
       if (buscarVideos && Math.abs(v.currentTime - loc.local) > 0.04) v.currentTime = loc.local
       v.playbackRate = c.velocidade
       v.preservesPitch = true
       v.muted = c.mudo
-      v.volume = Math.max(0, Math.min(1, c.volume * (pp.musica ? pp.musica.volumeOriginal : 1) * (1 - fade)))
+      v.volume = Math.max(0, Math.min(1, c.volume * geral * (pp.musica ? pp.musica.volumeOriginal : 1) * (1 - fadeSom)))
     }
     // Camadas: visíveis só no intervalo delas; vídeos sobrepostos acompanham.
     for (const cam of pp.camadas) {
@@ -180,7 +227,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
         const alvo = t - cam.inicio
         const dur = ff[cam.fonte]?.duracao ?? Infinity
         vc.muted = !(cam.volume > 0)
-        vc.volume = Math.min(1, cam.volume ?? 0)
+        vc.volume = Math.min(1, (cam.volume ?? 0) * geral)
         if (dentro && alvo < dur) {
           if (buscarVideos || Math.abs(vc.currentTime - alvo) > 0.3) vc.currentTime = Math.max(0, alvo)
           if (m.current.tocando && vc.paused) vc.play().catch(() => {})
@@ -193,7 +240,10 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     if (mu && pp.musica) {
       const dm = mu.duration || ff[pp.musica.fonte]?.duracao || Infinity
       const alvo = pp.musica.repetir ? t % dm : t
-      mu.volume = Math.max(0, Math.min(1, pp.musica.volume * (1 - fade)))
+      const mi = pp.musica.fadeIn && t < pp.musica.fadeIn ? t / pp.musica.fadeIn : 1
+      const saida = pp.musica.fadeOut || Math.min(2, T / 4)
+      const mo = t > T - saida ? Math.max(0, (T - t) / saida) : 1
+      mu.volume = Math.max(0, Math.min(1, pp.musica.volume * Math.min(mi, mo)))
       if (alvo < dm) {
         if (buscarVideos || Math.abs(mu.currentTime - alvo) > 0.3) mu.currentTime = alvo
         if (m.current.tocando && mu.paused) mu.play().catch(() => {})
@@ -325,6 +375,16 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
             const g = geometria(fonte)
             return (
               <div key={c.id} className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>
+                {fonte.tipo === 'imagem' ? (
+                  <img
+                    ref={(el) => (el ? (videos.current[c.id] = el._clipe ??= new ClipeImagem(el)) : delete videos.current[c.id])}
+                    src={fonte.url}
+                    alt=""
+                    className="absolute max-w-none"
+                    style={{ ...g.video, transform: `rotate(${p.girar}deg)`, filter: filtroCor, visibility: 'hidden' }}
+                    onLoad={() => aplicar(m.current.t, !m.current.tocando)}
+                  />
+                ) : (
                 <video
                   ref={(el) => (el ? (videos.current[c.id] = el) : delete videos.current[c.id])}
                   src={fonte.url}
@@ -334,6 +394,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
                   style={{ ...g.video, transform: `rotate(${p.girar}deg)`, filter: filtroCor, visibility: 'hidden' }}
                   onLoadedData={() => aplicar(m.current.t, !m.current.tocando)}
                 />
+                )}
               </div>
             )
           })}

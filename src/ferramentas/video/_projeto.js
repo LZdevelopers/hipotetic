@@ -87,19 +87,55 @@ function quebrar(ctx, texto, largura) {
   return linhas
 }
 
+/** Fontes do texto (as duas primeiras vêm com o site; as outras são do sistema). */
+export const FONTES = [
+  { id: 'inter', rotulo: 'Inter', css: "'Inter Variable', Inter, sans-serif" },
+  { id: 'jakarta', rotulo: 'Plus Jakarta Sans', css: "'Plus Jakarta Sans Variable', sans-serif" },
+  { id: 'arial', rotulo: 'Arial', css: 'Arial, Helvetica, sans-serif' },
+  { id: 'verdana', rotulo: 'Verdana', css: 'Verdana, Geneva, sans-serif' },
+  { id: 'trebuchet', rotulo: 'Trebuchet MS', css: "'Trebuchet MS', sans-serif" },
+  { id: 'georgia', rotulo: 'Georgia', css: 'Georgia, serif' },
+  { id: 'times', rotulo: 'Times New Roman', css: "'Times New Roman', Times, serif" },
+  { id: 'courier', rotulo: 'Courier New', css: "'Courier New', Courier, monospace" },
+  { id: 'impact', rotulo: 'Impact', css: "Impact, 'Arial Black', sans-serif" },
+  { id: 'comic', rotulo: 'Comic Sans MS', css: "'Comic Sans MS', 'Comic Neue', cursive" },
+]
+export const PADRAO_TEXTO = { fonte: 'inter', italico: false, maiusculas: false, espacamento: 0, contorno: null, corContorno: '#000000', espessuraContorno: 0.12, sombra: false }
+export const PADRAO_BLUR = { intensidade: 0.5, forma: 'retangulo', estilo: 'blur' }
+/** Quantos blocos o mosaico tem no lado menor da área (mais intenso = menos blocos). */
+export const blocosMosaico = (intensidade) => Math.max(3, Math.round(26 - intensidade * 22))
+export const PADRAO_AUDIO = { volume: 1, mudo: false, ruido: 'nao', voz: false, normalizar: 'nao', fadeIn: 0, fadeOut: 0 }
+
 /** Estilo de texto compartilhado pela prévia (CSS) e pela exportação (canvas). */
-export const estiloTexto = (c, alturaQuadro) => {
+export const estiloTexto = (bruto, alturaQuadro) => {
+  const c = { ...PADRAO_TEXTO, ...bruto }
   const tamanho = c.tamanho * alturaQuadro
-  return { tamanho, padding: tamanho * 0.3, linha: tamanho * 1.2, peso: c.negrito ? 700 : 500 }
+  const contorno = c.contorno ?? !c.fundo
+  return {
+    tamanho,
+    padding: tamanho * 0.3,
+    linha: tamanho * 1.2,
+    peso: c.negrito ? 700 : 500,
+    estilo: c.italico ? 'italic' : 'normal',
+    familia: (FONTES.find((x) => x.id === c.fonte) ?? FONTES[0]).css,
+    espacamento: c.espacamento * tamanho,
+    contorno: contorno ? Math.max(1, c.espessuraContorno * tamanho) : 0,
+    corContorno: c.corContorno,
+    sombra: c.sombra,
+    texto: c.maiusculas ? String(c.texto ?? '').toUpperCase() : String(c.texto ?? ''),
+  }
 }
 
 /** Desenha a camada de texto num PNG do tamanho que ela ocupa no quadro final. */
-export async function textoParaPng(c, quadro, familia) {
+export async function textoParaPng(c, quadro) {
   const e = estiloTexto(c, quadro.h)
+  const fonte = `${e.estilo} ${e.peso} ${e.tamanho}px ${e.familia}`
+  await document.fonts?.load(fonte).catch(() => {})
   const largura = Math.max(8, Math.round(c.w * quadro.w))
   const medidor = new OffscreenCanvas(1, 1).getContext('2d')
-  medidor.font = `${e.peso} ${e.tamanho}px ${familia}`
-  const linhas = quebrar(medidor, c.texto || ' ', largura - e.padding * 2)
+  medidor.font = fonte
+  if ('letterSpacing' in medidor) medidor.letterSpacing = `${e.espacamento}px`
+  const linhas = quebrar(medidor, e.texto || ' ', largura - e.padding * 2)
   const altura = Math.max(8, Math.round(linhas.length * e.linha + e.padding * 2))
   const cv = new OffscreenCanvas(largura, altura)
   const ctx = cv.getContext('2d')
@@ -112,32 +148,75 @@ export async function textoParaPng(c, quadro, familia) {
     ctx.fill()
     ctx.globalAlpha = 1
   }
-  ctx.font = `${e.peso} ${e.tamanho}px ${familia}`
+  ctx.font = fonte
+  if ('letterSpacing' in ctx) ctx.letterSpacing = `${e.espacamento}px`
   ctx.fillStyle = c.cor
   ctx.textBaseline = 'middle'
   ctx.textAlign = c.alinhar === 'esquerda' ? 'left' : c.alinhar === 'direita' ? 'right' : 'center'
   const xTexto = c.alinhar === 'esquerda' ? e.padding : c.alinhar === 'direita' ? largura - e.padding : largura / 2
-  if (!c.fundo) {
-    // Sem caixa: contorno escuro para ler sobre qualquer imagem.
+  if (e.sombra) {
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'
+    ctx.shadowBlur = e.tamanho * 0.18
+    ctx.shadowOffsetY = e.tamanho * 0.06
+  }
+  if (e.contorno) {
     ctx.lineJoin = 'round'
-    ctx.lineWidth = Math.max(2, e.tamanho * 0.12)
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)'
+    ctx.lineWidth = e.contorno
+    ctx.strokeStyle = e.corContorno
     linhas.forEach((l, i) => ctx.strokeText(l, xTexto, e.padding + e.linha * (i + 0.5)))
+    ctx.shadowColor = 'transparent'
   }
   linhas.forEach((l, i) => ctx.fillText(l, xTexto, e.padding + e.linha * (i + 0.5)))
   return { blob: await cv.convertToBlob({ type: 'image/png' }), largura, altura }
 }
 
+/** Máscara (branco = desfoca) para o blur em elipse. */
+async function mascaraElipse(w, h) {
+  const cv = new OffscreenCanvas(w, h)
+  const ctx = cv.getContext('2d')
+  ctx.fillStyle = '#fff'
+  ctx.beginPath()
+  ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
+  ctx.fill()
+  return cv.convertToBlob({ type: 'image/png' })
+}
+
 /* ─── Exportação ─────────────────────────────────────────────────────────── */
 
 const par = (n) => Math.max(2, Math.round(n / 2) * 2)
+
+/**
+ * Cores com a MESMA conta dos filtros do navegador usados na prévia
+ * (CSS brightness → contrast → saturate), em RGB: o que se vê é o que sai.
+ */
+function filtrosCor({ brilho, contraste, saturacao }, alfa = false) {
+  if (brilho === 0 && contraste === 1 && saturacao === 1) return []
+  const n = (v) => Number(v.toFixed(4))
+  const f = [alfa ? 'format=rgba' : 'format=gbrp']
+  const b = 1 + brilho
+  if (b !== 1) f.push(`colorchannelmixer=rr=${n(b)}:gg=${n(b)}:bb=${n(b)}`)
+  if (contraste !== 1) {
+    const e = `clip((val-128)*${n(contraste)}+128\,0\,255)`
+    f.push(`lutrgb=r='${e}':g='${e}':b='${e}'`)
+  }
+  if (saturacao !== 1) {
+    const s = saturacao
+    f.push(
+      `colorchannelmixer=rr=${n(0.213 + 0.787 * s)}:rg=${n(0.715 - 0.715 * s)}:rb=${n(0.072 - 0.072 * s)}:gr=${n(0.213 - 0.213 * s)}:gg=${n(0.715 + 0.285 * s)}:gb=${n(0.072 - 0.072 * s)}:br=${n(0.213 - 0.213 * s)}:bg=${n(0.715 - 0.715 * s)}:bb=${n(0.072 + 0.928 * s)}`,
+    )
+  }
+  return f
+}
 const fixo = (n) => Number(n.toFixed(3))
 
 /** Projeto simples (1 clipe, sem camadas/efeitos): vai pelo caminho rápido (aceleração do navegador). */
+let fontesSimples = () => true
 function simples(p) {
   const [c] = p.clipes
   const cor = p.cor
-  return p.clipes.length === 1 && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && cor.brilho === 0 && cor.contraste === 1 && cor.saturacao === 1
+  const au = { ...PADRAO_AUDIO, ...p.audio }
+  const audioPadrao = au.volume === 1 && !au.mudo && au.ruido === 'nao' && !au.voz && au.normalizar === 'nao' && !au.fadeIn && !au.fadeOut
+  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && cor.brilho === 0 && cor.contraste === 1 && cor.saturacao === 1
 }
 
 function nomeNoFs(id, arquivo) {
@@ -148,12 +227,13 @@ function nomeNoFs(id, arquivo) {
  * Exporta o projeto. Devolve { blob, motor }.
  * ctx: { progresso, sinal }; familia: fonte CSS dos textos.
  */
-export async function exportarProjeto(p, fontes, ctx, familia) {
+export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = false } = {}) {
   if (!p.clipes.length) throw new ErroAmigavel('Adicione pelo menos um vídeo.')
   const quadro = tamanhoFinal(p, fontes)
   const T = duracaoTotal(p)
 
-  if (simples(p)) {
+  fontesSimples = (pp) => fontes[pp.clipes[0].fonte]?.tipo === 'video'
+  if (!soAudio && simples(p)) {
     const [c] = p.clipes
     const f = fontes[c.fonte]
     const q = quadroGirado(f, p.girar)
@@ -197,12 +277,14 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
   const pares = []
   p.clipes.forEach((c, i) => {
     const fonte = fontes[c.fonte]
-    const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo)
     const d = duracaoClipe(c)
+    // Imagem como clipe: a foto parada pelo tempo do clipe.
+    const ehImagem = fonte.tipo === 'imagem'
+    const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : [])
     f.push(
-      `[${k}:v]trim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},setpts=(PTS-STARTPTS)/${c.velocidade},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v${i}]`,
+      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v${i}]`,
     )
-    if (fonte.temAudio && !c.mudo && c.volume > 0) {
+    if (!ehImagem && fonte.temAudio && !c.mudo && c.volume > 0) {
       f.push(`[${k}:a]atrim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
     } else {
       f.push(`anullsrc=r=48000:cl=stereo,atrim=0:${fixo(d)},aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`)
@@ -215,7 +297,8 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
   let v = 'vc'
   const efeitos = []
   const { brilho, contraste, saturacao } = p.cor
-  if (brilho !== 0 || contraste !== 1 || saturacao !== 1) efeitos.push(`eq=brightness=${fixo(brilho * 0.4)}:contrast=${fixo(contraste)}:saturation=${fixo(saturacao)}`)
+  efeitos.push(...filtrosCor({ brilho, contraste, saturacao }))
+  if (efeitos.length) efeitos.push('format=yuv420p')
   if (p.fadeIn) efeitos.push(`fade=t=in:st=0:d=${fixo(p.fadeIn)}`)
   if (p.fadeOut) efeitos.push(`fade=t=out:st=${fixo(Math.max(0, T - p.fadeOut))}:d=${fixo(p.fadeOut)}`)
   if (efeitos.length) {
@@ -231,11 +314,29 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
     const quando = `enable='between(t,${fixo(c.inicio)},${fixo(c.fim)})'`
     const saida = `vl${i}`
     if (c.tipo === 'desfoque') {
-      const x = Math.round(c.x * W)
-      const y = Math.round(c.y * H)
-      const cw = par(c.w * W)
-      const ch = par(c.h * H)
-      f.push(`[${v}]split[b${i}a][b${i}b]`, `[b${i}b]crop=${cw}:${ch}:${x}:${y},boxblur=${Math.max(4, Math.round(Math.min(cw, ch) / 8))}:3[b${i}c]`, `[b${i}a][b${i}c]overlay=${x}:${y}:${quando}[${saida}]`)
+      const d = { ...PADRAO_BLUR, ...c }
+      const cw = Math.min(par(c.w * W), W)
+      const ch = Math.min(par(c.h * H), H)
+      const x = Math.min(Math.max(0, Math.round(c.x * W)), W - cw)
+      const y = Math.min(Math.max(0, Math.round(c.y * H)), H - ch)
+      const menor = Math.min(cw, ch)
+      let efeito
+      if (d.estilo === 'mosaico') {
+        // Mosaico: reduz e amplia sem suavizar (blocos). n = blocos no lado menor.
+        const nb = blocosMosaico(d.intensidade)
+        efeito = `scale=${Math.max(2, Math.round((cw / menor) * nb))}:${Math.max(2, Math.round((ch / menor) * nb))},scale=${cw}:${ch}:flags=neighbor`
+      } else {
+        const raio = Math.max(2, Math.min(Math.floor(menor / 4) - 1, Math.round((menor / 8) * (0.4 + 1.6 * d.intensidade))))
+        efeito = `boxblur=${raio}:${d.intensidade > 0.6 ? 4 : 3}`
+      }
+      f.push(`[${v}]split[b${i}a][b${i}b]`, `[b${i}b]crop=${cw}:${ch}:${x}:${y},${efeito}[b${i}c]`)
+      let borrado = `b${i}c`
+      if (d.forma === 'elipse') {
+        const m = entrada(`m${c.id}.png`, await mascaraElipse(cw, ch), ['-loop', '1', '-framerate', '30', '-t', String(fixo(T))])
+        f.push(`[${m}:v]format=gray,scale=${cw}:${ch}[b${i}m]`, `[b${i}c]format=rgba[b${i}r]`, `[b${i}r][b${i}m]alphamerge[b${i}e]`)
+        borrado = `b${i}e`
+      }
+      f.push(`[b${i}a][${borrado}]overlay=${x}:${y}:${quando}[${saida}]`)
       v = saida
       continue
     }
@@ -243,7 +344,7 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
     let alturaPx
     const parado = ['-loop', '1', '-framerate', '30', '-t', String(fixo(T))]
     if (c.tipo === 'texto') {
-      const png = await textoParaPng(c, quadro, familia)
+      const png = await textoParaPng(c, quadro)
       origem = `[${entrada(`t${c.id}.png`, png.blob, parado)}:v]`
       alturaPx = png.altura
     } else {
@@ -271,7 +372,7 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
     if (c.espelharH) cadeia.push('hflip')
     if (c.espelharV) cadeia.push('vflip')
     const cor = c.ajuste
-    if (c.tipo !== 'texto' && (cor.brilho !== 0 || cor.contraste !== 1 || cor.saturacao !== 1)) cadeia.push('format=yuva420p', `eq=brightness=${fixo(cor.brilho * 0.4)}:contrast=${fixo(cor.contraste)}:saturation=${fixo(cor.saturacao)}`)
+    if (c.tipo !== 'texto') cadeia.push(...filtrosCor(cor, true))
     cadeia.push('format=rgba')
     if (c.tipo !== 'texto' && c.semFundo) cadeia.push(`colorkey=${c.semFundo === 'preto' ? '0x000000' : '0xFFFFFF'}:${fixo(Math.max(0.01, c.tolerancia))}:0.08`)
     if (c.opacidade < 1) cadeia.push(`colorchannelmixer=aa=${fixo(c.opacidade)}`)
@@ -288,26 +389,62 @@ export async function exportarProjeto(p, fontes, ctx, familia) {
     v = saida
   }
 
-  // 4. Som: fades no som original, música por baixo.
+  // 4. Som: tratamento do áudio original (volume, ruído, voz, fades), trilha
+  //    por baixo (com ducking) e normalização do resultado.
+  const au = { ...PADRAO_AUDIO, ...p.audio }
   let a = 'ac'
   const efeitosSom = []
-  if (p.musica && p.musica.volumeOriginal !== 1) efeitosSom.push(`volume=${fixo(p.musica.volumeOriginal)}`)
-  if (p.fadeIn) efeitosSom.push(`afade=t=in:st=0:d=${fixo(p.fadeIn)}`)
-  if (p.fadeOut) efeitosSom.push(`afade=t=out:st=${fixo(Math.max(0, T - p.fadeOut))}:d=${fixo(p.fadeOut)}`)
+  const volume = (au.mudo ? 0 : au.volume) * (p.musica ? p.musica.volumeOriginal : 1)
+  if (volume !== 1) efeitosSom.push(`volume=${fixo(volume)}`)
+  if (au.ruido !== 'nao') efeitosSom.push('highpass=f=80', `afftdn=nr=${{ leve: 10, medio: 18, forte: 28 }[au.ruido]}:nf=-42:tn=1`)
+  if (au.voz) efeitosSom.push('equalizer=f=250:t=q:w=1.2:g=-2,equalizer=f=3500:t=q:w=1.2:g=3', 'acompressor=threshold=-20dB:ratio=3:attack=15:release=250:makeup=2')
+  const somIn = Math.max(p.fadeIn, au.fadeIn)
+  const somOut = Math.max(p.fadeOut, au.fadeOut)
+  if (somIn) efeitosSom.push(`afade=t=in:st=0:d=${fixo(somIn)}`)
+  if (somOut) efeitosSom.push(`afade=t=out:st=${fixo(Math.max(0, T - somOut))}:d=${fixo(somOut)}`)
   if (efeitosSom.length) {
     f.push(`[ac]${efeitosSom.join(',')}[aq]`)
     a = 'aq'
   }
   if (p.musica) {
-    const fonte = fontes[p.musica.fonte]
-    const k = entrada(nomeNoFs(p.musica.fonte, fonte.arquivo), fonte.arquivo, p.musica.repetir ? ['-stream_loop', '-1'] : [])
-    const caida = Math.min(2, T / 4)
-    f.push(`[${k}:a]atrim=0:${fixo(T)},asetpts=PTS-STARTPTS,volume=${fixo(p.musica.volume)},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,afade=t=out:st=${fixo(Math.max(0, T - caida))}:d=${fixo(caida)}[mus]`)
-    sons.push('[mus]')
+    const mu = { fadeIn: 0, fadeOut: 0, ducking: false, ...p.musica }
+    const fonte = fontes[mu.fonte]
+    const k = entrada(nomeNoFs(mu.fonte, fonte.arquivo), fonte.arquivo, mu.repetir ? ['-stream_loop', '-1'] : [])
+    const saidaMus = mu.fadeOut || Math.min(2, T / 4)
+    f.push(`[${k}:a]atrim=0:${fixo(T)},asetpts=PTS-STARTPTS,volume=${fixo(mu.volume)},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo${mu.fadeIn ? `,afade=t=in:st=0:d=${fixo(mu.fadeIn)}` : ''},afade=t=out:st=${fixo(Math.max(0, T - saidaMus))}:d=${fixo(saidaMus)}[mus]`)
+    if (mu.ducking) {
+      // Ducking: a trilha abaixa sozinha quando há fala/som no vídeo.
+      f.push(`[${a}]asplit=2[${a}d][${a}k]`, `[mus][${a}k]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[musd]`)
+      a = `${a}d`
+      sons.push('[musd]')
+    } else sons.push('[mus]')
   }
   if (sons.length) {
     f.push(`[${a}]${sons.join('')}amix=inputs=${sons.length + 1}:duration=first:dropout_transition=0:normalize=0[am]`)
     a = 'am'
+  }
+  if (au.normalizar !== 'nao') {
+    f.push(`[${a}]loudnorm=I=${au.normalizar === 'podcast' ? -16 : -14}:TP=-1.5:LRA=11,aresample=48000[an]`)
+    a = 'an'
+  }
+
+  if (soAudio) {
+    // Só o som: o vídeo montado é descartado.
+    f.push(`[${v}]nullsink`)
+    const dados = await executarFfmpeg({
+      entradas: [...entradas].map(([nome, d]) => ({ nome, dados: d })),
+      args: [...args, '-filter_complex', f.join(';'), '-map', `[${a}]`, '-t', String(fixo(T)), '-c:a', 'libmp3lame', '-b:a', '192k'],
+      saida: 'saida.mp3',
+      duracao: T,
+      aoProgredir: ctx.progresso,
+      sinal: ctx.sinal,
+      rotulo: 'Exportando o áudio',
+    }).catch((erro) => {
+      if (erro?.name === 'AbortError') throw erro
+      console.error(erro?.log)
+      throw new ErroAmigavel('Não foi possível exportar o áudio.')
+    })
+    return { blob: new Blob([dados], { type: 'audio/mpeg' }), motor: 'webassembly' }
   }
 
   const saida = `saida.${p.formato}`

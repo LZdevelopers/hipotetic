@@ -17,19 +17,23 @@ function abrir() {
     pedido.onupgradeneeded = () => pedido.result.createObjectStore(LOJA)
     pedido.onsuccess = () => ok(pedido.result)
     pedido.onerror = () => falha(pedido.error)
+    pedido.onblocked = () => falha(new Error('IndexedDB bloqueado'))
   })
 }
 
+/** Nunca deixa o editor esperando para sempre (banco travado, aba antiga segurando…). */
+const comPrazo = (promessa, ms = 4000) => Promise.race([promessa, new Promise((_, falha) => setTimeout(() => falha(new Error('IndexedDB demorou demais')), ms))])
+
 async function operar(modo, fn) {
-  const db = await abrir()
+  const db = await comPrazo(abrir())
   try {
-    return await new Promise((ok, falha) => {
+    return await comPrazo(new Promise((ok, falha) => {
       const tx = db.transaction(LOJA, modo)
       const resultado = fn(tx.objectStore(LOJA))
       tx.oncomplete = () => ok(resultado?.result)
       tx.onerror = () => falha(tx.error)
       tx.onabort = () => falha(tx.error)
-    })
+    }))
   } finally {
     db.close()
   }

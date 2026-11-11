@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { PADRAO_CAMADA, estiloTexto } from './_projeto'
+import { PADRAO_BLUR, PADRAO_CAMADA, blocosMosaico, estiloTexto } from './_projeto'
 
 const IMA_CENTRO = 7 // px: distância para grudar no centro do vídeo
 
@@ -192,17 +192,21 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
           lineHeight: `${e.linha}px`,
           padding: e.padding,
           fontWeight: e.peso,
+          fontStyle: e.estilo,
+          fontFamily: e.familia,
+          letterSpacing: e.espacamento,
+          textShadow: e.sombra ? `0 ${e.tamanho * 0.06}px ${e.tamanho * 0.18}px rgba(0,0,0,0.6)` : undefined,
           color: c.cor,
           textAlign: c.alinhar === 'esquerda' ? 'left' : c.alinhar === 'direita' ? 'right' : 'center',
           background: c.fundo ? hexRgba(c.corFundo, c.opacidadeFundo) : 'transparent',
           borderRadius: c.fundo ? e.tamanho * 0.35 : 0,
-          WebkitTextStroke: c.fundo ? undefined : `${Math.max(2, e.tamanho * 0.12)}px rgba(0,0,0,0.75)`,
+          WebkitTextStroke: e.contorno ? `${e.contorno}px ${e.corContorno}` : undefined,
           paintOrder: 'stroke fill',
           whiteSpace: 'pre-wrap',
           transform: espelho,
         }}
       >
-        {c.texto || ' '}
+        {e.texto || ' '}
       </div>
     )
   } else if (c.tipo === 'imagem') {
@@ -218,8 +222,24 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
       </div>
     )
   } else if (c.tipo === 'desfoque') {
-    const raio = Math.max(6, Math.min(largura, altura) / 8)
-    conteudo = <div className="size-full" style={{ backdropFilter: `blur(${raio}px)`, WebkitBackdropFilter: `blur(${raio}px)` }} />
+    const d = { ...PADRAO_BLUR, ...c }
+    const menor = Math.min(largura, altura)
+    const raio = d.estilo === 'mosaico' ? Math.max(3, menor / 30) : Math.max(3, (menor / 8) * (0.4 + 1.6 * d.intensidade) * 0.6)
+    const bloco = menor / blocosMosaico(d.intensidade) // mesmo tamanho de bloco da exportação
+    conteudo = (
+      <div
+        className="size-full"
+        style={{
+          backdropFilter: `blur(${raio}px)`,
+          WebkitBackdropFilter: `blur(${raio}px)`,
+          borderRadius: d.forma === 'elipse' ? '50%' : 0,
+          clipPath: d.forma === 'elipse' ? 'ellipse(50% 50% at 50% 50%)' : undefined,
+          // Mosaico: a prévia sugere os blocos com uma grade por cima do desfoque.
+          backgroundImage: d.estilo === 'mosaico' ? 'linear-gradient(rgb(0 0 0/0.12) 1px, transparent 1px), linear-gradient(90deg, rgb(0 0 0/0.12) 1px, transparent 1px)' : undefined,
+          backgroundSize: d.estilo === 'mosaico' ? `${bloco}px ${bloco}px` : undefined,
+        }}
+      />
+    )
   }
 
   // Vídeo sem fundo na prévia: mistura (multiplicar tira o branco, "tela" tira o preto).

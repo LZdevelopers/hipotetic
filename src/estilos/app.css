@@ -138,6 +138,13 @@
    BASE
    ========================================================================== */
 @layer base {
+  /* Sem barras de rolagem no site: tudo rola, mas sem a barra. */
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
   html {
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
@@ -311,4 +318,10 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Onde ajuda ver que rola (painéis longos, linha do tempo): barra fina e discreta. */
+@utility rolagem-fina {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-fraca) 45%, transparent) transparent;
 }

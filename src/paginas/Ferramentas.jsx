@@ -39,13 +39,13 @@ export function Ferramentas() {
   const contagem = (id) => (id === 'todas' ? cats.reduce((s, c) => s + ferramentasDaCategoria(c.id).length, 1) : ferramentasDaCategoria(id).length)
 
   return (
-    <div className="container-pagina pt-12 sm:pt-16">
-      <header className="mx-auto max-w-3xl text-center">
-        <h1 className="text-[clamp(2rem,4.6vw,3.2rem)] leading-[1.08] font-extrabold tracking-[-0.03em]">Todas as ferramentas para os seus arquivos</h1>
-        <p className="mt-4 text-base text-suave sm:text-lg">Vídeo, áudio, imagens, PDF, documentos e compactados. Grátis, sem cadastro e, quase sempre, sem enviar nada para ninguém.</p>
+    <div className="mx-auto w-full max-w-[118rem] px-4 pt-12 sm:px-8 sm:pt-16">
+      <header className="mx-auto max-w-4xl text-center">
+        <h1 className="text-[clamp(2.2rem,4.2vw,3.5rem)] leading-[1.06] font-extrabold tracking-[-0.03em]">Todas as ferramentas para os seus arquivos</h1>
+        <p className="mt-5 text-lg text-suave sm:text-xl">Vídeo, áudio, imagens, PDF, documentos e compactados. Grátis, sem cadastro e, quase sempre, sem enviar nada para ninguém.</p>
       </header>
 
-      <div className="mt-9 flex flex-col items-center gap-4">
+      <div className="mt-10 flex flex-col items-center gap-5">
         <div role="tablist" aria-label="Categorias" className="flex max-w-full flex-wrap justify-center gap-2">
           {[{ id: 'todas', nome: 'Todas' }, ...cats].map((c) => {
             const ativa = aba === c.id
@@ -56,31 +56,32 @@ export function Ferramentas() {
                 role="tab"
                 aria-selected={ativa}
                 onClick={() => escolher(c.id)}
-                className={`inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors ${ativa ? 'border-marca bg-marca text-sobre-marca' : 'border-borda bg-superficie text-suave hover:border-borda-forte hover:text-tinta'}`}
+                className={`inline-flex h-12 items-center gap-2.5 rounded-full border-2 px-5 text-base font-semibold transition-colors ${ativa ? (c.id === 'todas' ? 'border-marca bg-marca text-sobre-marca' : 'text-white escuro:text-fundo') : 'border-borda bg-superficie text-texto hover:text-tinta'}`}
+                style={ativa && c.id !== 'todas' ? { backgroundColor: `var(--color-cat-${c.id})`, borderColor: `var(--color-cat-${c.id})` } : !ativa && c.id !== 'todas' ? { borderColor: `color-mix(in oklab, var(--color-cat-${c.id}) 35%, var(--color-borda))` } : undefined}
               >
-                {c.id !== 'todas' ? <span className="size-2 rounded-full" style={{ backgroundColor: `var(--color-cat-${c.id})` }} /> : null}
+                {c.id !== 'todas' ? <Icone nome={c.icone} tamanho={18} style={ativa ? undefined : { color: `var(--color-cat-${c.id})` }} /> : null}
                 {c.nome}
                 <span className={`text-xs tabular-nums ${ativa ? 'opacity-70' : 'text-fraca'}`}>{contagem(c.id)}</span>
               </button>
             )
           })}
         </div>
-        <label className="relative w-full max-w-sm">
+        <label className="relative w-full max-w-md">
           <span className="sr-only">Filtrar ferramentas</span>
-          <Icone nome="buscar" tamanho={16} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-fraca" />
+          <Icone nome="buscar" tamanho={18} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-fraca" />
           <input
             type="search"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Filtrar: cortar, mp3, pdf…"
-            className="h-10 w-full rounded-full border border-borda bg-superficie pr-4 pl-10 text-sm text-tinta placeholder:text-fraca focus:border-acento focus:outline-none"
+            className="h-12 w-full rounded-full border border-borda bg-superficie pr-4 pl-11 text-base text-tinta placeholder:text-fraca focus:border-acento focus:outline-none"
           />
         </label>
       </div>
 
-      <div key={`${aba}|${termo}`} className="mt-10">
+      <div key={`${aba}|${termo}`} className="mt-12">
         {lista.length ? (
-          <GradeCartoes lista={lista} rotulo="Ferramentas" />
+          <GradeCartoes lista={lista} rotulo="Ferramentas" grande />
         ) : (
           <p className="py-16 text-center text-suave">
             Nenhuma ferramenta com “{busca}”.{' '}
