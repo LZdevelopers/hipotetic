@@ -32,23 +32,40 @@ function arrastar(rolagem, e, mover, fim) {
   let ultimo = x0
   let rolado = 0
   let moveu = false
+  // O que se arrasta nunca sai da área visível da linha do tempo: o mouse pode
+  // ir além (até para outro monitor), mas a borda para na beirada e a linha rola.
+  const limitar = (cx) => {
+    const v = rolagem.current
+    if (!v) return cx
+    const r = v.getBoundingClientRect()
+    return Math.min(Math.max(cx, r.left + CAB + 1), r.right - 1)
+  }
   const aoMover = (ev) => {
     ultimo = ev.clientX
     if (Math.abs(ultimo - x0) > 3) moveu = true
-    mover(ultimo - x0 + rolado, ev)
+    const x = limitar(ultimo)
+    mover(x - x0 + rolado, { clientX: x })
   }
+  // Rolagem automática perto das bordas (só no sentido do movimento), mais
+  // rápida quanto mais longe o mouse estiver.
+  const ZONA = 40
   const relogio = setInterval(() => {
     const v = rolagem.current
     if (!v || !moveu) return
     const r = v.getBoundingClientRect()
-    const d = ultimo < r.left + CAB + 28 ? -14 : ultimo > r.right - 28 ? 14 : 0
+    const esq = r.left + CAB + ZONA
+    const dir = r.right - ZONA
+    let d = 0
+    if (ultimo < esq && ultimo < x0 - 2) d = -Math.min(30, 1 + (esq - ultimo) * 0.12)
+    else if (ultimo > dir && ultimo > x0 + 2) d = Math.min(30, 1 + (ultimo - dir) * 0.12)
     if (!d) return
     const antes = v.scrollLeft
     v.scrollLeft += d
     const real = v.scrollLeft - antes
     if (real) {
       rolado += real
-      mover(ultimo - x0 + rolado, { clientX: ultimo })
+      const x = limitar(ultimo)
+      mover(x - x0 + rolado, { clientX: x })
     }
   }, 16)
   const soltar = (ev) => {
@@ -56,7 +73,7 @@ function arrastar(rolagem, e, mover, fim) {
     alvo.removeEventListener('pointermove', aoMover)
     alvo.removeEventListener('pointerup', soltar)
     alvo.removeEventListener('pointercancel', soltar)
-    fim?.(ev)
+    fim?.({ clientX: limitar(ev?.clientX ?? ultimo) })
   }
   alvo.addEventListener('pointermove', aoMover)
   alvo.addEventListener('pointerup', soltar)
@@ -167,7 +184,6 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
   const [arrastando, setArrastando] = useState(null)
   const [reordenando, setReordenando] = useState(null) // { id, dx, destino }
   const ajusteRolagem = useRef(0)
-  const rolarPara = useRef(null) // posição absoluta da rolagem no próximo render
   const ancora = useRef(null) // zoom: { t, xTela } fica parado na tela
   const voltarAjuste = useRef(false)
 
@@ -235,10 +251,6 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
 
   useLayoutEffect(() => {
     const v = rolagem.current
-    if (v && rolarPara.current != null) {
-      v.scrollLeft = rolarPara.current
-      rolarPara.current = null
-    }
     if (v && ajusteRolagem.current) {
       v.scrollLeft += ajusteRolagem.current
       ajusteRolagem.current = 0
@@ -334,12 +346,11 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
     congelar()
     // Estender o começo do 1º clipe: folga à esquerda para o trecho escondido caber.
     const folga = lado === 'inicio' && !imagem ? Math.max(0, c0.inicio / c0.velocidade - base) : 0
-    if (lado === 'inicio' && !imagem) {
-      // A vista vai até o começo do trecho escondido (que fica todo à mostra).
-      if (folga) setDesloc(folga)
-      const s0 = rolagem.current?.scrollLeft ?? 0
-      const xFantasma = (base - c0.inicio / c0.velocidade + folga) * k
-      rolarPara.current = Math.max(0, Math.min(s0 + folga * k, xFantasma - 12))
+    if (folga) {
+      // A folga entra à esquerda e a rolagem compensa: a borda continua embaixo
+      // do mouse. Arrastando para a esquerda, a linha rola e revela o trecho.
+      setDesloc(folga)
+      ajusteRolagem.current += folga * k
     }
     if (lado === 'inicio') setFixos({ inicios: [...inicios], id: c.id, dur: durOrig })
     setAparando({ id: c.id, lado })
@@ -577,17 +588,37 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
                       {temAntes ? (
                         <>
                           <span className="pointer-events-none absolute inset-y-0 left-3.5 w-1 bg-[repeating-linear-gradient(180deg,white_0_3px,transparent_3px_6px)] opacity-80" />
-                          <span className="pointer-events-none absolute top-0.5 left-5 rounded bg-black/70 px-1 text-[0.5625rem] font-bold text-white tabular-nums" title="Há trecho escondido antes: arraste a ponta para a esquerda">
+                          <button
+                            type="button"
+                            className="absolute top-0.5 z-20 rounded bg-black/75 px-1.5 py-px text-[0.625rem] font-bold text-white tabular-nums transition-colors hover:bg-acento left-5"
+                            title="Trecho escondido antes. Clique para trazer tudo de volta (ou arraste a ponta para a esquerda)"
+                            aria-label={`Restaurar o começo: ${tempo(c.inicio / c.velocidade)} escondidos`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              aoMudarClipe(c.id, { inicio: 0 })
+                            }}
+                          >
                             ‹ {tempo(c.inicio / c.velocidade)}
-                          </span>
+                          </button>
                         </>
                       ) : null}
                       {temDepois ? (
                         <>
                           <span className="pointer-events-none absolute inset-y-0 right-3.5 w-1 bg-[repeating-linear-gradient(180deg,white_0_3px,transparent_3px_6px)] opacity-80" />
-                          <span className="pointer-events-none absolute top-0.5 right-5 rounded bg-black/70 px-1 text-[0.5625rem] font-bold text-white tabular-nums" title="Há trecho escondido depois: arraste a ponta para a direita">
+                          <button
+                            type="button"
+                            className="absolute top-0.5 z-20 rounded bg-black/75 px-1.5 py-px text-[0.625rem] font-bold text-white tabular-nums transition-colors hover:bg-acento right-5"
+                            title="Trecho escondido depois. Clique para trazer tudo de volta (ou arraste a ponta para a direita)"
+                            aria-label={`Restaurar o fim: ${tempo(((fonte.duracao ?? c.fim) - c.fim) / c.velocidade)} escondidos`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              aoMudarClipe(c.id, { fim: fonte.duracao ?? c.fim })
+                            }}
+                          >
                             {tempo(((fonte.duracao ?? c.fim) - c.fim) / c.velocidade)} ›
-                          </span>
+                          </button>
                         </>
                       ) : null}
                       <span className={`pointer-events-none absolute left-4 max-w-[calc(100%-2rem)] truncate rounded bg-black/65 px-1 text-[0.625rem] font-semibold text-white tabular-nums ${fonte?.picos && !c.mudo && fonte.tipo === 'video' ? 'bottom-4' : 'bottom-1'}`}>
@@ -597,10 +628,10 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
                         {c.mudo ? 'mudo · ' : ''}
                         {tempo(pos.dur)}
                       </span>
-                      <span onPointerDown={aparar(c, i, 'inicio')} className={`absolute inset-y-0 left-0 z-10 grid w-3.5 cursor-ew-resize place-items-center rounded-l-lg ${sel ? 'bg-white' : 'bg-white/85 opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o início">
+                      <span onPointerDown={aparar(c, i, 'inicio')} onDoubleClick={() => fonte?.tipo === 'video' && aoMudarClipe(c.id, { inicio: 0 })} title="Arraste para aparar · duplo clique restaura o começo" className={`absolute inset-y-0 left-0 z-10 grid w-3.5 cursor-ew-resize place-items-center rounded-l-lg ${sel ? 'bg-white' : 'bg-white/85 opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o início">
                         <span className="h-5 w-0.5 rounded-full bg-black/45" />
                       </span>
-                      <span onPointerDown={aparar(c, i, 'fim')} className={`absolute inset-y-0 right-0 z-10 grid w-3.5 cursor-ew-resize place-items-center rounded-r-lg ${sel ? 'bg-white' : 'bg-white/85 opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o fim">
+                      <span onPointerDown={aparar(c, i, 'fim')} onDoubleClick={() => fonte?.tipo === 'video' && aoMudarClipe(c.id, { fim: fonte.duracao ?? c.fim })} title="Arraste para aparar · duplo clique restaura o fim" className={`absolute inset-y-0 right-0 z-10 grid w-3.5 cursor-ew-resize place-items-center rounded-r-lg ${sel ? 'bg-white' : 'bg-white/85 opacity-0 group-hover:opacity-100'}`} aria-label="Aparar o fim">
                         <span className="h-5 w-0.5 rounded-full bg-black/45" />
                       </span>
                       {arrastando === c.id && aparando ? <span className="pointer-events-none absolute top-1 left-1/2 z-20 -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[0.6875rem] font-bold text-white tabular-nums">{tempo(pos.dur)}</span> : null}

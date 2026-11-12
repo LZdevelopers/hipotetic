@@ -324,14 +324,29 @@ export default [
       const original = await duracao()
       await arrastarX(t, inicio, 120)
       assert.notEqual(await duracao(), original, 'o trim deveria encurtar o clipe')
-      // Voltando (e passando do começo): o clipe e o trecho escondido continuam dentro da linha do tempo.
-      await arrastarX(t, inicio, -400, { soltar: false })
+      // Voltando: a borda fica embaixo do mouse desde o começo do arrasto…
+      const bordaSegue = await t.js(`const h = document.querySelector(${JSON.stringify(inicio)}); const r = h.getBoundingClientRect(); const x0 = r.left + r.width / 2
+        h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: x0, clientY: r.top + 5, pointerId: 1 }))
+        await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))
+        h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, clientX: x0 - 6, clientY: r.top + 5, pointerId: 1 }))
+        await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))
+        const r2 = h.getBoundingClientRect(); window.__x0 = x0
+        return Math.abs(r2.left + r2.width / 2 - (x0 - 6))`)
+      assert.ok(bordaSegue < 4, `a borda deveria seguir o mouse (diferença de ${bordaSegue}px)`)
+      // …e com o mouse muito além da borda (outro monitor), ela para na beirada e a linha rola sozinha.
+      await t.js(`const h = document.querySelector(${JSON.stringify(inicio)}); h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, clientX: -900, clientY: 10, pointerId: 1 }))`)
+      await t.esperar(1500)
       const dentro = await t.js(`const clipe = document.querySelector('main [aria-label^="Clipe 1"]').getBoundingClientRect()
         const vista = document.querySelector('main [aria-label="Zoom da linha do tempo"]').closest('div.flex.flex-col').querySelector('.overflow-auto').getBoundingClientRect()
-        return clipe.left >= vista.left + 96 - 2`)
-      await t.js(`const el = document.querySelector(${JSON.stringify(inicio)}); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 0, pointerId: 1 }))`)
-      assert.ok(dentro, 'o clipe saiu da tela pela esquerda')
+        return clipe.left >= vista.left + 96 - 2 && clipe.left <= vista.left + 96 + 30`)
+      await t.js(`const el = document.querySelector(${JSON.stringify(inicio)}); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: -900, pointerId: 1 }))`)
+      assert.ok(dentro, 'a borda deveria ficar na beirada visível da linha do tempo')
       assert.equal(await duracao(), original, 'voltando, o clipe deveria ficar inteiro de novo')
+      // Etiqueta do trecho escondido: um clique traz tudo de volta.
+      await arrastarX(t, inicio, 100)
+      assert.notEqual(await duracao(), original)
+      await t.js("document.querySelector('main button[aria-label^=\"Restaurar o começo\"]').click()")
+      await t.aguardar(`document.querySelector('[title="Duração do vídeo final"]').textContent === ${JSON.stringify(original)}`, 3000)
       // Zoom: aumenta a largura do clipe; "Ajustar" volta a caber tudo.
       const larg = () => t.js("return document.querySelector('main [aria-label^=\"Clipe 1\"]').getBoundingClientRect().width")
       const antes = await larg()
