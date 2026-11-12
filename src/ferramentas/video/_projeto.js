@@ -277,8 +277,11 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
   const soAudio = opcoes.soAudio || p.formato === 'mp3'
   const gif = p.formato === 'gif'
   if (!p.clipes.length) throw new ErroAmigavel('Adicione pelo menos um vídeo.')
-  const quadro = tamanhoFinal(p, fontes)
   const T = duracaoTotal(p)
+  const quadroVideo = tamanhoFinal(p, fontes)
+  const g = gif ? quadroGif(p, quadroVideo) : null
+  const quadro = gif ? { w: par(g.w), h: par(g.h) } : quadroVideo
+  const fpsSaida = gif ? g.fps : p.fps || 30
 
   fontesSimples = (pp) => fontes[pp.clipes[0].fonte]?.tipo === 'video'
   if (gif && T > MAX_SEGUNDOS_GIF + 0.05) throw new ErroAmigavel(`GIF só para vídeos de até ${MAX_SEGUNDOS_GIF} segundos.`)
@@ -330,12 +333,13 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     const d = duracaoClipe(c)
     // Imagem como clipe: a foto parada pelo tempo do clipe.
     const ehImagem = fonte.tipo === 'imagem'
-    const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : [])
+    const trecho = c.fim - c.inicio
+    const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : ['-ss', String(fixo(c.inicio)), '-t', String(fixo(trecho))])
     f.push(
-      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${p.fps || 30},format=yuv420p[v${i}]`,
+      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p[v${i}]`,
     )
-    if (!ehImagem && fonte.temAudio && !c.mudo && c.volume > 0) {
-      f.push(`[${k}:a]atrim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
+    if (!ehImagem && !gif && fonte.temAudio && !c.mudo && c.volume > 0) {
+      f.push(`[${k}:a]atrim=0:${fixo(trecho)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
     } else {
       f.push(`anullsrc=r=48000:cl=stereo,atrim=0:${fixo(d)},aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`)
     }
@@ -403,10 +407,10 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
       alturaPx = par(c.h * H)
       if (c.tipo === 'imagem') origem = `[${entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, parado)}:v]`
       else {
-        const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo)
         const d = Math.min(c.fim - c.inicio, fonte.duracao || c.fim - c.inicio)
+        const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ['-t', String(fixo(d + 0.1))])
         origem = `[${k}:v]trim=0:${fixo(d)},setpts=PTS-STARTPTS+${fixo(c.inicio)}/TB,`
-        if (fonte.temAudio && c.volume > 0) {
+        if (!gif && fonte.temAudio && c.volume > 0) {
           const atraso = Math.round(c.inicio * 1000)
           f.push(`[${k}:a]atrim=0:${fixo(d)},asetpts=PTS-STARTPTS,volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${atraso}|${atraso}[s${i}]`)
           sons.push(`[s${i}]`)
@@ -456,10 +460,10 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     f.push(`[ac]${efeitosSom.join(',')}[aq]`)
     a = 'aq'
   }
-  if (p.musica) {
+  if (p.musica && !gif) {
     const mu = { fadeIn: 0, fadeOut: 0, ducking: false, ...p.musica }
     const fonte = fontes[mu.fonte]
-    const k = entrada(nomeNoFs(mu.fonte, fonte.arquivo), fonte.arquivo, mu.repetir ? ['-stream_loop', '-1'] : [])
+    const k = entrada(nomeNoFs(mu.fonte, fonte.arquivo), fonte.arquivo, [...(mu.repetir ? ['-stream_loop', '-1'] : []), '-t', String(fixo(T + 0.1))])
     const saidaMus = mu.fadeOut || Math.min(2, T / 4)
     f.push(`[${k}:a]atrim=0:${fixo(T)},asetpts=PTS-STARTPTS,volume=${fixo(mu.volume)},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo${mu.fadeIn ? `,afade=t=in:st=0:d=${fixo(mu.fadeIn)}` : ''},afade=t=out:st=${fixo(Math.max(0, T - saidaMus))}:d=${fixo(saidaMus)}[mus]`)
     if (mu.ducking) {
@@ -498,16 +502,30 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
   }
 
   if (gif) {
-    const g = quadroGif(p, quadro)
-    f.push(`[${v}]fps=${g.fps},scale=${g.w}:-1:flags=lanczos,split[ga][gb]`, '[ga]palettegen=stats_mode=diff[gp]', '[gb][gp]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[gif]', `[${a}]anullsink`)
-    const dados = await executarFfmpeg({
+    // 1ª passada: o projeto montado no tamanho do GIF, sem som (o progresso anda de verdade).
+    f.push(`[${a}]anullsink`)
+    const meio = await executarFfmpeg({
       entradas: [...entradas].map(([nome, d]) => ({ nome, dados: d })),
-      args: [...args, '-filter_complex', f.join(';'), '-map', '[gif]', '-t', String(fixo(T)), '-loop', g.loop ? '0' : '-1'],
-      saida: 'saida.gif',
+      args: [...args, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-t', String(fixo(T)), '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-pix_fmt', 'yuv420p'],
+      saida: 'gif-meio.mp4',
       duracao: T,
-      aoProgredir: ctx.progresso,
+      aoProgredir: (x, r) => ctx.progresso(x == null ? null : x * 0.85, x == null ? r : 'Criando o GIF'),
       sinal: ctx.sinal,
       rotulo: 'Criando o GIF',
+    }).catch((erro) => {
+      if (erro?.name === 'AbortError') throw erro
+      console.error(erro?.log)
+      throw new ErroAmigavel('Não foi possível criar o GIF.')
+    })
+    // 2ª passada (arquivo pequeno, rápida): paleta otimizada para as cores do vídeo.
+    const dados = await executarFfmpeg({
+      entradas: [{ nome: 'gif-meio.mp4', dados: meio }],
+      args: ['-i', 'gif-meio.mp4', '-vf', 'split[ga][gb];[ga]palettegen=stats_mode=diff[gp];[gb][gp]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle', '-loop', g.loop ? '0' : '-1'],
+      saida: 'saida.gif',
+      duracao: T,
+      aoProgredir: (x) => ctx.progresso(0.85 + (x ?? 0) * 0.15, 'Otimizando as cores do GIF'),
+      sinal: ctx.sinal,
+      rotulo: 'Otimizando as cores do GIF',
     }).catch((erro) => {
       if (erro?.name === 'AbortError') throw erro
       console.error(erro?.log)

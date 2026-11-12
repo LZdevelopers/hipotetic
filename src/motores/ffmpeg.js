@@ -10,6 +10,8 @@
  * de arquivos virtual ao terminar, para não acumular memória.
  */
 
+import { ErroAmigavel } from '../nucleo/tarefa'
+
 const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm'
 
 let carregando = null
@@ -33,7 +35,51 @@ export function obterFfmpeg(aoProgredir) {
   return carregando
 }
 
+/** Sem nenhuma linha de log por este tempo, o worker travou (ou ficou sem memória). */
+const TEMPO_TRAVADO = 120_000
+
 const segundos = (h, m, s) => Number(h) * 3600 + Number(m) * 60 + Number(s)
+
+/**
+ * Coloca as entradas no sistema de arquivos do ffmpeg. Arquivos (Blob/File)
+ * são MONTADOS (WORKERFS): o ffmpeg lê sob demanda, sem copiar o arquivo
+ * inteiro para a memória — um vídeo de 1 GB não estoura mais o worker.
+ * Devolve { caminhos: Map(nome → caminho), limpar() }.
+ */
+async function prepararEntradas(ff, entradas) {
+  const caminhos = new Map()
+  const montados = []
+  const escritos = []
+  for (const [i, e] of entradas.entries()) {
+    if (e.dados instanceof Uint8Array) {
+      await ff.writeFile(e.nome, e.dados)
+      escritos.push(e.nome)
+      continue
+    }
+    const dir = `/entrada${i}`
+    try {
+      await ff.createDir(dir)
+      await ff.mount('WORKERFS', { blobs: [{ name: e.nome, data: e.dados }] }, dir)
+      montados.push(dir)
+      caminhos.set(e.nome, `${dir}/${e.nome}`)
+    } catch {
+      // Sem WORKERFS: copia (o jeito antigo).
+      await ff.deleteDir(dir).catch(() => {})
+      await ff.writeFile(e.nome, new Uint8Array(await e.dados.arrayBuffer()))
+      escritos.push(e.nome)
+    }
+  }
+  return {
+    caminhos,
+    async limpar() {
+      for (const dir of montados) {
+        await ff.unmount(dir).catch(() => {})
+        await ff.deleteDir(dir).catch(() => {})
+      }
+      for (const nome of escritos) await ff.deleteFile(nome).catch(() => {})
+    },
+  }
+}
 
 /**
  * Executa um comando do ffmpeg.
@@ -55,14 +101,15 @@ export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgred
     if (sinal?.aborted) throw new DOMException('Cancelado', 'AbortError')
 
     aoProgredir?.(null, 'Preparando os arquivos')
-    for (const e of entradas) {
-      const dados = e.dados instanceof Uint8Array ? e.dados : new Uint8Array(await e.dados.arrayBuffer())
-      await ff.writeFile(e.nome, dados)
-    }
+    const preparadas = await prepararEntradas(ff, entradas)
+    const argsFinais = args.map((a) => preparadas.caminhos.get(a) ?? a)
 
     let total = duracao ?? null
     let ultimasLinhas = []
+    let ultimoSinal = Date.now()
+    let travou = false
     const aoLog = ({ message }) => {
+      ultimoSinal = Date.now()
       ultimasLinhas = [...ultimasLinhas.slice(-30), message]
       ouvinte?.(message)
       if (!total) {
@@ -76,8 +123,16 @@ export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgred
     aoProgredir?.(total ? 0 : null, rotulo)
 
     const saidas = [saida].flat()
+    // Vigia: o ffmpeg escreve no log o tempo todo; silêncio longo = travou. Encerra em vez de esperar para sempre.
+    const vigia = setInterval(() => {
+      if (Date.now() - ultimoSinal < TEMPO_TRAVADO) return
+      travou = true
+      clearInterval(vigia)
+      ff.terminate()
+      carregando = null
+    }, 5000)
     try {
-      const codigo = await ff.exec([...args, '-y', ...(Array.isArray(saida) ? [] : [saida])], -1, { signal: sinal })
+      const codigo = await ff.exec([...argsFinais, '-y', ...(Array.isArray(saida) ? [] : [saida])], -1, { signal: sinal })
       if (sinal?.aborted) throw new DOMException('Cancelado', 'AbortError')
       if (codigo !== 0) {
         console.error('ffmpeg falhou:\n' + ultimasLinhas.join('\n'))
@@ -88,9 +143,16 @@ export async function executarFfmpeg({ entradas, args, saida, duracao, aoProgred
       const lidos = []
       for (const nome of saidas) lidos.push(await ff.readFile(nome))
       return Array.isArray(saida) ? lidos : lidos[0]
+    } catch (erro) {
+      if (travou) throw new ErroAmigavel('O processamento parou de responder — o navegador provavelmente ficou sem memória. Tente um trecho menor, uma resolução menor ou feche outras abas.')
+      throw erro
     } finally {
+      clearInterval(vigia)
       ff.off('log', aoLog)
-      for (const nome of [...entradas.map((e) => e.nome), ...saidas]) await ff.deleteFile(nome).catch(() => {})
+      if (!travou) {
+        await preparadas.limpar()
+        for (const nome of saidas) await ff.deleteFile(nome).catch(() => {})
+      }
     }
   } catch (erro) {
     // Cancelar no meio deixa a instância em estado indefinido: descarta.
@@ -113,16 +175,14 @@ export async function executarComVariasSaidas({ entradas, args, prefixo, aoProgr
   await anterior
   try {
     const ff = await obterFfmpeg(aoProgredir)
-    for (const e of entradas) {
-      await ff.writeFile(e.nome, e.dados instanceof Uint8Array ? e.dados : new Uint8Array(await e.dados.arrayBuffer()))
-    }
+    const preparadas = await prepararEntradas(ff, entradas)
     const aoLog = ({ message }) => {
       const t = /time=\s*(\d+):(\d+):([\d.]+)/.exec(message)
       if (t && duracao) aoProgredir?.(Math.min(segundos(t[1], t[2], t[3]) / duracao, 0.99), rotulo)
     }
     ff.on('log', aoLog)
     try {
-      const codigo = await ff.exec([...args, '-y'], -1, { signal: sinal })
+      const codigo = await ff.exec([...args.map((a) => preparadas.caminhos.get(a) ?? a), '-y'], -1, { signal: sinal })
       if (codigo !== 0) throw new Error('ffmpeg')
       const nomes = (await ff.listDir('/'))
         .filter((n) => !n.isDir && n.name.startsWith(prefixo))
@@ -136,7 +196,7 @@ export async function executarComVariasSaidas({ entradas, args, prefixo, aoProgr
       return saidas
     } finally {
       ff.off('log', aoLog)
-      for (const e of entradas) await ff.deleteFile(e.nome).catch(() => {})
+      await preparadas.limpar()
     }
   } catch (erro) {
     if (erro?.name === 'AbortError') {
