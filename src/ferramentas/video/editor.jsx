@@ -710,6 +710,24 @@ export default function EditorVideo() {
   }
   const agora = () => palco.current?.tempo() ?? 0
 
+  /**
+   * Prévia ao arrastar bordas na linha do tempo (como no CapCut): o player
+   * pausa e mostra o quadro exato da borda; ao soltar (t = null), volta.
+   */
+  const tempoAntesDaPrevia = useRef(null)
+  const aoPrevia = (t) => {
+    if (t == null) {
+      if (tempoAntesDaPrevia.current != null) palco.current?.buscar(tempoAntesDaPrevia.current)
+      tempoAntesDaPrevia.current = null
+      return
+    }
+    if (tempoAntesDaPrevia.current == null) {
+      tempoAntesDaPrevia.current = agora()
+      palco.current?.pausar()
+    }
+    palco.current?.buscar(t)
+  }
+
   /** Lê os arquivos e os coloca onde fazem sentido (clipes, camadas ou música). */
   const adicionar = async (lista, destino) => {
     const arquivos = [...(lista ?? [])].filter((a) => a.size).sort(ordemNatural)
@@ -1410,6 +1428,7 @@ export default function EditorVideo() {
             aoMenu={abrirMenu}
             aoDividir={acoes.dividir}
             aoRemover={acoes.remover}
+            aoPrevia={aoPrevia}
             agora={agora}
           />
         </div>

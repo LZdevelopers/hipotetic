@@ -166,7 +166,7 @@ function BotaoLinha({ rotulo, icone, onClick, disabled, children }) {
  * ref: { mover(t, seguir) } — posiciona o cursor sem re-renderizar.
  */
 export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
-  { p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoReordenar, aoAdicionar, aoMenu, aoDividir, aoRemover, agora },
+  { p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoReordenar, aoAdicionar, aoMenu, aoDividir, aoRemover, aoPrevia, agora },
   ref,
 ) {
   const total = duracaoTotal(p)
@@ -186,6 +186,9 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
   const ajusteRolagem = useRef(0)
   const ancora = useRef(null) // zoom: { t, xTela } fica parado na tela
   const voltarAjuste = useRef(false)
+  // Prévia ao arrastar uma borda: o player mostra o quadro exato daquela borda.
+  const previaPendente = useRef(null) // { tipo: 'clipe' | 'camada', id, lado }
+  const cursorTravado = useRef(null) // enquanto arrasta, o cursor fica na borda
 
   useLayoutEffect(() => {
     const el = rolagem.current
@@ -238,7 +241,7 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
   // Cursor de reprodução: movido direto (60 vezes por segundo, sem render).
   const mover = (t, seguir = false) => {
     const { pps: k, desloc: dl } = atual.current
-    const px = (t + dl) * k
+    const px = ((cursorTravado.current ?? t) + dl) * k
     if (linhaCursor.current) linhaCursor.current.style.transform = `translateX(${CAB + px}px)`
     if (pinoCursor.current) pinoCursor.current.style.transform = `translateX(${px}px)`
     const v = rolagem.current
@@ -259,6 +262,26 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
       const { t, xTela } = ancora.current
       v.scrollLeft = Math.max(0, (t + desloc) * pps - xTela)
       ancora.current = null
+    }
+    // Arrastando uma borda: leva o player ao quadro dela (depois do render, com o projeto já atualizado).
+    const pv = previaPendente.current
+    if (pv && aoPrevia) {
+      previaPendente.current = null
+      if (pv.tipo === 'clipe') {
+        const i = p.clipes.findIndex((c) => c.id === pv.id)
+        if (i >= 0) {
+          const ini = inicios[i]
+          const dur = duracaoClipe(p.clipes[i])
+          cursorTravado.current = pv.lado === 'inicio' ? posicoes[i].left : ini + dur
+          aoPrevia(pv.lado === 'inicio' ? ini + 0.001 : Math.max(ini, ini + dur - 0.034))
+        }
+      } else {
+        const cam = p.camadas.find((c) => c.id === pv.id)
+        if (cam) {
+          cursorTravado.current = pv.lado === 'fim' ? cam.fim : cam.inicio
+          aoPrevia(pv.lado === 'fim' ? Math.max(cam.inicio, cam.fim - 0.02) : cam.inicio + 0.001)
+        }
+      }
     }
     mover(agora())
   })
@@ -300,6 +323,11 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
     }
   }
   const soltar = () => {
+    previaPendente.current = null
+    if (cursorTravado.current != null) {
+      cursorTravado.current = null
+      aoPrevia?.(null) // o player volta para onde estava
+    }
     setGuia(null)
     setFixos(null)
     setAparando(null)
@@ -342,7 +370,9 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
     const durOrig = duracaoClipe(c)
     const max = imagem ? 600 : (fonte?.duracao ?? c.fim)
     const outros = inicios.flatMap((s, j) => (j === i ? [] : [s, s + duracaoClipe(p.clipes[j])]))
-    const lista = [agora(), 0, ...outros, ...p.camadas.flatMap((y) => [y.inicio, y.fim])]
+    // Ímã: cursor, começo, outros clipes e camadas — mas não a própria borda de onde se parte (seguraria a borda sem motivo).
+    const pontoDePartida = lado === 'inicio' ? base : base + durOrig
+    const lista = [agora(), 0, ...outros, ...p.camadas.flatMap((y) => [y.inicio, y.fim])].filter((q) => Math.abs(q - pontoDePartida) > 1e-3)
     congelar()
     // Estender o começo do 1º clipe: folga à esquerda para o trecho escondido caber.
     const folga = lado === 'inicio' && !imagem ? Math.max(0, c0.inicio / c0.velocidade - base) : 0
@@ -369,13 +399,16 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
           if (imagem) {
             const d = Math.min(Math.max(delta, -base), durOrig - 0.2)
             aoMudarClipe(c.id, { inicio: 0, fim: Math.min(600, durOrig - d) })
+            if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'clipe', id: c.id, lado }
           } else aoMudarClipe(c.id, { inicio: Math.min(Math.max(0, c0.inicio + delta * c0.velocidade), c0.fim - 0.1) })
+          if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'clipe', id: c.id, lado }
         } else {
           let borda = base + durOrig + dt
           const g = grudar(borda, lista, k)
           setGuia(g)
           if (g != null) borda = g
           aoMudarClipe(c.id, { fim: Math.max(Math.min(max, c0.inicio + (borda - base) * c0.velocidade), c0.inicio + 0.1) })
+          if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'clipe', id: c.id, lado }
         }
       },
       () => {
@@ -396,6 +429,7 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
     const lista = [agora(), 0, total, ...inicios, ...inicios.map((s, i) => s + duracaoClipe(p.clipes[i])), ...p.camadas.filter((c) => c.id !== cam.id).flatMap((c) => [c.inicio, c.fim])]
     congelar()
     setArrastando(cam.id)
+    const ladoPrevia = modo === 'fim' ? 'fim' : 'inicio'
     arrastar(
       rolagem,
       e,
@@ -411,18 +445,21 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
           setGuia(gi != null && inicio === gi ? gi : gf != null && inicio === gf - d ? gf : null)
           inicio = Math.min(Math.max(0, inicio), Math.max(0, total - d))
           aoMudarCamada(cam.id, { inicio, fim: inicio + d })
+          if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'camada', id: cam.id, lado: ladoPrevia }
         } else if (modo === 'inicio') {
           let t = c0.inicio + dt
           const g = grudar(t, lista, k)
           setGuia(g)
           if (g != null) t = g
           aoMudarCamada(cam.id, { inicio: Math.min(Math.max(0, t), c0.fim - 0.2) })
+          if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'camada', id: cam.id, lado: ladoPrevia }
         } else {
           let t = c0.fim + dt
           const g = grudar(t, lista, k)
           setGuia(g)
           if (g != null) t = g
           aoMudarCamada(cam.id, { fim: Math.max(Math.min(total, t), c0.inicio + 0.2) })
+          if (Math.abs(dx) >= 2) previaPendente.current = { tipo: 'camada', id: cam.id, lado: ladoPrevia }
         }
       },
       soltar,

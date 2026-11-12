@@ -359,6 +359,40 @@ export default [
     },
   },
   {
+    nome: 'video/editor: arrastando uma borda, o player mostra aquele quadro (e volta ao soltar)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      const seg = (txt) => { const [m, s] = txt.trim().split(':'); return Number(m) * 60 + Number(s) }
+      const relogio = () => t.js("return document.querySelector('main section[aria-label=Player] p.font-display span').textContent")
+      const quadros = () => t.js('return new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))')
+      await t.clicar('Texto')
+      // Cursor em ~0:01 antes de arrastar.
+      await t.js(`const r = document.querySelector('main [aria-label="Zoom da linha do tempo"]').closest('div.flex.flex-col').querySelector('.overflow-auto .sticky.top-0 > div:last-child'); const b = r.getBoundingClientRect()
+        r.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: b.left + 1 + (b.width - 110) * 0.33, pointerId: 2 })); r.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 2 }))`)
+      await quadros()
+      const antes = await relogio()
+      // Arrasta o fim da camada de texto para a esquerda, sem soltar.
+      await arrastarX(t, 'main [aria-label^="Camada Texto"] [aria-label="Fim da camada"]', -90, { soltar: false })
+      await quadros()
+      const ate = await t.js(`return [...document.querySelectorAll('main aside label')].find((x) => x.firstChild?.textContent?.trim() === 'Até').querySelector('input').value`)
+      const durante = await relogio()
+      assert.ok(Math.abs(seg(durante) - seg(ate)) <= 0.1, `o player deveria estar no fim da camada (${ate}), está em ${durante}`)
+      await t.js("document.querySelector('main [aria-label^=\"Camada Texto\"] [aria-label=\"Fim da camada\"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1 }))")
+      await quadros()
+      assert.equal(await relogio(), antes, 'ao soltar, o player volta para onde estava')
+      // Fim do clipe: mostra o último quadro do trecho.
+      await arrastarX(t, 'main [aria-label^="Clipe 1"] [aria-label="Aparar o fim"]', -80, { soltar: false })
+      await quadros()
+      const total = await t.js("return document.querySelector('[title=\"Duração do vídeo final\"]').textContent.replace('/', '')")
+      const noFim = await relogio()
+      assert.ok(Math.abs(seg(noFim) - seg(total)) <= 0.1, `o player deveria estar no fim do clipe (${total}), está em ${noFim}`)
+      await t.js("document.querySelector('main [aria-label^=\"Clipe 1\"] [aria-label=\"Aparar o fim\"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1 }))")
+      await quadros()
+      assert.equal(await relogio(), antes)
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {
