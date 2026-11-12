@@ -43,6 +43,21 @@ const campoRecorte = (t, rotulo, valor) =>
   t.js(`const el = document.querySelector('main input[aria-label="${rotulo} do crop em %"]')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '${valor}')
     el.dispatchEvent(new Event('input', { bubbles: true }))`)
+/** Exportar vídeo: abre o modal e confirma (com mudanças opcionais nos campos antes). */
+async function exportarVideo(t, antes) {
+  await t.clicar('Exportar vídeo')
+  await t.aguardar("document.querySelector('main dialog[open] [data-exportar]')", 5000)
+  if (antes) await antes()
+  await t.js("document.querySelector('main dialog[open] [data-exportar]').click()")
+}
+/** Opção (cartão) dentro do modal de exportar. */
+const opcaoModal = (t, texto) => t.js(`[...document.querySelectorAll('main dialog[open] [role=radio]')].find((b) => b.textContent.trim().startsWith(${JSON.stringify(texto)})).click()`)
+/** Arrasta um elemento da linha do tempo na horizontal (eventos de ponteiro, passo a passo). */
+const arrastarX = (t, seletor, dx, { soltar = true } = {}) =>
+  t.js(`const el = document.querySelector(${JSON.stringify(seletor)}); const r = el.getBoundingClientRect(); const x0 = r.left + r.width / 2
+    const ev = (tipo, x) => el.dispatchEvent(new PointerEvent(tipo, { bubbles: true, button: 0, clientX: x, clientY: r.top + r.height / 2, pointerId: 1 }))
+    ev('pointerdown', x0); for (let i = 1; i <= 8; i += 1) ev('pointermove', x0 + (${dx} * i) / 8)
+    ${soltar ? 'ev("pointerup", x0 + ' + dx + ')' : ''}`)
 /** Aba do painel de propriedades. */
 const aba = (t, nome) => t.js(`[...document.querySelectorAll('main aside [role=radio]')].find((b) => b.textContent.trim() === '${nome}').click()`)
 
@@ -107,7 +122,7 @@ export default [
       await campoTempo(t, 'De', '0:01')
       await campoTempo(t, 'Até', '0:02.5')
       await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:03.5')", 5000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       perto(m.duracao, 3.5, 0.4, 'duração dos dois clipes')
@@ -129,7 +144,7 @@ export default [
       await aba(t, 'Clipe')
       await t.js("__t.digitar('Velocidade', '2')")
       await t.aguardar("document.querySelector('[title=\"Duração do vídeo final\"]').textContent.includes('0:01.5')", 5000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [320, 360], 'recorte de metade da largura')
@@ -147,7 +162,7 @@ export default [
       await t.js(`__t.enviar([__t.arquivo(await __t.imagem(200, 100), 'logo.png')], 'main input[aria-label="Escolher camada"]')`)
       await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'musica.wav')], 'main input[aria-label="Escolher musica"]')`)
       await t.aguardar("document.querySelectorAll('main [aria-label^=\"Camada \"][role=button]').length === 3 && document.querySelector('main').innerText.includes('musica.wav')", 20000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [640, 360])
@@ -175,7 +190,7 @@ export default [
       // Na prévia: a camada gira e o fundo branco some.
       await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"]')?.style.transform.includes('rotate(30deg)')", 5000)
       await t.aguardar("document.querySelector('main [aria-label=\"Camada: imagem\"] img')?.src.startsWith('blob:')", 5000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [640, 360])
@@ -197,7 +212,7 @@ export default [
         const ev = (tipo, x) => el.dispatchEvent(new PointerEvent(tipo, { bubbles: true, button: 0, clientX: x, clientY: r.top + 5, pointerId: 1 }))
         ev('pointerdown', r.left + r.width / 2); ev('pointermove', r.left + r.width / 2 - 20); ev('pointermove', trilha.left + 4); ev('pointerup', trilha.left + 4)`)
       await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-label').includes('foto.png')", 5000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [640, 360])
@@ -222,7 +237,7 @@ export default [
       await t.clicar('Elipse')
       await t.js("__t.digitar('Intensidade', '80')")
       await t.aguardar("document.querySelector('main [aria-label=\"Camada: desfoque\"] div')?.style.borderRadius === '50%'", 5000)
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [640, 360])
@@ -252,6 +267,83 @@ export default [
     },
   },
   {
+    nome: 'video/editor: modal de exportar — renomear, qualidade com tamanho estimado e GIF',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      // Renomear pelo nome no topo do editor.
+      await t.js("document.querySelector('main button[aria-label^=\"Renomear o arquivo\"]').click()")
+      await t.aguardar("document.querySelector('main input[aria-label=\"Nome do arquivo\"]')", 3000)
+      await t.js(`const el = document.querySelector('main input[aria-label="Nome do arquivo"]')
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'Minha viagem')
+        el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); el.blur()`)
+      await t.aguardar("document.querySelector('main button[aria-label=\"Renomear o arquivo: Minha viagem\"]')", 3000)
+      // Os seletores de formato/resolução saíram do topo.
+      assert.ok(!(await t.js("return Boolean(document.querySelector('main select[title=\"Formato do vídeo final\"]'))")), 'o formato deveria estar só no modal')
+      await exportarVideo(t, async () => {
+        assert.equal(await t.js("return document.querySelector('main dialog[open] input[aria-label=\"Nome do arquivo\"]').value"), 'Minha viagem')
+        // Cada qualidade mostra o tamanho estimado; máxima > mínima.
+        const mb = (txt) => Number(txt.replace(/[^\d,]/g, '').replace(',', '.')) * (txt.includes('KB') ? 1 / 1024 : 1)
+        const tamanhos = await t.js("return [...document.querySelectorAll('main dialog[open] [role=radio]')].filter((b) => /^(Máxima|Mínima)/.test(b.textContent.trim())).map((b) => b.textContent)")
+        assert.ok(mb(tamanhos[0].split('~')[1]) > mb(tamanhos[1].split('~')[1]), `estimativas: ${tamanhos}`)
+        await opcaoModal(t, 'GIF')
+        await t.aguardar("document.querySelector('main dialog[open] [data-exportar]').textContent.includes('GIF')", 3000)
+      })
+      await t.aguardarResultado(300000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.tipo, 'gif')
+      assert.equal(r.nome, 'Minha viagem.gif')
+      assert.equal(r.largura, 480)
+    },
+  },
+  {
+    nome: 'video/editor: exportar com tamanho exato (MB) em MKV',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await exportarVideo(t, async () => {
+        await opcaoModal(t, 'MKV')
+        await t.js(`const el = document.querySelector('main dialog[open] input[aria-label="Tamanho do arquivo em MB"]'); el.focus()
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '1')
+          el.dispatchEvent(new Event('input', { bubbles: true }))`)
+        await t.aguardar("document.querySelector('main dialog[open] [data-estimativa]').textContent.includes('1 MB') || document.querySelector('main dialog[open] [data-estimativa]').textContent.includes('KB')", 3000)
+      })
+      await t.aguardarResultado(300000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.ok(r.nome.endsWith('-editado.mkv'), r.nome)
+      assert.ok(r.tamanho < 1.3 * 1024 * 1024, `deveria caber em ~1 MB: ${r.tamanho}`)
+    },
+  },
+  {
+    nome: 'video/editor: timeline — aparar o começo e voltar não sai da tela; zoom',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      const inicio = 'main [aria-label^="Clipe 1"] [aria-label="Aparar o início"]'
+      const duracao = () => t.js("return document.querySelector('[title=\"Duração do vídeo final\"]').textContent")
+      const original = await duracao()
+      await arrastarX(t, inicio, 120)
+      assert.notEqual(await duracao(), original, 'o trim deveria encurtar o clipe')
+      // Voltando (e passando do começo): o clipe e o trecho escondido continuam dentro da linha do tempo.
+      await arrastarX(t, inicio, -400, { soltar: false })
+      const dentro = await t.js(`const clipe = document.querySelector('main [aria-label^="Clipe 1"]').getBoundingClientRect()
+        const vista = document.querySelector('main [aria-label="Zoom da linha do tempo"]').closest('div.flex.flex-col').querySelector('.overflow-auto').getBoundingClientRect()
+        return clipe.left >= vista.left + 96 - 2`)
+      await t.js(`const el = document.querySelector(${JSON.stringify(inicio)}); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 0, pointerId: 1 }))`)
+      assert.ok(dentro, 'o clipe saiu da tela pela esquerda')
+      assert.equal(await duracao(), original, 'voltando, o clipe deveria ficar inteiro de novo')
+      // Zoom: aumenta a largura do clipe; "Ajustar" volta a caber tudo.
+      const larg = () => t.js("return document.querySelector('main [aria-label^=\"Clipe 1\"]').getBoundingClientRect().width")
+      const antes = await larg()
+      await t.js("document.querySelector('main button[aria-label=\"Aumentar zoom\"]').click()")
+      await t.esperar(150)
+      assert.ok((await larg()) > antes * 1.4, 'o zoom deveria aumentar o clipe')
+      await t.js("document.querySelector('main button[aria-label=\"Ajustar à largura\"]').click()")
+      await t.esperar(150)
+      assert.ok(Math.abs((await larg()) - antes) < 3, 'ajustar deveria voltar à largura inicial')
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {
@@ -259,7 +351,7 @@ export default [
       await t.js("__t.digitar('Saturação', '0')")
       await t.js("__t.digitar('Contraste', '120')")
       await t.js("__t.digitar('Brilho', '10')")
-      await t.clicar('Exportar vídeo')
+      await exportarVideo(t)
       await t.aguardarResultado(300000)
       // Um quadro do resultado: em preto e branco, R = G = B.
       const px = await t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')

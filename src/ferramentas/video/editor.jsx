@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BotaoAcao, CampoTempo, SeletorCompacto, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
+import { BotaoAcao, CampoTempo, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
 import { MenuContexto } from '../../componentes/editor/MenuContexto'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
 import { EXTENSOES_AUDIO, EXTENSOES_VIDEO, infoMidia, processarVideo } from '../../motores/midia'
 import { EXTENSOES_IMAGEM } from '../../motores/imagem'
-import { extensaoDe, trocarExtensao } from '../../nucleo/arquivos'
+import { extensaoDe } from '../../nucleo/arquivos'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
 import { useTarefa } from '../../nucleo/tarefa'
+import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { FONTES, PADRAO_AUDIO, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_TEXTO, duracaoTotal, exportarProjeto, localizar, tamanhoFinal } from './_projeto'
+import { FONTES, PADRAO_AUDIO, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, localizar, quadroGif, tamanhoFinal } from './_projeto'
 
-const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, formato: 'mp4', resolucao: 0, qualidade: 'alta' }
+const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
 /** Botão liga/desliga pequeno (negrito, itálico…). */
 function Alternar({ ativo, aoMudar, rotulo, children, className = '' }) {
@@ -58,7 +59,10 @@ function metadadosVideo(url) {
   })
 }
 
-/** Quatro quadros pequenos para a linha do tempo. */
+/**
+ * Tira de miniaturas para a linha do tempo: um quadro a cada `passo`
+ * segundos (entre 6 e 48 quadros), na proporção do vídeo.
+ */
 async function quadrosDe(url, duracao) {
   const v = document.createElement('video')
   v.muted = true
@@ -68,24 +72,51 @@ async function quadrosDe(url, duracao) {
     v.onloadeddata = ok
     v.onerror = falha
   })
-  const alto = 72
+  const alto = 104 // 2× a altura do clipe na linha do tempo (fica nítido)
   const largo = Math.max(1, Math.round((v.videoWidth / v.videoHeight) * alto))
   const cv = document.createElement('canvas')
   cv.width = largo
   cv.height = alto
   const ctx = cv.getContext('2d')
-  const saida = []
-  for (const f of [0.08, 0.36, 0.64, 0.92]) {
+  const d = duracao || 1
+  const n = Math.min(48, Math.max(6, Math.round(d)))
+  const passo = d / n
+  const quadros = []
+  for (let k = 0; k < n; k += 1) {
     await new Promise((ok) => {
       v.onseeked = ok
-      v.currentTime = Math.max(0, (duracao || 1) * f)
+      v.currentTime = Math.min(d - 0.05, (k + 0.5) * passo)
     })
     ctx.drawImage(v, 0, 0, largo, alto)
-    saida.push(cv.toDataURL('image/jpeg', 0.6))
+    quadros.push(cv.toDataURL('image/jpeg', 0.62))
   }
   v.removeAttribute('src')
   v.load()
-  return saida
+  return { quadros, passoQuadros: passo }
+}
+
+/** Picos do som (0–1) a cada `passoPicos` segundos, para desenhar a onda. */
+async function picosDe(arquivo) {
+  if (arquivo.size > 250 * 1024 * 1024) return null // arquivo enorme: não vale decodificar só para a onda
+  const ctx = new OfflineAudioContext(1, 1, 8000)
+  const buf = await ctx.decodeAudioData(await arquivo.arrayBuffer())
+  const dados = buf.getChannelData(0)
+  const n = Math.min(6000, Math.max(100, Math.round(buf.duration * 25)))
+  const bloco = Math.max(1, Math.floor(dados.length / n))
+  const picos = new Array(n)
+  let max = 0
+  for (let i = 0; i < n; i += 1) {
+    let m = 0
+    const fim = Math.min(dados.length, (i + 1) * bloco)
+    for (let j = i * bloco; j < fim; j += 4) {
+      const a = Math.abs(dados[j])
+      if (a > m) m = a
+    }
+    picos[i] = m
+    if (m > max) max = m
+  }
+  const k = max > 0 ? 1 / max : 1
+  return { picos: picos.map((x) => Math.sqrt(x * k)), passoPicos: buf.duration / n }
 }
 
 async function lerFonte(arquivo, aoPreparar) {
@@ -115,6 +146,56 @@ async function lerFonte(arquivo, aoPreparar) {
     meta = await metadadosVideo(url)
   }
   return { arquivo, tipo: 'video', url, largura: meta.largura || info.largura, altura: meta.altura || info.altura, duracao: meta.duracao ?? info.duracao, temAudio: Boolean(info.temAudio) }
+}
+
+/** Nome do arquivo exportado, editável no lugar (clique para renomear). */
+function NomeArquivo({ nome, aoMudar, desativado }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(nome)
+  const cancelado = useRef(false)
+  if (editando) {
+    return (
+      <input
+        // eslint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          else if (e.key === 'Escape') {
+            cancelado.current = true
+            e.currentTarget.blur()
+          }
+        }}
+        onBlur={() => {
+          const n = limparNome(texto)
+          if (!cancelado.current && n && n !== nome) aoMudar(n)
+          cancelado.current = false
+          setEditando(false)
+        }}
+        aria-label="Nome do arquivo"
+        spellCheck={false}
+        className="h-7 w-full max-w-sm rounded-md border border-acento bg-superficie px-2 text-sm font-semibold text-tinta focus:outline-none"
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      disabled={desativado}
+      onClick={() => {
+        setTexto(nome)
+        setEditando(true)
+      }}
+      title="Renomear o arquivo exportado"
+      aria-label={`Renomear o arquivo: ${nome}`}
+      className="group -mx-1.5 flex h-7 max-w-full items-center gap-1.5 rounded-md px-1.5 text-left text-sm font-semibold text-tinta transition-colors hover:bg-superficie-2 disabled:pointer-events-none"
+    >
+      <span className="truncate">{nome}</span>
+      {desativado ? null : <Icone nome="caneta" tamanho={13} className="shrink-0 text-fraca group-hover:text-tinta" />}
+    </button>
+  )
 }
 
 /* ─── Painéis de propriedades ────────────────────────────────────────────── */
@@ -591,9 +672,14 @@ export default function EditorVideo() {
 
   const palco = useRef(null)
   const relogio = useRef(null)
-  const cabeca = useRef(null)
-  const larguraLinha = useRef(null)
-  const escalaLinha = useRef(1)
+  const linha = useRef(null)
+  const caixaPalco = useRef(null)
+  const relogioCheio = useRef(null)
+  const barraCheia = useRef(null)
+  const [cheia, setCheia] = useState(false)
+  const [controlesVisiveis, setControlesVisiveis] = useState(true)
+  const esconder = useRef(0)
+  const [exportando, setExportando] = useState(false)
   const raiz = useRef(null)
   const entradas = { clipes: useRef(null), camada: useRef(null), musica: useRef(null) }
 
@@ -616,9 +702,11 @@ export default function EditorVideo() {
   const pAtual = useRef(p)
   pAtual.current = p
   const aoTempo = (t) => {
-    const T = escalaLinha.current || duracaoTotal(pAtual.current)
+    const T = duracaoTotal(pAtual.current)
     if (relogio.current) relogio.current.textContent = tempo(t)
-    if (cabeca.current) cabeca.current.style.left = `${T ? (t / T) * 100 : 0}%`
+    if (relogioCheio.current) relogioCheio.current.textContent = tempo(t)
+    if (barraCheia.current) barraCheia.current.style.width = `${T ? Math.min(100, (t / T) * 100) : 0}%`
+    linha.current?.mover(t, palco.current?.tocando())
   }
   const agora = () => palco.current?.tempo() ?? 0
 
@@ -674,9 +762,16 @@ export default function EditorVideo() {
 
   /** Quadros da linha do tempo, sem travar a tela. */
   const gerarQuadros = (lista) => {
+    const juntar = (id, d) => setFontes((x) => (x[id] ? { ...x, [id]: { ...x[id], ...d } } : x))
     for (const f of lista.filter((l) => l.tipo === 'video')) {
       quadrosDe(f.url, f.duracao)
-        .then((quadros) => setFontes((x) => (x[f.id] ? { ...x, [f.id]: { ...x[f.id], quadros } } : x)))
+        .then((d) => juntar(f.id, d))
+        .catch(() => {})
+    }
+    // Onda do som (clipes com áudio e trilhas).
+    for (const f of lista.filter((l) => l.tipo === 'audio' || (l.tipo === 'video' && l.temAudio))) {
+      picosDe(f.arquivo)
+        .then((d) => d && juntar(f.id, d))
         .catch(() => {})
     }
   }
@@ -949,6 +1044,59 @@ export default function EditorVideo() {
     tarefa.reiniciar()
   }
 
+  // ─── Tela cheia do player ─────────────────────────────────────────────────
+  useEffect(() => {
+    const mudou = () => {
+      const agoraCheia = document.fullscreenElement === caixaPalco.current && Boolean(caixaPalco.current)
+      setCheia(agoraCheia)
+      setControlesVisiveis(true)
+      if (agoraCheia) {
+        setSelecao(null)
+        // O botão clicado não fica com o foco: o espaço passa a tocar/pausar.
+        document.activeElement?.blur?.()
+      }
+      requestAnimationFrame(() => aoTempo(agora()))
+    }
+    document.addEventListener('fullscreenchange', mudou)
+    return () => document.removeEventListener('fullscreenchange', mudou)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const alternarTelaCheia = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    else caixaPalco.current?.requestFullscreen?.().catch(() => setAviso('O navegador não deixou abrir em tela cheia.'))
+  }
+  const mostrarControles = () => {
+    setControlesVisiveis(true)
+    clearTimeout(esconder.current)
+    esconder.current = setTimeout(() => palco.current?.tocando() && setControlesVisiveis(false), 2600)
+  }
+  useEffect(() => {
+    if (cheia && tocando) mostrarControles()
+    else setControlesVisiveis(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cheia, tocando])
+  /** Barra de progresso da tela cheia: clicar/arrastar percorre o vídeo. */
+  const percorrerCheia = (e) => {
+    const barra = e.currentTarget
+    const ir = (clientX) => {
+      const r = barra.getBoundingClientRect()
+      palco.current?.buscar(Math.min(Math.max(0, (clientX - r.left) / r.width), 1) * total)
+    }
+    ir(e.clientX)
+    try {
+      barra.setPointerCapture(e.pointerId)
+    } catch {
+      /* evento sintético */
+    }
+    const mover = (ev) => ir(ev.clientX)
+    const soltar = () => {
+      barra.removeEventListener('pointermove', mover)
+      barra.removeEventListener('pointerup', soltar)
+    }
+    barra.addEventListener('pointermove', mover)
+    barra.addEventListener('pointerup', soltar)
+  }
+
   // Atalhos: espaço, S (dividir), Delete, setas, Ctrl+Z / Ctrl+Shift+Z, Enter/Esc no recorte.
   const teclas = useRef(null)
   teclas.current = (e) => {
@@ -971,6 +1119,7 @@ export default function EditorVideo() {
       e.preventDefault()
       palco.current?.alternar()
     } else if (e.key === 's' || e.key === 'S') acoes.dividir()
+    else if (e.key === 'f' || e.key === 'F') alternarTelaCheia()
     else if (e.key === 'Delete' || e.key === 'Backspace') acoes.remover(selecao)
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault()
@@ -983,20 +1132,31 @@ export default function EditorVideo() {
     return () => removeEventListener('keydown', f)
   }, [])
 
-  const exportar = () =>
+  // Nome do arquivo exportado: o que a pessoa escolheu ou "<primeiro arquivo>-editado".
+  const primeiroArquivo = p.clipes.length ? fontes[p.clipes[0].fonte]?.arquivo.name : null
+  const nomePadrao = primeiroArquivo ? `${primeiroArquivo.replace(/\.[^.]+$/, '')}-editado` : 'video-editado'
+  const nomeArquivo = p.nome || nomePadrao
+
+  const exportar = (escolhas) => {
+    setExportando(false)
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    const q = { ...p, ...escolhas }
+    mudar(escolhas) // as escolhas ficam salvas no projeto
     tarefa.executar(async (ctx) => {
       palco.current?.pausar()
       await document.fonts?.ready
-      const { blob, motor } = await exportarProjeto(p, fontes, ctx)
-      const primeiro = fontes[p.clipes[0].fonte].arquivo
-      return [{ nome: trocarExtensao(primeiro.name, p.formato, '-editado'), blob, detalhe: `${final.w} × ${final.h} px · ${tempo(total)}${motor === 'navegador' ? ' · acelerado pelo navegador' : ''}` }]
+      const { blob, motor } = await exportarProjeto(q, fontes, ctx)
+      const fq = tamanhoFinal(q, fontes)
+      const g = quadroGif(q, fq)
+      const detalhe = q.formato === 'mp3' ? `MP3 · ${tempo(total)}` : q.formato === 'gif' ? `GIF · ${g.w} × ${g.h} px · ${g.fps} fps · ${tempo(total)}` : `${fq.w} × ${fq.h} px · ${q.fps || 30} fps · ${tempo(total)}${motor === 'navegador' ? ' · acelerado pelo navegador' : ''}`
+      return [{ nome: `${escolhas.nome}.${q.formato}`, blob, detalhe }]
     }, 'Preparando')
+  }
   const exportarAudio = () =>
     tarefa.executar(async (ctx) => {
       palco.current?.pausar()
       const { blob } = await exportarProjeto(p, fontes, ctx, null, { soAudio: true })
-      const primeiro = fontes[p.clipes[0].fonte].arquivo
-      return [{ nome: trocarExtensao(primeiro.name, 'mp3', '-audio'), blob, detalhe: `MP3 · ${tempo(total)}` }]
+      return [{ nome: `${nomeArquivo}.mp3`, blob, detalhe: `MP3 · ${tempo(total)}` }]
     }, 'Preparando')
 
   if (tarefa.fase === 'pronto') return <Resultados itens={tarefa.resultado} duracao={tarefa.duracao} aoAjustar={tarefa.reiniciar} aoReiniciar={recomecar} rotuloNovo="Outro vídeo" />
@@ -1063,10 +1223,10 @@ export default function EditorVideo() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
           <SeloCategoria categoria="video" icone="arquivoVideo" tamanho="p" />
           <div className="min-w-0 flex-1 basis-40">
-            <p className="truncate text-sm font-semibold text-tinta" title={nomes.join(' + ')}>
-              {vazio ? 'Nenhum vídeo aberto' : nomes.length === 1 ? nomes[0] : `${nomes.length} clipes em sequência`}
+            {vazio ? <p className="text-sm font-semibold text-tinta">Nenhum vídeo aberto</p> : <NomeArquivo key={nomeArquivo} nome={nomeArquivo} aoMudar={(n) => mudar({ nome: n })} desativado={processando} />}
+            <p className="truncate text-xs text-fraca tabular-nums" title={nomes.join(' + ')}>
+              {vazio ? 'Escolha vídeos, imagens ou GIFs para começar' : `${tempo(total)} · ${final.w} × ${final.h} px · ${nomes.length === 1 ? nomes[0] : `${nomes.length} clipes em sequência`}`}
             </p>
-            <p className="text-xs text-fraca tabular-nums">{vazio ? 'Escolha vídeos, imagens ou GIFs para começar' : `${tempo(total)} · ${final.w} × ${final.h} px`}</p>
           </div>
           <div className="flex items-center gap-0.5">
             <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || processando} />
@@ -1079,33 +1239,12 @@ export default function EditorVideo() {
             </Botao>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SeletorCompacto
-              rotulo="Formato do vídeo final"
-              valor={p.formato}
-              aoMudar={(v) => mudar({ formato: v })}
-              opcoes={[
-                { valor: 'mp4', rotulo: 'MP4' },
-                { valor: 'mov', rotulo: 'MOV' },
-                { valor: 'mkv', rotulo: 'MKV' },
-              ]}
-            />
-            <SeletorCompacto
-              rotulo="Resolução do vídeo final"
-              valor={String(p.resolucao)}
-              aoMudar={(v) => mudar({ resolucao: Number(v) })}
-              opcoes={[
-                { valor: '0', rotulo: 'Resolução original' },
-                { valor: '1080', rotulo: '1080p' },
-                { valor: '720', rotulo: '720p' },
-                { valor: '480', rotulo: '480p' },
-              ]}
-            />
             {processando ? (
               <div className="w-60">
                 <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
               </div>
             ) : (
-              <Botao icone="baixar" onClick={exportar} disabled={vazio || Boolean(rascunho)}>
+              <Botao icone="baixar" onClick={() => setExportando(true)} disabled={vazio || Boolean(rascunho)}>
                 Exportar vídeo
               </Botao>
             )}
@@ -1115,7 +1254,12 @@ export default function EditorVideo() {
         <div className="grid min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_21rem]">
           {/* Palco + controles */}
           <div className="flex min-h-0 min-w-0 flex-col">
-            <div className="relative mx-4 mt-3 h-[clamp(12rem,40vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5 lg:h-auto lg:min-h-[12rem] lg:flex-1">
+            <div
+              ref={caixaPalco}
+              className={cheia ? `relative bg-black ${controlesVisiveis ? '' : 'cursor-none'}` : 'relative mx-4 mt-3 h-[clamp(12rem,40vh,30rem)] overflow-hidden rounded-xl bg-fundo-suave sm:mx-5 lg:h-auto lg:min-h-[12rem] lg:flex-1'}
+              onPointerMove={cheia ? mostrarControles : undefined}
+              onDoubleClick={(e) => !e.target.closest('[aria-label^="Camada"]') && !vazio && alternarTelaCheia()}
+            >
               {vazio ? (
                 <div className="absolute inset-0 z-10 grid place-items-center border-2 border-dashed border-borda-forte bg-fundo-suave">
                   <div className="flex flex-col items-center gap-3 px-4 text-center">
@@ -1154,6 +1298,35 @@ export default function EditorVideo() {
                   <Progresso valor={null} rotulo={lendo} />
                 </div>
               ) : null}
+
+              {/* Controles da tela cheia (somem enquanto toca; voltam ao mexer o mouse) */}
+              {cheia ? (
+                <div className={`absolute inset-x-0 bottom-0 z-40 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-6 pt-16 pb-5 text-white transition-opacity duration-300 ${controlesVisiveis ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+                  <div role="slider" tabIndex={0} aria-label="Posição no vídeo" aria-valuemin={0} aria-valuemax={Math.round(total)} aria-valuenow={0} className="group relative h-4 cursor-pointer" onPointerDown={percorrerCheia}>
+                    <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25 transition-[height] group-hover:h-1.5">
+                      <div ref={barraCheia} className="relative h-full rounded-full bg-white">
+                        <span className="absolute top-1/2 right-0 size-3.5 translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button type="button" onClick={() => palco.current?.alternar()} aria-label={tocando ? 'Pausar' : 'Tocar'} title={`${tocando ? 'Pausar' : 'Tocar'} (espaço)`} className="grid size-11 place-items-center rounded-full hover:bg-white/15">
+                      <Icone nome={tocando ? 'pausa' : 'play'} tamanho={24} fill="currentColor" className={tocando ? '' : 'translate-x-0.5'} />
+                    </button>
+                    <button type="button" onClick={() => palco.current?.buscar(0)} aria-label="Voltar ao início" title="Voltar ao início" className="grid size-10 place-items-center rounded-full hover:bg-white/15">
+                      <Icone nome="voltarInicio" tamanho={20} />
+                    </button>
+                    <p className="ml-1 text-base font-semibold tabular-nums">
+                      <span ref={relogioCheio}>0:00.0</span>
+                      <span className="text-white/60"> / {tempo(total)}</span>
+                    </p>
+                    <p className="mx-auto truncate px-4 text-sm text-white/70">{nomeArquivo}</p>
+                    <button type="button" onClick={alternarTelaCheia} aria-label="Sair da tela cheia" title="Sair da tela cheia (F ou Esc)" className="grid size-10 place-items-center rounded-full hover:bg-white/15">
+                      <Icone nome="reduzir" tamanho={20} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* Player próprio: controles no centro, tempo à esquerda */}
@@ -1183,7 +1356,11 @@ export default function EditorVideo() {
                   <Icone nome="cortar" tamanho={18} />
                 </button>
               </div>
-              <span />
+              <div className="flex justify-end">
+                <button type="button" onClick={alternarTelaCheia} disabled={vazio} aria-label="Tela cheia" title="Tela cheia (F)" className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
+                  <Icone nome="ampliar" tamanho={18} />
+                </button>
+              </div>
             </div>
 
             {/* Adicionar */}
@@ -1218,12 +1395,28 @@ export default function EditorVideo() {
         </div>
 
         {/* Linha do tempo */}
-        <div className="border-t border-borda py-2 pr-4 sm:pr-5">
-          <LinhaDoTempo p={p} fontes={fontes} selecao={selecao} aoSelecionar={selecionar} aoBuscar={(t) => palco.current?.buscar(t)} aoMudarClipe={mudarClipe} aoMudarCamada={mudarCamada} aoReordenar={acoes.reordenar} aoAdicionar={() => entradas.clipes.current?.click()} aoMenu={abrirMenu} agora={agora} cabeca={cabeca} larguraRef={larguraLinha} escalaRef={escalaLinha} />
+        <div className="border-t border-borda">
+          <LinhaDoTempo
+            ref={linha}
+            p={p}
+            fontes={fontes}
+            selecao={selecao}
+            aoSelecionar={selecionar}
+            aoBuscar={(t) => palco.current?.buscar(t)}
+            aoMudarClipe={mudarClipe}
+            aoMudarCamada={mudarCamada}
+            aoReordenar={acoes.reordenar}
+            aoAdicionar={() => entradas.clipes.current?.click()}
+            aoMenu={abrirMenu}
+            aoDividir={acoes.dividir}
+            aoRemover={acoes.remover}
+            agora={agora}
+          />
         </div>
       </section>
 
       <MenuContexto menu={menu} aoFechar={fecharMenu} />
+      <DialogoExportar aberto={exportando} aoFechar={() => setExportando(false)} p={p} fontes={fontes} nomePadrao={nomeArquivo} aoExportar={exportar} />
 
       {aviso ? (
         <Aviso tom="alerta" aoFechar={() => setAviso(null)}>
@@ -1234,7 +1427,7 @@ export default function EditorVideo() {
 
       <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fraca">
         <span className="size-1.5 rounded-full bg-sucesso" />
-        Tudo o que você muda já aparece no player. Na timeline: arraste um clipe para reordenar, as pontas para fazer trim (as partes escondidas aparecem tracejadas) e o + para adicionar vídeo, imagem ou GIF. Botão direito mostra as opções de cada item. Atalhos: espaço toca/pausa · S divide · Delete apaga · Ctrl+Z desfaz.
+        Tudo o que você muda já aparece no player. Na timeline: arraste um clipe para reordenar, as pontas para fazer trim (as partes escondidas aparecem tracejadas) e o + para adicionar vídeo, imagem ou GIF. Botão direito mostra as opções de cada item. Atalhos: espaço toca/pausa · S divide · F tela cheia · Delete apaga · Ctrl+Z desfaz · Ctrl + roda dá zoom na timeline.
       </p>
     </div>
   )

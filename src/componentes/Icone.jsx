@@ -117,6 +117,9 @@ import {
   WandSparkles,
   Wrench,
   X,
+  ZoomIn,
+  ZoomOut,
+  MoveHorizontal,
 } from 'lucide-react'
 
 /**
@@ -181,6 +184,9 @@ const ICONES = {
   repetir: Repeat,
   voltarInicio: SkipBack,
   globo: Globe,
+  zoomMais: ZoomIn,
+  zoomMenos: ZoomOut,
+  encaixar: MoveHorizontal,
 
   // operações
   ajustar: SlidersHorizontal,

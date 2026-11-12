@@ -211,6 +211,52 @@ const fixo = (n) => Number(n.toFixed(3))
 
 /** Projeto simples (1 clipe, sem camadas/efeitos): vai pelo caminho rápido (aceleração do navegador). */
 let fontesSimples = () => true
+/* ─── Saída: qualidade, tamanho estimado, GIF ─────────────────────────────── */
+
+/** Níveis de qualidade: bits por pixel por quadro (dá um tamanho previsível). */
+export const QUALIDADES_VIDEO = [
+  { id: 'maxima', rotulo: 'Máxima', bpp: 0.16, dica: 'Quase sem perda. Arquivo grande.' },
+  { id: 'alta', rotulo: 'Alta', bpp: 0.1, dica: 'Recomendada para YouTube e redes sociais.' },
+  { id: 'media', rotulo: 'Média', bpp: 0.065, dica: 'Boa imagem com bem menos espaço.' },
+  { id: 'baixa', rotulo: 'Baixa', bpp: 0.04, dica: 'Para mandar por mensagem.' },
+  { id: 'minima', rotulo: 'Mínima', bpp: 0.025, dica: 'O menor arquivo possível.' },
+]
+export const PADRAO_GIF = { largura: 480, fps: 15, loop: true }
+/** GIF só faz sentido em trechos curtos (fica enorme). */
+export const MAX_SEGUNDOS_GIF = 30
+const MB = 1024 * 1024
+
+export const bitrateAudio = (p) => (p.formato === 'webm' ? 128_000 : 160_000)
+/** Bitrate do vídeo (bits/s) para a qualidade escolhida (ou para caber no tamanho pedido). */
+export function bitrateVideo(p, quadro, T) {
+  if (p.qualidade === 'alvo') return Math.max(120_000, Math.round(((p.alvoMB || 10) * MB * 8 * 0.96) / Math.max(0.1, T) - bitrateAudio(p)))
+  const q = QUALIDADES_VIDEO.find((x) => x.id === p.qualidade) ?? QUALIDADES_VIDEO[1]
+  return Math.round(Math.max(150_000, quadro.w * quadro.h * (p.fps || 30) * q.bpp))
+}
+/** Tamanho do GIF final (largura limitada à do vídeo). */
+export function quadroGif(p, quadro) {
+  const g = { ...PADRAO_GIF, ...p.gif }
+  const w = Math.min(g.largura, quadro.w)
+  return { w, h: Math.round((w * quadro.h) / quadro.w), fps: g.fps, loop: g.loop }
+}
+/** Tamanho estimado do arquivo final, em bytes. */
+export function estimarBytes(p, fontes, extra = {}) {
+  const q = { ...p, ...extra }
+  const T = duracaoTotal(q)
+  const quadro = tamanhoFinal(q, fontes)
+  if (q.formato === 'mp3') return (192_000 * T) / 8
+  if (q.formato === 'gif') {
+    const g = quadroGif(q, quadro)
+    return g.w * g.h * g.fps * T * 0.17
+  }
+  return ((bitrateVideo(q, quadro, T) + bitrateAudio(q)) * T * 1.02) / 8
+}
+export const emMB = (bytes) => {
+  const v = bytes / MB
+  return v >= 100 ? `${Math.round(v)} MB` : v >= 1 ? `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+const MIMES = { mp4: 'video/mp4', mov: 'video/quicktime', mkv: 'video/x-matroska', webm: 'video/webm', gif: 'image/gif', mp3: 'audio/mpeg' }
+
 function simples(p) {
   const [c] = p.clipes
   const cor = p.cor
@@ -227,13 +273,16 @@ function nomeNoFs(id, arquivo) {
  * Exporta o projeto. Devolve { blob, motor }.
  * ctx: { progresso, sinal }; familia: fonte CSS dos textos.
  */
-export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = false } = {}) {
+export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
+  const soAudio = opcoes.soAudio || p.formato === 'mp3'
+  const gif = p.formato === 'gif'
   if (!p.clipes.length) throw new ErroAmigavel('Adicione pelo menos um vídeo.')
   const quadro = tamanhoFinal(p, fontes)
   const T = duracaoTotal(p)
 
   fontesSimples = (pp) => fontes[pp.clipes[0].fonte]?.tipo === 'video'
-  if (!soAudio && simples(p)) {
+  if (gif && T > MAX_SEGUNDOS_GIF + 0.05) throw new ErroAmigavel(`GIF só para vídeos de até ${MAX_SEGUNDOS_GIF} segundos.`)
+  if (!soAudio && !gif && simples(p)) {
     const [c] = p.clipes
     const f = fontes[c.fonte]
     const q = quadroGirado(f, p.girar)
@@ -244,7 +293,8 @@ export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = fals
       f.arquivo,
       {
         formato: p.formato,
-        qualidade: p.qualidade,
+        qualidade: bitrateVideo(p, quadro, T),
+        fps: p.fps || undefined,
         girar: p.girar,
         espelhar: p.espelhar,
         recorte,
@@ -282,7 +332,7 @@ export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = fals
     const ehImagem = fonte.tipo === 'imagem'
     const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : [])
     f.push(
-      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v${i}]`,
+      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${p.fps || 30},format=yuv420p[v${i}]`,
     )
     if (!ehImagem && fonte.temAudio && !c.mudo && c.volume > 0) {
       f.push(`[${k}:a]atrim=start=${fixo(c.inicio)}:end=${fixo(c.fim)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
@@ -447,10 +497,29 @@ export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = fals
     return { blob: new Blob([dados], { type: 'audio/mpeg' }), motor: 'webassembly' }
   }
 
+  if (gif) {
+    const g = quadroGif(p, quadro)
+    f.push(`[${v}]fps=${g.fps},scale=${g.w}:-1:flags=lanczos,split[ga][gb]`, '[ga]palettegen=stats_mode=diff[gp]', '[gb][gp]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[gif]', `[${a}]anullsink`)
+    const dados = await executarFfmpeg({
+      entradas: [...entradas].map(([nome, d]) => ({ nome, dados: d })),
+      args: [...args, '-filter_complex', f.join(';'), '-map', '[gif]', '-t', String(fixo(T)), '-loop', g.loop ? '0' : '-1'],
+      saida: 'saida.gif',
+      duracao: T,
+      aoProgredir: ctx.progresso,
+      sinal: ctx.sinal,
+      rotulo: 'Criando o GIF',
+    }).catch((erro) => {
+      if (erro?.name === 'AbortError') throw erro
+      console.error(erro?.log)
+      throw new ErroAmigavel('Não foi possível criar o GIF.')
+    })
+    return { blob: new Blob([dados], { type: 'image/gif' }), motor: 'webassembly' }
+  }
+
   const saida = `saida.${p.formato}`
   const dados = await executarFfmpeg({
     entradas: [...entradas].map(([nome, dados]) => ({ nome, dados })),
-    args: [...args, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-map', `[${a}]`, '-t', String(fixo(T)), ...argsVideoFfmpeg(p.formato, p.qualidade)],
+    args: [...args, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-map', `[${a}]`, '-t', String(fixo(T)), ...argsVideoFfmpeg(p.formato, bitrateVideo(p, quadro, T))],
     saida,
     duracao: T,
     aoProgredir: ctx.progresso,
@@ -461,6 +530,6 @@ export async function exportarProjeto(p, fontes, ctx, _familia, { soAudio = fals
     console.error(erro?.log)
     throw new ErroAmigavel('Não foi possível montar o vídeo. Algum arquivo pode estar corrompido ou usar um codec sem suporte.')
   })
-  const mime = p.formato === 'mov' ? 'video/quicktime' : p.formato === 'mkv' ? 'video/x-matroska' : 'video/mp4'
+  const mime = MIMES[p.formato] ?? 'video/mp4'
   return { blob: new Blob([dados], { type: mime }), motor: 'webassembly' }
 }
