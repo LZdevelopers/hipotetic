@@ -462,6 +462,31 @@ export default [
     },
   },
   {
+    nome: 'video/editor: animações de entrada e saída nas camadas',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.clicar('Texto')
+      const escolher = (rotulo, valor) => t.js(`const s = document.querySelector('main aside select[aria-label="${rotulo}"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, '${valor}'); s.dispatchEvent(new Event('change', { bubbles: true }))`)
+      await t.aguardar("document.querySelector('main aside select[aria-label=\"Animação de entrada\"]')", 5000)
+      await escolher('Animação de entrada', 'baixo')
+      await escolher('Animação de saída', 'zoom')
+      // No começo da animação, a camada está deslocada para baixo e quase transparente.
+      await t.js("dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))")
+      for (let i = 0; i < 3; i += 1) await t.js("dispatchEvent(new KeyboardEvent('keydown', { key: '.', bubbles: true }))")
+      await t.esperar(200)
+      const estilo = await t.js("const el = document.querySelector('main [aria-label=\"Camada: texto\"]'); return { translate: el.style.translate, opacity: Number(el.style.opacity) }")
+      assert.ok(/px/.test(estilo.translate) && !estilo.translate.startsWith('0px 0px'), `deveria estar deslocada: ${estilo.translate}`)
+      assert.ok(estilo.opacity < 0.5, `deveria estar quase transparente: ${estilo.opacity}`)
+      // Exporta (deslize na posição e zoom com escala quadro a quadro).
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, 3, 0.5, 'duração')
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {

@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -460,10 +460,42 @@ function PainelCamada({ camada: bruta, mudarCamada, acoes, total }) {
         </Bloco>
       ) : null}
       {camada.tipo !== 'desfoque' ? (
+        <>
+        <Bloco titulo="Animação">
+          {[
+            ['animEntrada', 'Entrada'],
+            ['animSaida', 'Saída'],
+          ].map(([chave, rotulo]) => {
+            const an = camada[chave]
+            return (
+              <div key={chave} className="flex flex-col gap-2">
+                <label className="relative flex flex-col gap-1.5 text-[0.8125rem] font-semibold text-tinta">
+                  {rotulo}
+                  <select
+                    value={an?.tipo ?? ''}
+                    aria-label={`Animação de ${rotulo.toLowerCase()}`}
+                    onChange={(e) => m({ [chave]: e.target.value ? { tipo: e.target.value, dur: an?.dur ?? 0.6 } : null })}
+                    className="h-10 appearance-none rounded-lg border border-borda-forte bg-superficie pr-8 pl-3 text-sm font-medium text-tinta focus:border-acento focus:outline-none"
+                  >
+                    <option value="">Nenhuma</option>
+                    {ANIMACOES.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.rotulo}
+                      </option>
+                    ))}
+                  </select>
+                  <Icone nome="setaBaixo" tamanho={14} className="pointer-events-none absolute right-2.5 bottom-3 text-fraca" />
+                </label>
+                {an ? <Deslizante rotulo={`Duração da ${rotulo.toLowerCase()}`} valor={an.dur} aoMudar={(v) => m({ [chave]: { ...an, dur: v } })} min={0.2} max={2} passo={0.1} formatar={(v) => `${v.toLocaleString('pt-BR')} s`} /> : null}
+              </div>
+            )
+          })}
+        </Bloco>
         <Bloco titulo="Fade">
           <Deslizante rotulo="Fade in" valor={camada.fadeIn} aoMudar={(v) => m({ fadeIn: v })} min={0} max={3} passo={0.25} formatar={segundos} />
           <Deslizante rotulo="Fade out" valor={camada.fadeOut} aoMudar={(v) => m({ fadeOut: v })} min={0} max={3} passo={0.25} formatar={segundos} />
         </Bloco>
+        </>
       ) : null}
       {camada.tipo !== 'desfoque' ? <Deslizante rotulo="Opacidade" valor={Math.round((camada.opacidade ?? 1) * 100)} aoMudar={(v) => m({ opacidade: v / 100 })} min={10} max={100} formatar={(v) => `${v}%`} /> : null}
       <Bloco titulo="In / out na timeline">

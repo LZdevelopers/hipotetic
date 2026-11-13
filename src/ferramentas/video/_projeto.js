@@ -87,6 +87,64 @@ export function tamanhoFinal(p, fontes) {
   return { w: Math.max(2, Math.round(w / 2) * 2), h: Math.max(2, Math.round(h / 2) * 2) }
 }
 
+/* ─── Animações de entrada e saída das camadas ──────────────────────────── */
+
+export const ANIMACOES = [
+  { id: 'baixo', rotulo: 'Deslizar de baixo' },
+  { id: 'cima', rotulo: 'Deslizar de cima' },
+  { id: 'esquerda', rotulo: 'Deslizar da esquerda' },
+  { id: 'direita', rotulo: 'Deslizar da direita' },
+  { id: 'zoom', rotulo: 'Zoom' },
+]
+const DESLIZE = 0.18 // fração do quadro que a camada percorre
+const VETOR = { baixo: [0, 1], cima: [0, -1], esquerda: [-1, 0], direita: [1, 0] }
+const limitar01 = (x) => Math.min(1, Math.max(0, x))
+
+/**
+ * Animação da camada no instante t: deslocamento (px num quadro W×H), escala e
+ * opacidade. A entrada desacelera (cúbica) e a saída acelera; a opacidade é
+ * linear (igual ao fade do ffmpeg).
+ */
+export function animacaoNoTempo(cam, t, W, H) {
+  let dx = 0
+  let dy = 0
+  let s = 1
+  let a = 1
+  const aplicar = (an, p) => {
+    const r = (1 - p) ** 3
+    const [vx, vy] = VETOR[an.tipo] ?? [0, 0]
+    dx += vx * DESLIZE * W * r
+    dy += vy * DESLIZE * H * r
+    if (an.tipo === 'zoom') s *= 1 - 0.5 * r
+    a *= p
+  }
+  const e = cam.animEntrada
+  if (e?.tipo && e.dur > 0) aplicar(e, limitar01((t - cam.inicio) / e.dur))
+  const o = cam.animSaida
+  if (o?.tipo && o.dur > 0) aplicar(o, limitar01((cam.fim - t) / o.dur))
+  return { dx, dy, s, a }
+}
+
+/** As mesmas curvas como expressões do ffmpeg (variável t). */
+function exprAnimacao(c, W, H) {
+  const termos = { dx: [], dy: [], s: [] }
+  const fades = []
+  const usar = (an, r, fade) => {
+    const [vx, vy] = VETOR[an.tipo] ?? [0, 0]
+    if (vx) termos.dx.push(`${fixo(vx * DESLIZE * W)}*${r}`)
+    if (vy) termos.dy.push(`${fixo(vy * DESLIZE * H)}*${r}`)
+    if (an.tipo === 'zoom') termos.s.push(`(1-0.5*${r})`)
+    fades.push(fade)
+  }
+  const e = c.animEntrada
+  if (e?.tipo && e.dur > 0) usar(e, `pow(1-clip((t-${fixo(c.inicio)})/${fixo(e.dur)},0,1),3)`, `fade=t=in:st=${fixo(c.inicio)}:d=${fixo(e.dur)}:alpha=1`)
+  const o = c.animSaida
+  if (o?.tipo && o.dur > 0) usar(o, `pow(1-clip((${fixo(c.fim)}-t)/${fixo(o.dur)},0,1),3)`, `fade=t=out:st=${fixo(Math.max(c.inicio, c.fim - o.dur))}:d=${fixo(o.dur)}:alpha=1`)
+  // Ao configurar o filtro o ffmpeg avalia com t indefinido (NaN): aí vale o estado parado.
+  const seguro = (expr, parado) => (expr ? `if(isnan(t),${parado},${expr})` : '')
+  return { dx: seguro(termos.dx.join('+'), 0), dy: seguro(termos.dy.join('+'), 0), s: seguro(termos.s.join('*'), 1), fades }
+}
+
 /** Opções de uma camada que nem toda camada tem (as antigas, por exemplo). */
 export const PADRAO_CAMADA = { girar: 0, espelharH: false, espelharV: false, ajuste: { brilho: 0, contraste: 1, saturacao: 1 }, opacidade: 1, fadeIn: 0, fadeOut: 0, recorte: null, semFundo: null, tolerancia: 0.15 }
 
@@ -308,7 +366,7 @@ function filtrosCor(cor, alfa = false) {
   const b = 1 + brilho
   if (b !== 1) f.push(`colorchannelmixer=rr=${n(b)}:gg=${n(b)}:bb=${n(b)}`)
   if (contraste !== 1) {
-    const e = `clip((val-128)*${n(contraste)}+128\,0\,255)`
+    const e = `clip((val-128)*${n(contraste)}+128,0,255)`
     f.push(`lutrgb=r='${e}':g='${e}':b='${e}'`)
   }
   if (saturacao !== 1) {
@@ -519,11 +577,13 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     }
     let origem
     let alturaPx
+    let larguraBase = par(c.w * W)
     const parado = ['-loop', '1', '-framerate', '30', '-t', String(fixo(T))]
     if (c.tipo === 'texto') {
       const png = await textoParaPng(c, quadro)
       origem = `[${entrada(`t${c.id}.png`, png.blob, parado)}:v]`
       alturaPx = png.altura
+      larguraBase = png.largura
     } else {
       const fonte = fontes[c.fonte]
       if (!fonte) continue
@@ -554,16 +614,26 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     cadeia.push('format=rgba')
     if (c.tipo !== 'texto' && c.semFundo) cadeia.push(`colorkey=${c.semFundo === 'preto' ? '0x000000' : '0xFFFFFF'}:${fixo(Math.max(0.01, c.tolerancia))}:0.08`)
     if (c.opacidade < 1) cadeia.push(`colorchannelmixer=aa=${fixo(c.opacidade)}`)
+    const anim = exprAnimacao(c, W, H)
+    if (anim.s) {
+      // Zoom: muda o tamanho a cada quadro e volta ao tamanho original com borda transparente.
+      // (RGBA forçado: com croma subamostrado o ffmpeg arredonda alturas ímpares e o pad quebra.)
+      const S = anim.s
+      cadeia.push(`scale=w='max(2,trunc(${larguraBase}*${S}))':h='max(2,trunc(${alturaPx}*${S}))':eval=frame`, 'format=rgba', `pad=${larguraBase}:${alturaPx}:(ow-iw)/2:(oh-ih)/2:color=black@0`, 'format=rgba')
+    }
     if (c.girar) {
       const rad = fixo((c.girar * Math.PI) / 180)
       cadeia.push(`rotate=${rad}:c=none:ow=rotw(${rad}):oh=roth(${rad})`)
     }
     if (c.fadeIn) cadeia.push(`fade=t=in:st=${fixo(c.inicio)}:d=${fixo(c.fadeIn)}:alpha=1`)
     if (c.fadeOut) cadeia.push(`fade=t=out:st=${fixo(Math.max(c.inicio, c.fim - c.fadeOut))}:d=${fixo(c.fadeOut)}:alpha=1`)
+    cadeia.push(...anim.fades)
     // Posição pelo centro: girar muda o tamanho do retângulo, não o centro.
     const cx = fixo(c.x * W + (c.w * W) / 2)
     const cy = fixo(c.y * H + alturaPx / 2)
-    f.push(`${origem}${cadeia.join(',')}[o${i}]`, `[${v}][o${i}]overlay=x=${cx}-overlay_w/2:y=${cy}-overlay_h/2:eof_action=pass:${quando}[${saida}]`)
+    const px = anim.dx ? `'${cx}-overlay_w/2+${anim.dx}'` : `${cx}-overlay_w/2`
+    const py = anim.dy ? `'${cy}-overlay_h/2+${anim.dy}'` : `${cy}-overlay_h/2`
+    f.push(`${origem}${cadeia.join(',')}[o${i}]`, `[${v}][o${i}]overlay=x=${px}:y=${py}:eof_action=pass:${quando}[${saida}]`)
     v = saida
   }
 

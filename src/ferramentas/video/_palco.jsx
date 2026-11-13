@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -200,6 +200,8 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   const qAtivo = fonteAtiva ? quadroGirado(fonteAtiva, p.girar) : { w: 16, h: 9 }
   const proporcao = recortando ? qAtivo.w / qAtivo.h : final.w / final.h
   const palco = encaixar(tamCaixa, proporcao)
+  const tamPalco = useRef(palco)
+  tamPalco.current = palco
 
   /** Aplica o estado do tempo t: clipe visível, camadas, véu de fade e volumes. */
   const aplicar = (t, buscarVideos) => {
@@ -243,7 +245,10 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
         el.style.visibility = dentro ? 'visible' : 'hidden'
         const fi = cam.fadeIn ? Math.min(1, Math.max(0, (t - cam.inicio) / cam.fadeIn)) : 1
         const fo = cam.fadeOut ? Math.min(1, Math.max(0, (cam.fim - t) / cam.fadeOut)) : 1
-        el.style.opacity = String((cam.opacidade ?? PADRAO_CAMADA.opacidade) * Math.min(fi, fo))
+        const an = animacaoNoTempo(cam, t, tamPalco.current.w, tamPalco.current.h)
+        el.style.opacity = String((cam.opacidade ?? PADRAO_CAMADA.opacidade) * Math.min(fi, fo) * an.a)
+        el.style.translate = an.dx || an.dy ? `${an.dx}px ${an.dy}px` : ''
+        el.style.scale = an.s !== 1 ? String(an.s) : ''
       }
       if (cam.tipo === 'video') {
         const vc = videosCamada.current[cam.id]
