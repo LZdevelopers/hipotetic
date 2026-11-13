@@ -487,6 +487,34 @@ export default [
     },
   },
   {
+    nome: 'video/editor: trilha de áudio movida na timeline começa depois (exportação)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.js(`__t.enviar([__t.arquivo(__t.wav([{ s: 2, hz: 660 }]), 'trilha.wav')], 'main input[aria-label="Escolher musica"]')`)
+      await t.aguardar("document.querySelector('main [aria-label=\"Trilha de áudio\"]')", 15000)
+      await aba(t, 'Áudio')
+      const comeca = () => t.js(`return [...document.querySelectorAll('main aside label')].find((x) => x.firstChild?.textContent?.trim() === 'Começa em').querySelector('input').value`)
+      assert.equal(await comeca(), '0:00.0')
+      // Arrastar a trilha para a direita muda onde ela começa.
+      await arrastarX(t, 'main [aria-label="Trilha de áudio"]', 60)
+      await t.aguardar(`[...document.querySelectorAll('main aside label')].find((x) => x.firstChild?.textContent?.trim() === 'Começa em').querySelector('input').value !== '0:00.0'`, 3000)
+      // Começa em 1 s exato (campo) e exporta só o áudio.
+      // O vídeo de teste tem som: no mudo, sobra só a trilha.
+      await t.js("[...document.querySelectorAll('main aside label')].find((l) => l.textContent.trim().startsWith('Mudo')).click()")
+      await campoTempo(t, 'Começa em', '0:01')
+      await t.aguardar(`[...document.querySelectorAll('main aside label')].find((x) => x.firstChild?.textContent?.trim() === 'Começa em').querySelector('input').value === '0:01.0'`, 3000)
+      await t.clicar('Exportar só o áudio')
+      await t.aguardarResultado(300000)
+      const rms = await t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const buf = await new OfflineAudioContext(1, 1, 22050).decodeAudioData(await (await fetch(a.href)).arrayBuffer())
+        const d = buf.getChannelData(0); const taxa = buf.sampleRate
+        const rms = (de, ate) => { let s = 0, n = 0; for (let i = Math.floor(de * taxa); i < Math.floor(ate * taxa) && i < d.length; i++) { s += d[i] * d[i]; n++ } return Math.sqrt(s / Math.max(1, n)) }
+        return [rms(0.1, 0.8), rms(1.3, 1.9)]`)
+      assert.ok(rms[0] < 0.01 && rms[1] > 0.05, `antes de 1 s deveria ser silêncio e depois som: ${rms}`)
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {

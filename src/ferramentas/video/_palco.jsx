@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -268,12 +268,15 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     const mu = musica.current
     if (mu && pp.musica) {
       const dm = mu.duration || ff[pp.musica.fonte]?.duracao || Infinity
-      const alvo = pp.musica.repetir ? t % dm : t
-      const mi = pp.musica.fadeIn && t < pp.musica.fadeIn ? t / pp.musica.fadeIn : 1
-      const saida = pp.musica.fadeOut || Math.min(2, T / 4)
-      const mo = t > T - saida ? Math.max(0, (T - t) / saida) : 1
+      const tm = trechoMusica(pp.musica, ff[pp.musica.fonte], T)
+      const rel = t - tm.inicio
+      const dentro = rel >= 0 && rel < tm.len
+      const alvo = pp.musica.repetir ? (tm.corte + rel) % dm : tm.corte + rel
+      const mi = pp.musica.fadeIn && rel < pp.musica.fadeIn ? Math.max(0, rel) / pp.musica.fadeIn : 1
+      const saida = pp.musica.fadeOut || Math.min(2, tm.len / 4)
+      const mo = rel > tm.len - saida ? Math.max(0, (tm.len - rel) / saida) : 1
       mu.volume = Math.max(0, Math.min(1, pp.musica.volume * Math.min(mi, mo)))
-      if (alvo < dm) {
+      if (dentro && alvo < dm) {
         if (buscarVideos || Math.abs(mu.currentTime - alvo) > 0.3) mu.currentTime = alvo
         if (m.current.tocando && mu.paused) mu.play().catch(() => {})
       } else if (!mu.paused) mu.pause()

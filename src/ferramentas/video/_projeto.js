@@ -87,6 +87,18 @@ export function tamanhoFinal(p, fontes) {
   return { w: Math.max(2, Math.round(w / 2) * 2), h: Math.max(2, Math.round(h / 2) * 2) }
 }
 
+/**
+ * Onde a trilha de áudio toca: começa em `inicio` (linha do tempo), a partir de
+ * `corte` no arquivo, por `len` segundos (com loop, o arquivo recomeça do 0).
+ */
+export function trechoMusica(mu, fonte, T) {
+  const inicio = Math.min(Math.max(0, mu.inicio ?? 0), Math.max(0, T - 0.1))
+  const corte = Math.max(0, mu.corte ?? 0)
+  const dm = fonte?.duracao ?? Infinity
+  const max = mu.repetir ? T - inicio : Math.min(dm - corte, T - inicio)
+  return { inicio, corte, len: Math.max(0.1, Math.min(mu.duracao ?? Infinity, max)) }
+}
+
 /* ─── Animações de entrada e saída das camadas ──────────────────────────── */
 
 export const ANIMACOES = [
@@ -657,9 +669,12 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
   if (p.musica && !gif) {
     const mu = { fadeIn: 0, fadeOut: 0, ducking: false, ...p.musica }
     const fonte = fontes[mu.fonte]
-    const k = entrada(nomeNoFs(mu.fonte, fonte.arquivo), fonte.arquivo, [...(mu.repetir ? ['-stream_loop', '-1'] : []), '-t', String(fixo(T + 0.1))])
-    const saidaMus = mu.fadeOut || Math.min(2, T / 4)
-    f.push(`[${k}:a]atrim=0:${fixo(T)},asetpts=PTS-STARTPTS,volume=${fixo(mu.volume)},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo${mu.fadeIn ? `,afade=t=in:st=0:d=${fixo(mu.fadeIn)}` : ''},afade=t=out:st=${fixo(Math.max(0, T - saidaMus))}:d=${fixo(saidaMus)}[mus]`)
+    const { inicio: muIni, corte: muCorte, len: muLen } = trechoMusica(mu, fonte, T)
+    const k = entrada(nomeNoFs(mu.fonte, fonte.arquivo), fonte.arquivo, mu.repetir ? ['-stream_loop', '-1'] : [...(muCorte ? ['-ss', String(fixo(muCorte))] : []), '-t', String(fixo(muLen + 0.1))])
+    const trechoMus = mu.repetir ? `atrim=start=${fixo(muCorte)}:end=${fixo(muCorte + muLen)}` : `atrim=0:${fixo(muLen)}`
+    const saidaMus = mu.fadeOut || Math.min(2, muLen / 4)
+    const atrasoMus = Math.round(muIni * 1000)
+    f.push(`[${k}:a]${trechoMus},asetpts=PTS-STARTPTS,volume=${fixo(mu.volume)},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo${mu.fadeIn ? `,afade=t=in:st=0:d=${fixo(mu.fadeIn)}` : ''},afade=t=out:st=${fixo(Math.max(0, muLen - saidaMus))}:d=${fixo(saidaMus)}${atrasoMus ? `,adelay=${atrasoMus}:all=1` : ''}[mus]`)
     if (mu.ducking) {
       // Ducking: a trilha abaixa sozinha quando há fala/som no vídeo.
       f.push(`[${a}]asplit=2[${a}d][${a}k]`, `[mus][${a}k]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[musd]`)

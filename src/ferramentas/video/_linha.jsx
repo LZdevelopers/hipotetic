@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { tempo } from '../../componentes/editor/Comum'
-import { duracaoClipe, duracaoTotal, iniciosNaLinha } from './_projeto'
+import { duracaoClipe, duracaoTotal, iniciosNaLinha, trechoMusica } from './_projeto'
 
 const ICONES = { texto: 'texto', imagem: 'imagem', video: 'arquivoVideo', desfoque: 'borracha' }
 const NOMES = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', desfoque: 'Blur' }
@@ -166,7 +166,7 @@ function BotaoLinha({ rotulo, icone, onClick, disabled, children }) {
  * ref: { mover(t, seguir) } — posiciona o cursor sem re-renderizar.
  */
 export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
-  { p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoReordenar, aoAdicionar, aoMenu, aoDividir, aoRemover, aoPrevia, agora },
+  { p, fontes, selecao, aoSelecionar, aoBuscar, aoMudarClipe, aoMudarCamada, aoReordenar, aoAdicionar, aoMenu, aoDividir, aoRemover, aoPrevia, aoMudarMusica, agora },
   ref,
 ) {
   const total = duracaoTotal(p)
@@ -466,6 +466,50 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
     )
   }
 
+  /** Trilha de áudio: mover (arrastando o meio) e aparar o começo/fim (escolhe o trecho da música). */
+  const moverMusica = (modo) => (e) => {
+    if (e.button !== 0 || !p.musica) return
+    aoSelecionar({ tipo: 'musica' })
+    const fonte = fontes[p.musica.fonte]
+    const t0 = trechoMusica(p.musica, fonte, total)
+    const dm = fonte?.duracao ?? Infinity
+    const k = pps
+    const lista = [agora(), 0, total, ...inicios, ...inicios.map((s, i) => s + duracaoClipe(p.clipes[i])), ...p.camadas.flatMap((c) => [c.inicio, c.fim])]
+    congelar()
+    setArrastando('musica')
+    arrastar(
+      rolagem,
+      e,
+      (dx) => {
+        const dt = dx / k
+        if (modo === 'mover') {
+          let ini = t0.inicio + dt
+          const gi = grudar(ini, lista, k)
+          const gf = grudar(ini + t0.len, lista, k)
+          if (gi != null) ini = gi
+          else if (gf != null) ini = gf - t0.len
+          setGuia(gi ?? gf)
+          aoMudarMusica({ inicio: Math.min(Math.max(0, ini), Math.max(0, total - 0.3)) })
+        } else if (modo === 'inicio') {
+          let ini = t0.inicio + dt
+          const g = grudar(ini, lista, k)
+          setGuia(g)
+          if (g != null) ini = g
+          const d = Math.min(Math.max(ini - t0.inicio, -t0.corte, -t0.inicio), t0.len - 0.3)
+          aoMudarMusica({ inicio: t0.inicio + d, corte: t0.corte + d, duracao: t0.len - d })
+        } else {
+          let fim = t0.inicio + t0.len + dt
+          const g = grudar(fim, lista, k)
+          setGuia(g)
+          if (g != null) fim = g
+          const max = p.musica.repetir ? total - t0.inicio : Math.min(dm - t0.corte, total - t0.inicio)
+          aoMudarMusica({ duracao: Math.min(Math.max(fim - t0.inicio, 0.3), max) })
+        }
+      },
+      soltar,
+    )
+  }
+
   const menu = (alvo) => (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -748,28 +792,31 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
                 <div className="relative h-12 cursor-pointer" style={largura} onPointerDown={percorrer}>
                   {(() => {
                     const fonte = fontes[p.musica.fonte]
-                    const dm = fonte?.duracao ?? total
-                    const fim = p.musica.repetir ? total : Math.min(dm, total)
+                    const tm = trechoMusica(p.musica, fonte, total)
+                    const sel = selecao?.tipo === 'musica'
                     return (
                       <div
                         role="button"
                         tabIndex={0}
                         aria-label="Trilha de áudio"
-                        onPointerDown={(e) => {
-                          if (e.button !== 0) return
-                          aoSelecionar({ tipo: 'musica' })
-                          percorrer(e)
-                        }}
+                        onPointerDown={moverMusica('mover')}
                         onContextMenu={menu({ tipo: 'musica' })}
-                        className={`absolute top-1 bottom-1 overflow-hidden rounded-md text-white ${selecao?.tipo === 'musica' ? 'z-10 ring-2 ring-white' : 'ring-1 ring-black/15'}`}
-                        style={{ left: x(0), width: Math.max(6, fim * pps), backgroundColor: 'color-mix(in oklab, var(--color-cat-audio) 80%, black)' }}
+                        className={`group absolute top-1 bottom-1 cursor-grab overflow-hidden rounded-md text-white active:cursor-grabbing ${sel ? 'z-10 ring-2 ring-white' : 'ring-1 ring-black/15'}`}
+                        style={{ left: x(tm.inicio), width: Math.max(6, tm.len * pps), backgroundColor: 'color-mix(in oklab, var(--color-cat-audio) 80%, black)' }}
                       >
-                        <div className="absolute inset-x-0 top-0 bottom-0 text-white/75">
-                          <Onda fonte={fonte} inicio={0} fim={fim} pps={pps} altura={40} repetir={p.musica.repetir} className="top-0" />
+                        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-0 text-white/75">
+                          <Onda fonte={fonte} inicio={tm.corte} fim={tm.corte + tm.len} pps={pps} altura={40} repetir={p.musica.repetir} className="top-0" />
                         </div>
-                        <span className="pointer-events-none absolute top-0.5 left-2 max-w-[calc(100%-1rem)] truncate rounded bg-black/45 px-1 text-[0.625rem] font-semibold">
+                        <span className="pointer-events-none absolute top-0.5 left-3.5 max-w-[calc(100%-2rem)] truncate rounded bg-black/45 px-1 text-[0.625rem] font-semibold">
                           {fonte?.arquivo.name}
                           {p.musica.repetir ? ' · loop' : ''}
+                          {arrastando === 'musica' ? ` · ${tempo(tm.len)}` : ''}
+                        </span>
+                        <span onPointerDown={moverMusica('inicio')} className={`absolute inset-y-0 left-0 grid w-3 cursor-ew-resize place-items-center bg-black/35 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Início da trilha">
+                          <span className="h-4 w-0.5 rounded-full bg-white/90" />
+                        </span>
+                        <span onPointerDown={moverMusica('fim')} className={`absolute inset-y-0 right-0 grid w-3 cursor-ew-resize place-items-center bg-black/35 ${sel ? '' : 'opacity-0 group-hover:opacity-100'}`} aria-label="Fim da trilha">
+                          <span className="h-4 w-0.5 rounded-full bg-white/90" />
                         </span>
                       </div>
                     )

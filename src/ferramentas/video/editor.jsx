@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -704,7 +704,17 @@ function PainelAudio({ p, fontes, mudar, abrir, exportarAudio, processando }) {
             <Deslizante rotulo="Volume da trilha" valor={Math.round(mu.volume * 100)} aoMudar={(v) => mm({ volume: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
             <Deslizante rotulo="Volume do vídeo" valor={Math.round(mu.volumeOriginal * 100)} aoMudar={(v) => mm({ volumeOriginal: v / 100 })} min={0} max={100} formatar={(v) => (v ? `${v}%` : 'mudo')} />
             <Caixa rotulo="Ducking automático" dica="A trilha abaixa sozinha quando há fala no vídeo (aplicado na exportação)." marcado={mu.ducking} aoMudar={(v) => mm({ ducking: v })} />
-            <Caixa rotulo="Loop até o fim do vídeo" marcado={mu.repetir} aoMudar={(v) => mm({ repetir: v })} />
+            <Caixa rotulo="Loop até o fim do vídeo" marcado={mu.repetir} aoMudar={(v) => mm({ repetir: v, duracao: null })} />
+            {(() => {
+              const tm = trechoMusica(mu, fontes[mu.fonte], duracaoTotal(p))
+              return (
+                <div className="flex gap-2">
+                  <CampoTempo rotulo="Começa em" valor={tm.inicio} aoMudar={(v) => mm({ inicio: Math.max(0, v) })} />
+                  <CampoTempo rotulo="Do arquivo, a partir de" valor={tm.corte} aoMudar={(v) => mm({ corte: Math.max(0, Math.min(v, (fontes[mu.fonte]?.duracao ?? v + 1) - 0.3)), duracao: null })} />
+                </div>
+              )
+            })()}
+            <p className="text-xs text-fraca">Na timeline: arraste a trilha para mudar onde ela começa e as pontas para escolher o trecho.</p>
             <Deslizante rotulo="Fade in da trilha" valor={mu.fadeIn} aoMudar={(v) => mm({ fadeIn: v })} min={0} max={5} passo={0.25} formatar={segundos} />
             <Deslizante rotulo="Fade out da trilha" valor={mu.fadeOut} aoMudar={(v) => mm({ fadeOut: v })} min={0} max={5} passo={0.25} formatar={(v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'auto')} />
             <div className="flex gap-2">
@@ -1646,6 +1656,7 @@ export default function EditorVideo() {
             aoDividir={acoes.dividir}
             aoRemover={acoes.remover}
             aoPrevia={aoPrevia}
+            aoMudarMusica={(d) => mudar((x) => ({ musica: { ...x.musica, ...d } }))}
             agora={agora}
           />
         </div>
