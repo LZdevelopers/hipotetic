@@ -441,6 +441,27 @@ export default [
     },
   },
   {
+    nome: 'video/editor: filtros prontos, sépia e vinheta (prévia e exportação)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await t.js("[...document.querySelectorAll('main aside [role=radiogroup][aria-label=Filtros] [role=radio]')].find((b) => b.textContent.trim() === 'P&B').click()")
+      await t.aguardar("[...document.querySelectorAll('main aside [aria-label=Filtros] [role=radio]')].find((b) => b.textContent.trim() === 'P&B').getAttribute('aria-checked') === 'true'", 3000)
+      await t.js("__t.digitar('Sépia', '100')")
+      await t.js("__t.digitar('Vinheta', '60')")
+      // Prévia: matriz de cor (SVG) no vídeo e a vinheta por cima.
+      await t.aguardar("[...document.querySelectorAll('main video')].some((v) => v.style.filter.includes('url(')) && [...document.querySelectorAll('main img')].some((i) => i.src.startsWith('blob:') && i.className.includes('inset-0 size-full'))", 5000)
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const px = await t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const v = document.createElement('video'); v.muted = true; v.src = a.href
+        await new Promise((ok) => (v.onloadeddata = ok)); v.currentTime = 1; await new Promise((ok) => (v.onseeked = ok))
+        const c = document.createElement('canvas'); c.width = 64; c.height = 36; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 64, 36)
+        return [...x.getImageData(32, 18, 1, 1).data]`)
+      assert.ok(px[0] > px[1] && px[1] > px[2] && px[0] - px[2] > 12, `deveria sair em sépia (R > G > B): ${px}`)
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {

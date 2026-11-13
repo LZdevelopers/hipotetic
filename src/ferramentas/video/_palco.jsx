@@ -1,6 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -46,6 +46,30 @@ class ClipeImagem {
       this._marco = null
     }
   }
+}
+
+/** Vinheta da prévia (a mesma imagem que vai para a exportação). */
+function useVinheta(k, final) {
+  const [url, setUrl] = useState(null)
+  const proporcao = final.w / final.h
+  useEffect(() => {
+    if (!k) {
+      setUrl(null)
+      return undefined
+    }
+    let vivo = true
+    let atual = null
+    vinhetaPng(480, Math.round(480 / proporcao), k).then((b) => {
+      if (!vivo) return
+      atual = URL.createObjectURL(b)
+      setUrl(atual)
+    })
+    return () => {
+      vivo = false
+      if (atual) setTimeout(() => URL.revokeObjectURL(atual), 1000)
+    }
+  }, [k, proporcao])
+  return url
 }
 
 /** Arrasto genérico: chama mover(dx, dy) em px desde o início; fim() ao soltar. */
@@ -368,7 +392,11 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
       video: { width: fonte.largura * s, height: fonte.altura * s, left: ((q.w - fonte.largura) * s) / 2, top: ((q.h - fonte.altura) * s) / 2 },
     }
   }
-  const filtroCor = `brightness(${1 + p.cor.brilho}) contrast(${p.cor.contraste}) saturate(${p.cor.saturacao})`
+  const cor = { ...PADRAO_COR, ...p.cor }
+  const idMatriz = `cor${useId().replace(/[^a-z0-9]/gi, '')}`
+  const matriz = matrizCor(cor)
+  const filtroCor = `brightness(${1 + cor.brilho}) contrast(${cor.contraste}) saturate(${cor.saturacao})${matriz ? ` url(#${idMatriz})` : ''}`
+  const urlVinheta = useVinheta(cor.vinheta, final)
 
   const [guias, setGuias] = useState(null)
 
@@ -415,6 +443,16 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
               </div>
             )
           })}
+
+          {/* Matriz de cor (sépia, matiz, temperatura) e vinheta */}
+          {matriz ? (
+            <svg width="0" height="0" className="absolute" aria-hidden="true">
+              <filter id={idMatriz} colorInterpolationFilters="sRGB">
+                <feColorMatrix type="matrix" values={`${matriz[0].join(' ')} 0 0 ${matriz[1].join(' ')} 0 0 ${matriz[2].join(' ')} 0 0 0 0 0 1 0`} />
+              </filter>
+            </svg>
+          ) : null}
+          {urlVinheta && !recortando ? <img src={urlVinheta} alt="" className="pointer-events-none absolute inset-0 size-full" /> : null}
 
           {/* Camadas (fora do modo recorte) */}
           {recortando

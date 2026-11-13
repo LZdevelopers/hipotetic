@@ -212,8 +212,97 @@ const par = (n) => Math.max(2, Math.round(n / 2) * 2)
  * Cores com a MESMA conta dos filtros do navegador usados na prévia
  * (CSS brightness → contrast → saturate), em RGB: o que se vê é o que sai.
  */
-function filtrosCor({ brilho, contraste, saturacao }, alfa = false) {
-  if (brilho === 0 && contraste === 1 && saturacao === 1) return []
+/* ─── Cor: ajustes, filtros prontos e vinheta ────────────────────────────── */
+
+export const PADRAO_COR = { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }
+
+/** Filtros prontos (cada um é só um conjunto de ajustes — dá para mexer depois). */
+export const FILTROS = [
+  { id: 'original', rotulo: 'Original', cor: {} },
+  { id: 'vivido', rotulo: 'Vívido', cor: { saturacao: 1.45, contraste: 1.15 } },
+  { id: 'quente', rotulo: 'Quente', cor: { temperatura: 0.6, saturacao: 1.1 } },
+  { id: 'frio', rotulo: 'Frio', cor: { temperatura: -0.6, saturacao: 1.05 } },
+  { id: 'cinema', rotulo: 'Cinema', cor: { contraste: 1.2, saturacao: 0.85, temperatura: -0.2, brilho: -0.05, vinheta: 0.6 } },
+  { id: 'por-do-sol', rotulo: 'Pôr do sol', cor: { temperatura: 0.8, matiz: -10, saturacao: 1.2 } },
+  { id: 'vintage', rotulo: 'Vintage', cor: { sepia: 0.35, saturacao: 0.85, contraste: 0.9, brilho: 0.05, temperatura: 0.3, vinheta: 0.5 } },
+  { id: 'desbotado', rotulo: 'Desbotado', cor: { contraste: 0.8, saturacao: 0.7, brilho: 0.08 } },
+  { id: 'sepia', rotulo: 'Sépia', cor: { sepia: 0.85, contraste: 1.05 } },
+  { id: 'pb', rotulo: 'P&B', cor: { saturacao: 0, contraste: 1.1 } },
+  { id: 'noir', rotulo: 'Noir', cor: { saturacao: 0, contraste: 1.4, brilho: -0.05, vinheta: 0.7 } },
+]
+export const corDoFiltro = (f) => ({ ...PADRAO_COR, ...f.cor })
+
+/**
+ * Matriz 3×3 de sépia → matiz → temperatura (nessa ordem), igual às funções
+ * sepia() e hue-rotate() do CSS. A prévia usa um feColorMatrix com ela e a
+ * exportação um colorchannelmixer: o resultado é o mesmo.
+ */
+export function matrizCor(bruta) {
+  const c = { ...PADRAO_COR, ...bruta }
+  if (!c.sepia && !c.matiz && !c.temperatura) return null
+  const mul = (A, B) => A.map((l) => [0, 1, 2].map((j) => l[0] * B[0][j] + l[1] * B[1][j] + l[2] * B[2][j]))
+  let M = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ]
+  if (c.sepia) {
+    const a = 1 - c.sepia
+    M = mul(
+      [
+        [0.393 + 0.607 * a, 0.769 - 0.769 * a, 0.189 - 0.189 * a],
+        [0.349 - 0.349 * a, 0.686 + 0.314 * a, 0.168 - 0.168 * a],
+        [0.272 - 0.272 * a, 0.534 - 0.534 * a, 0.131 + 0.869 * a],
+      ],
+      M,
+    )
+  }
+  if (c.matiz) {
+    const r = (c.matiz * Math.PI) / 180
+    const co = Math.cos(r)
+    const s = Math.sin(r)
+    M = mul(
+      [
+        [0.213 + co * 0.787 - s * 0.213, 0.715 - co * 0.715 - s * 0.715, 0.072 - co * 0.072 + s * 0.928],
+        [0.213 - co * 0.213 + s * 0.143, 0.715 + co * 0.285 + s * 0.14, 0.072 - co * 0.072 - s * 0.283],
+        [0.213 - co * 0.213 - s * 0.787, 0.715 - co * 0.715 + s * 0.715, 0.072 + co * 0.928 + s * 0.072],
+      ],
+      M,
+    )
+  }
+  if (c.temperatura) {
+    const k = c.temperatura
+    M = mul(
+      [
+        [1 + 0.18 * k, 0, 0],
+        [0, 1 + 0.03 * k, 0],
+        [0, 0, 1 - 0.18 * k],
+      ],
+      M,
+    )
+  }
+  return M
+}
+
+/** Vinheta (bordas escuras) como PNG transparente — a prévia e a exportação usam a mesma. */
+export async function vinhetaPng(w, h, k) {
+  const cv = new OffscreenCanvas(Math.max(2, w), Math.max(2, h))
+  const ctx = cv.getContext('2d')
+  ctx.translate(w / 2, h / 2)
+  ctx.scale(w / 2, h / 2)
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.SQRT2)
+  g.addColorStop(0, 'rgba(0,0,0,0)')
+  g.addColorStop(0.42, 'rgba(0,0,0,0)')
+  g.addColorStop(1, `rgba(0,0,0,${Math.min(1, 0.9 * k)})`)
+  ctx.fillStyle = g
+  ctx.fillRect(-1, -1, 2, 2)
+  return cv.convertToBlob({ type: 'image/png' })
+}
+
+function filtrosCor(cor, alfa = false) {
+  const { brilho, contraste, saturacao } = { ...PADRAO_COR, ...cor }
+  const M = matrizCor(cor)
+  if (brilho === 0 && contraste === 1 && saturacao === 1 && !M) return []
   const n = (v) => Number(v.toFixed(4))
   const f = [alfa ? 'format=rgba' : 'format=gbrp']
   const b = 1 + brilho
@@ -228,6 +317,7 @@ function filtrosCor({ brilho, contraste, saturacao }, alfa = false) {
       `colorchannelmixer=rr=${n(0.213 + 0.787 * s)}:rg=${n(0.715 - 0.715 * s)}:rb=${n(0.072 - 0.072 * s)}:gr=${n(0.213 - 0.213 * s)}:gg=${n(0.715 + 0.285 * s)}:gb=${n(0.072 - 0.072 * s)}:br=${n(0.213 - 0.213 * s)}:bg=${n(0.715 - 0.715 * s)}:bb=${n(0.072 + 0.928 * s)}`,
     )
   }
+  if (M) f.push(`colorchannelmixer=rr=${n(M[0][0])}:rg=${n(M[0][1])}:rb=${n(M[0][2])}:gr=${n(M[1][0])}:gg=${n(M[1][1])}:gb=${n(M[1][2])}:br=${n(M[2][0])}:bg=${n(M[2][1])}:bb=${n(M[2][2])}`)
   return f
 }
 const fixo = (n) => Number(n.toFixed(3))
@@ -285,7 +375,7 @@ function simples(p) {
   const cor = p.cor
   const au = { ...PADRAO_AUDIO, ...p.audio }
   const audioPadrao = au.volume === 1 && !au.mudo && au.ruido === 'nao' && !au.voz && au.normalizar === 'nao' && !au.fadeIn && !au.fadeOut
-  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && cor.brilho === 0 && cor.contraste === 1 && cor.saturacao === 1
+  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && cor.brilho === 0 && cor.contraste === 1 && cor.saturacao === 1 && !matrizCor(cor) && !cor.vinheta
 }
 
 function nomeNoFs(id, arquivo) {
@@ -373,14 +463,23 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
 
   // 2. Quadro inteiro: cores e fades.
   let v = 'vc'
-  const efeitos = []
-  const { brilho, contraste, saturacao } = p.cor
-  efeitos.push(...filtrosCor({ brilho, contraste, saturacao }))
-  if (efeitos.length) efeitos.push('format=yuv420p')
-  if (p.fadeIn) efeitos.push(`fade=t=in:st=0:d=${fixo(p.fadeIn)}`)
-  if (p.fadeOut) efeitos.push(`fade=t=out:st=${fixo(Math.max(0, T - p.fadeOut))}:d=${fixo(p.fadeOut)}`)
+  const corQuadro = { ...PADRAO_COR, ...p.cor }
+  const efeitos = filtrosCor(corQuadro)
   if (efeitos.length) {
-    f.push(`[vc]${efeitos.join(',')}[vq]`)
+    f.push(`[vc]${efeitos.join(',')},format=yuv420p[vcor]`)
+    v = 'vcor'
+  }
+  // Vinheta: a mesma imagem da prévia, por cima do vídeo (e por baixo das camadas).
+  if (corQuadro.vinheta > 0) {
+    const k = entrada('vinheta.png', await vinhetaPng(W, H, corQuadro.vinheta), ['-loop', '1', '-framerate', '30', '-t', String(fixo(T + 0.1))])
+    f.push(`[${k}:v]format=rgba[vin]`, `[${v}][vin]overlay=0:0:shortest=1,format=yuv420p[vvin]`)
+    v = 'vvin'
+  }
+  const fades = []
+  if (p.fadeIn) fades.push(`fade=t=in:st=0:d=${fixo(p.fadeIn)}`)
+  if (p.fadeOut) fades.push(`fade=t=out:st=${fixo(Math.max(0, T - p.fadeOut))}:d=${fixo(p.fadeOut)}`)
+  if (fades.length) {
+    f.push(`[${v}]${fades.join(',')}[vq]`)
     v = 'vq'
   }
 

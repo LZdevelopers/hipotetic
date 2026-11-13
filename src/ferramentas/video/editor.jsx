@@ -13,9 +13,9 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { FONTES, PADRAO_AUDIO, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
+import { FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
 
-const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
+const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
 /** Botão liga/desliga pequeno (negrito, itálico…). */
 function Alternar({ ativo, aoMudar, rotulo, children, className = '' }) {
@@ -490,7 +490,44 @@ function PainelCamada({ camada: bruta, mudarCamada, acoes, total }) {
   )
 }
 
-function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
+/** Os mesmos ajustes iguais? (para marcar o filtro escolhido) */
+const mesmaCor = (a, b) => Object.keys(PADRAO_COR).every((k) => Math.abs((a[k] ?? PADRAO_COR[k]) - (b[k] ?? PADRAO_COR[k])) < 0.005)
+const cssCor = (c, idMatriz) => `brightness(${1 + c.brilho}) contrast(${c.contraste}) saturate(${c.saturacao})${idMatriz ? ` url(#${idMatriz})` : ''}`
+
+/** Grade de filtros prontos, com a miniatura do próprio vídeo (como no CapCut). */
+function Filtros({ cor, miniatura, aoEscolher }) {
+  return (
+    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Filtros">
+      <svg width="0" height="0" className="absolute" aria-hidden="true">
+        {FILTROS.map((f) => {
+          const M = matrizCor(f.cor)
+          return M ? (
+            <filter key={f.id} id={`filtro-${f.id}`} colorInterpolationFilters="sRGB">
+              <feColorMatrix type="matrix" values={`${M[0].join(' ')} 0 0 ${M[1].join(' ')} 0 0 ${M[2].join(' ')} 0 0 0 0 0 1 0`} />
+            </filter>
+          ) : null
+        })}
+      </svg>
+      {FILTROS.map((f) => {
+        const c = corDoFiltro(f)
+        const ativo = mesmaCor(cor, c)
+        return (
+          <button key={f.id} type="button" role="radio" aria-checked={ativo} onClick={() => aoEscolher(c)} className="group flex flex-col items-center gap-1 text-[0.6875rem] font-semibold text-suave">
+            <span className={`relative block aspect-video w-full overflow-hidden rounded-lg border-2 bg-superficie-3 transition-colors ${ativo ? 'border-acento' : 'border-transparent group-hover:border-borda-forte'}`}>
+              {miniatura ? <img src={miniatura} alt="" className="size-full object-cover" style={{ filter: cssCor(c, matrizCor(f.cor) ? `filtro-${f.id}` : null) }} /> : null}
+              {c.vinheta ? <span className="absolute inset-0" style={{ background: `radial-gradient(ellipse at center, transparent 42%, rgb(0 0 0 / ${0.9 * c.vinheta}) 100%)` }} /> : null}
+            </span>
+            <span className={ativo ? 'text-acento' : 'group-hover:text-tinta'}>{f.rotulo}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PainelQuadro({ p, mudar, recorte, acoesRecorte, final, miniatura }) {
+  const cor = { ...PADRAO_COR, ...p.cor }
+  const mc = (d) => mudar((x) => ({ cor: { ...PADRAO_COR, ...x.cor, ...d } }))
   return (
     <div className="flex flex-col gap-5">
       <Bloco titulo="Crop">
@@ -563,10 +600,22 @@ function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
           <Botao variante={p.espelhar ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" onClick={() => mudar((x) => ({ espelhar: !x.espelhar }))} aria-pressed={p.espelhar} aria-label="Flip horizontal" title="Flip horizontal" />
         </div>
       </Bloco>
+      <Bloco titulo="Filtros">
+        <Filtros cor={cor} miniatura={miniatura} aoEscolher={(c) => mudar({ cor: c })} />
+      </Bloco>
       <Bloco titulo="Correção de cor">
-        <Deslizante rotulo="Brilho" valor={Math.round(p.cor.brilho * 100)} aoMudar={(v) => mudar((x) => ({ cor: { ...x.cor, brilho: v / 100 } }))} min={-50} max={50} formatar={(v) => `${v > 0 ? '+' : ''}${v}`} />
-        <Deslizante rotulo="Contraste" valor={Math.round(p.cor.contraste * 100)} aoMudar={(v) => mudar((x) => ({ cor: { ...x.cor, contraste: v / 100 } }))} min={50} max={150} formatar={(v) => `${v}%`} />
-        <Deslizante rotulo="Saturação" valor={Math.round(p.cor.saturacao * 100)} aoMudar={(v) => mudar((x) => ({ cor: { ...x.cor, saturacao: v / 100 } }))} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
+        <Deslizante rotulo="Brilho" valor={Math.round(cor.brilho * 100)} aoMudar={(v) => mc({ brilho: v / 100 })} min={-50} max={50} formatar={(v) => `${v > 0 ? '+' : ''}${v}`} />
+        <Deslizante rotulo="Contraste" valor={Math.round(cor.contraste * 100)} aoMudar={(v) => mc({ contraste: v / 100 })} min={50} max={150} formatar={(v) => `${v}%`} />
+        <Deslizante rotulo="Saturação" valor={Math.round(cor.saturacao * 100)} aoMudar={(v) => mc({ saturacao: v / 100 })} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
+        <Deslizante rotulo="Temperatura" valor={Math.round(cor.temperatura * 100)} aoMudar={(v) => mc({ temperatura: v / 100 })} min={-100} max={100} formatar={(v) => (v ? `${v > 0 ? '+' : ''}${v} ${v > 0 ? 'quente' : 'frio'}` : '0')} />
+        <Deslizante rotulo="Matiz" valor={Math.round(cor.matiz)} aoMudar={(v) => mc({ matiz: v })} min={-180} max={180} formatar={(v) => `${v > 0 ? '+' : ''}${v}°`} />
+        <Deslizante rotulo="Sépia" valor={Math.round(cor.sepia * 100)} aoMudar={(v) => mc({ sepia: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
+        <Deslizante rotulo="Vinheta" valor={Math.round(cor.vinheta * 100)} aoMudar={(v) => mc({ vinheta: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
+        {!mesmaCor(cor, PADRAO_COR) ? (
+          <button type="button" onClick={() => mudar({ cor: { ...PADRAO_COR } })} className="self-start text-xs font-semibold text-suave hover:text-tinta">
+            Redefinir cores
+          </button>
+        ) : null}
       </Bloco>
       <Bloco titulo="Fade (preto)">
         <Deslizante rotulo="Fade in" valor={p.fadeIn} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={5} passo={0.25} formatar={segundos} />
@@ -1540,7 +1589,7 @@ export default function EditorVideo() {
               <Segmentado valor={aba} aoMudar={setAba} opcoes={ABAS} />
             </div>
             <div className="rolagem-fina flex-1 overflow-y-auto p-4">
-              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
+              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} miniatura={p.clipes.length ? (fontes[p.clipes[0].fonte]?.quadros?.[Math.floor((fontes[p.clipes[0].fonte]?.quadros?.length ?? 0) / 2)] ?? (fontes[p.clipes[0].fonte]?.tipo === 'imagem' ? fontes[p.clipes[0].fonte].url : null)) : null} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
               {aba === 'clipe' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} acoes={acoes} /> : null}
               {aba === 'camada' ? <PainelCamada camada={camadaSel} mudarCamada={mudarCamada} acoes={acoes} total={total} /> : null}
               {aba === 'musica' ? <PainelAudio p={p} fontes={fontes} mudar={mudar} abrir={() => entradas.musica.current?.click()} exportarAudio={exportarAudio} processando={processando} /> : null}
