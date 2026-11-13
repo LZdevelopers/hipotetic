@@ -224,7 +224,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
       if (cam.tipo === 'video') {
         const vc = videosCamada.current[cam.id]
         if (!vc) continue
-        const alvo = t - cam.inicio
+        const alvo = t - cam.inicio + (cam.corte ?? 0)
         const dur = ff[cam.fonte]?.duracao ?? Infinity
         vc.muted = !(cam.volume > 0)
         vc.volume = Math.min(1, (cam.volume ?? 0) * geral)
@@ -328,6 +328,23 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     buscar,
     tempo: () => m.current.t,
     tocando: () => m.current.tocando,
+    /** Quadro do clipe no cursor, cru (sem camadas nem efeitos), como PNG. */
+    async capturar() {
+      const { p: pp } = atual.current
+      const c = pp.clipes[Math.min(m.current.ativo, pp.clipes.length - 1)]
+      const el = videos.current[c?.id]
+      if (!el) return null
+      const src = el instanceof ClipeImagem ? el.el : el
+      if (src.seeking) await new Promise((ok) => src.addEventListener('seeked', ok, { once: true }))
+      const w = src.videoWidth || src.naturalWidth
+      const h = src.videoHeight || src.naturalHeight
+      if (!w || !h) return null
+      const cv = document.createElement('canvas')
+      cv.width = w
+      cv.height = h
+      cv.getContext('2d').drawImage(src, 0, 0, w, h)
+      return new Promise((ok) => cv.toBlob(ok, 'image/png'))
+    },
   }))
 
   // Projeto mudou (corte, velocidade, camadas…): reaplica no tempo atual.

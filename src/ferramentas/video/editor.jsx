@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { FONTES, PADRAO_AUDIO, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, localizar, quadroGif, tamanhoFinal } from './_projeto'
+import { FONTES, PADRAO_AUDIO, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -262,6 +262,12 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, acoes }) {
         </Botao>
         <Botao variante="secundario" tamanho="p" icone="copiar" onClick={() => acoes.duplicar(clipe.id)}>
           Duplicar
+        </Botao>
+        <Botao variante="secundario" tamanho="p" icone="congelar" onClick={acoes.congelar} title="Congela o quadro do cursor por 2 s">
+          Congelar quadro
+        </Botao>
+        <Botao variante="secundario" tamanho="p" icone="camera" onClick={acoes.salvarQuadro} title="Salva o quadro do cursor como PNG">
+          Salvar quadro
         </Botao>
         <Botao variante="secundario" tamanho="p" onClick={() => acoes.mover(clipe.id, -1)} disabled={i === 0}>
           ← Antes
@@ -877,7 +883,112 @@ export default function EditorVideo() {
     else if (s?.tipo === 'musica') setAba('musica')
   }
 
+  /** Baixa um arquivo gerado sem sair do editor. */
+  const baixarArquivo = (blob, nome) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nome
+    document.body.append(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+  const copiado = useRef(null)
+
   const acoes = {
+    /** Q / W (como no CapCut): corta do começo do clipe até o cursor, ou do cursor até o fim. */
+    apararNoCursor: (lado) => {
+      const t = agora()
+      const loc = localizar(p, t)
+      const c = p.clipes[loc.indice]
+      if (!c) return
+      const imagem = fontes[c.fonte]?.tipo === 'imagem'
+      const passou = t - loc.inicio
+      const dur = (c.fim - c.inicio) / c.velocidade
+      if (passou < 0.05 || dur - passou < 0.05) {
+        setAviso('Posicione o cursor no meio de um clipe.')
+        return
+      }
+      if (lado === 'antes') {
+        mudarClipe(c.id, imagem ? { fim: c.fim - passou } : { inicio: loc.local })
+        requestAnimationFrame(() => palco.current?.buscar(loc.inicio))
+      } else mudarClipe(c.id, imagem ? { fim: passou } : { fim: loc.local })
+      selecionar({ tipo: 'clipe', id: c.id })
+    },
+    /** Congela o quadro do cursor: vira uma imagem de 2 s no meio do clipe. */
+    congelar: async () => {
+      const t = agora()
+      const loc = localizar(p, t)
+      const c = p.clipes[loc.indice]
+      if (!c) return
+      palco.current?.pausar()
+      palco.current?.buscar(t)
+      const blob = await palco.current?.capturar()
+      if (!blob) {
+        setAviso('Não foi possível capturar este quadro.')
+        return
+      }
+      const arquivo = new File([blob], `quadro-${tempo(t).replace(/[:.]/g, '-')}.png`, { type: 'image/png' })
+      const fonte = { id: novoId('f'), ...(await lerFonte(arquivo)) }
+      setFontes((f) => ({ ...f, [fonte.id]: fonte }))
+      guardar(`video:arquivo:${fonte.id}`, arquivo)
+      const congelado = { id: novoId('c'), fonte: fonte.id, inicio: 0, fim: 2, velocidade: 1, volume: 1, mudo: false }
+      const resto = { id: novoId('c') }
+      const imagem = fontes[c.fonte]?.tipo === 'imagem'
+      mudar((x) => ({
+        clipes: x.clipes.flatMap((y) => {
+          if (y.id !== c.id) return [y]
+          if (imagem || y.fim - loc.local < 0.05) return [y, congelado]
+          if (loc.local - y.inicio < 0.05) return [congelado, y]
+          return [{ ...y, fim: loc.local }, congelado, { ...y, ...resto, inicio: loc.local }]
+        }),
+      }))
+      selecionar({ tipo: 'clipe', id: congelado.id })
+    },
+    /** Salva o quadro do cursor como PNG, com textos e camadas (como no vídeo final). */
+    salvarQuadro: async () => {
+      const t = agora()
+      const pq = projetoNoInstante(p, fontes, t)
+      if (!pq) return
+      palco.current?.pausar()
+      setLendo('Gerando a imagem do quadro')
+      try {
+        await document.fonts?.ready
+        const { blob } = await exportarProjeto(pq, fontes, { progresso: () => {} }, null, { quadroPng: true })
+        baixarArquivo(blob, `${nomeArquivo}-${tempo(t).replace(/[:.]/g, '-')}.png`)
+      } catch (erro) {
+        console.error(erro)
+        setAviso(erro?.mensagem ?? 'Não foi possível salvar este quadro.')
+      } finally {
+        setLendo(null)
+      }
+    },
+    copiar: () => {
+      if (selecao?.tipo === 'camada') copiado.current = { tipo: 'camada', dado: p.camadas.find((c) => c.id === selecao.id) }
+      else if (selecao?.tipo === 'clipe') copiado.current = { tipo: 'clipe', dado: p.clipes.find((c) => c.id === selecao.id) }
+    },
+    colar: () => {
+      const cp = copiado.current
+      if (!cp?.dado) return
+      if (cp.tipo === 'camada') {
+        const id = novoId('k')
+        const d = cp.dado.fim - cp.dado.inicio
+        const ini = Math.min(agora(), Math.max(0, total - Math.min(d, total)))
+        mudar((x) => ({ camadas: [...x.camadas, { ...cp.dado, id, inicio: ini, fim: Math.min(total, ini + d) }] }))
+        selecionar({ tipo: 'camada', id })
+      } else if (fontes[cp.dado.fonte]) {
+        const id = novoId('c')
+        const depois = selecao?.tipo === 'clipe' ? selecao.id : null
+        mudar((x) => {
+          const i = depois ? x.clipes.findIndex((c) => c.id === depois) : x.clipes.length - 1
+          const clipes = [...x.clipes]
+          clipes.splice(i + 1, 0, { ...cp.dado, id })
+          return { clipes }
+        })
+        selecionar({ tipo: 'clipe', id })
+      }
+    },
     dividir: () => {
       const t = agora()
       const loc = localizar(p, t)
@@ -956,6 +1067,9 @@ export default function EditorVideo() {
           },
         },
         { rotulo: fontes[c.fonte]?.tipo === 'imagem' ? 'Duração…' : 'Velocidade, volume e trim…', icone: 'ajustar', acao: () => selecionar({ tipo: 'clipe', id: c.id }) },
+        { rotulo: 'Cortar até o cursor', icone: 'cortar', atalho: 'Q', acao: () => acoes.apararNoCursor('antes') },
+        { rotulo: 'Cortar a partir do cursor', icone: 'cortar', atalho: 'W', acao: () => acoes.apararNoCursor('depois') },
+        { rotulo: 'Congelar quadro (2 s)', icone: 'congelar', acao: acoes.congelar },
         { rotulo: c.mudo ? 'Ativar áudio' : 'Mute', icone: 'semAudio', acao: () => mudarClipe(c.id, { mudo: !c.mudo }), desativado: !fontes[c.fonte]?.temAudio },
         { rotulo: 'Duplicar', icone: 'copiar', acao: () => acoes.duplicar(c.id) },
         { rotulo: 'Mover para antes', acao: () => acoes.mover(c.id, -1), desativado: i === 0 },
@@ -971,7 +1085,8 @@ export default function EditorVideo() {
       titulo = c.tipo === 'texto' ? c.texto.split('\n')[0] || 'Texto' : { imagem: 'Camada · imagem', video: 'Camada · vídeo', desfoque: 'Blur' }[c.tipo]
       itens = [
         { rotulo: 'Editar', icone: 'caneta', acao: () => selecionar({ tipo: 'camada', id: c.id }) },
-        { rotulo: 'Duplicar', icone: 'copiar', acao: () => duplicarCamada(c.id) },
+        { rotulo: 'Duplicar', icone: 'copiar', atalho: 'Ctrl+D', acao: () => duplicarCamada(c.id) },
+        { rotulo: 'Copiar', atalho: 'Ctrl+C', acao: () => (copiado.current = { tipo: 'camada', dado: c }) },
         '-',
         { rotulo: 'Começar no cursor', icone: 'tempo', acao: () => mudarCamada(c.id, { inicio: Math.min(cursor, c.fim - 0.2) }), desativado: cursor >= c.fim - 0.2 },
         { rotulo: 'Terminar no cursor', icone: 'tempo', acao: () => mudarCamada(c.id, { fim: Math.max(cursor, c.inicio + 0.2) }), desativado: cursor <= c.inicio + 0.2 },
@@ -1006,6 +1121,8 @@ export default function EditorVideo() {
           { rotulo: 'Crop', icone: 'recortar', acao: acoesRecorte.abrir },
           { rotulo: 'Rotacionar 90°', icone: 'girar', acao: () => mudar((x) => ({ girar: (x.girar + 90) % 360, recorte: null })) },
           { rotulo: 'Dividir no cursor', icone: 'cortar', atalho: 'S', acao: acoes.dividir },
+          { rotulo: 'Congelar quadro (2 s)', icone: 'congelar', acao: acoes.congelar },
+          { rotulo: 'Salvar este quadro (PNG)', icone: 'imagem', acao: acoes.salvarQuadro },
         ]
       }
     } else {
@@ -1127,6 +1244,14 @@ export default function EditorVideo() {
       } else if ((k === 'z' && e.shiftKey) || k === 'y') {
         e.preventDefault()
         historico.refazer()
+      } else if (k === 'c' && selecao && !vazio) acoes.copiar()
+      else if (k === 'v' && !vazio) {
+        e.preventDefault()
+        acoes.colar()
+      } else if (k === 'd' && selecao && !vazio) {
+        e.preventDefault()
+        if (selecao.tipo === 'clipe') acoes.duplicar(selecao.id)
+        else if (selecao.tipo === 'camada') duplicarCamada(selecao.id)
       }
       return
     }
@@ -1137,6 +1262,14 @@ export default function EditorVideo() {
       e.preventDefault()
       palco.current?.alternar()
     } else if (e.key === 's' || e.key === 'S') acoes.dividir()
+    else if (e.key === 'q' || e.key === 'Q') acoes.apararNoCursor('antes')
+    else if (e.key === 'w' || e.key === 'W') acoes.apararNoCursor('depois')
+    else if (e.key === ',' || e.key === '.') {
+      // Quadro a quadro.
+      palco.current?.pausar()
+      palco.current?.buscar(agora() + (e.key === ',' ? -1 : 1) / (p.fps || 30))
+    } else if (e.key === 'Home') palco.current?.buscar(0)
+    else if (e.key === 'End') palco.current?.buscar(total)
     else if (e.key === 'f' || e.key === 'F') alternarTelaCheia()
     else if (e.key === 'Delete' || e.key === 'Backspace') acoes.remover(selecao)
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -1374,7 +1507,10 @@ export default function EditorVideo() {
                   <Icone nome="cortar" tamanho={18} />
                 </button>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-0.5">
+                <button type="button" onClick={acoes.salvarQuadro} disabled={vazio || Boolean(lendo)} aria-label="Salvar este quadro (PNG)" title="Salvar este quadro como imagem (PNG)" className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
+                  <Icone nome="camera" tamanho={18} />
+                </button>
                 <button type="button" onClick={alternarTelaCheia} disabled={vazio} aria-label="Tela cheia" title="Tela cheia (F)" className="grid size-10 place-items-center rounded-full text-suave transition-colors hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
                   <Icone nome="ampliar" tamanho={18} />
                 </button>
@@ -1446,7 +1582,7 @@ export default function EditorVideo() {
 
       <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fraca">
         <span className="size-1.5 rounded-full bg-sucesso" />
-        Tudo o que você muda já aparece no player. Na timeline: arraste um clipe para reordenar, as pontas para fazer trim (as partes escondidas aparecem tracejadas) e o + para adicionar vídeo, imagem ou GIF. Botão direito mostra as opções de cada item. Atalhos: espaço toca/pausa · S divide · F tela cheia · Delete apaga · Ctrl+Z desfaz · Ctrl + roda dá zoom na timeline.
+        Tudo o que você muda já aparece no player. Na timeline: arraste um clipe para reordenar, as pontas para fazer trim (as partes escondidas aparecem tracejadas) e o + para adicionar vídeo, imagem ou GIF. Botão direito mostra as opções de cada item. Atalhos: espaço toca/pausa · , e . quadro a quadro · S divide · Q/W cortam até/a partir do cursor · F tela cheia · Delete apaga · Ctrl+C/V/D copia, cola e duplica · Ctrl+Z desfaz · Ctrl + roda dá zoom na timeline.
       </p>
     </div>
   )

@@ -43,6 +43,29 @@ export function localizar(p, t) {
   return { indice: 0, local: p.clipes[0]?.inicio ?? 0, inicio: 0 }
 }
 
+/**
+ * O projeto reduzido ao instante t (um trecho curtinho): o clipe naquele ponto
+ * e as camadas visíveis, com a opacidade que têm ali. Usado para salvar o quadro.
+ */
+export function projetoNoInstante(p, fontes, t) {
+  const loc = localizar(p, t)
+  const c = p.clipes[loc.indice]
+  if (!c) return null
+  const passo = 0.12
+  const imagem = fontes[c.fonte]?.tipo === 'imagem'
+  const clipe = imagem ? { ...c, inicio: 0, fim: passo } : { ...c, inicio: loc.local, fim: Math.min(c.fim, loc.local + passo * c.velocidade) }
+  if (!imagem && clipe.fim - clipe.inicio < 0.04) clipe.inicio = Math.max(0, clipe.fim - passo * c.velocidade)
+  const camadas = p.camadas
+    .filter((k) => t >= k.inicio && t <= k.fim)
+    .map((bruta) => {
+      const k = { ...PADRAO_CAMADA, ...bruta }
+      const fi = k.fadeIn ? Math.min(1, (t - k.inicio) / k.fadeIn) : 1
+      const fo = k.fadeOut ? Math.min(1, (k.fim - t) / k.fadeOut) : 1
+      return { ...bruta, inicio: 0, fim: passo, fadeIn: 0, fadeOut: 0, opacidade: k.opacidade * Math.max(0, Math.min(fi, fo)), corte: k.tipo === 'video' ? (k.corte ?? 0) + (t - k.inicio) : k.corte, animEntrada: null, animSaida: null }
+    })
+  return { ...p, clipes: [clipe], camadas, fadeIn: 0, fadeOut: 0, musica: null, formato: 'mp4', resolucao: 0 }
+}
+
 /** Quadro "girado" de uma fonte (largura × altura depois de girar). */
 export function quadroGirado(f, girar) {
   return girar === 90 || girar === 270 ? { w: f.altura, h: f.largura } : { w: f.largura, h: f.altura }
@@ -275,6 +298,7 @@ function nomeNoFs(id, arquivo) {
  */
 export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
   const soAudio = opcoes.soAudio || p.formato === 'mp3'
+  const quadroPng = Boolean(opcoes.quadroPng)
   const gif = p.formato === 'gif'
   if (!p.clipes.length) throw new ErroAmigavel('Adicione pelo menos um vídeo.')
   const T = duracaoTotal(p)
@@ -285,7 +309,7 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
 
   fontesSimples = (pp) => fontes[pp.clipes[0].fonte]?.tipo === 'video'
   if (gif && T > MAX_SEGUNDOS_GIF + 0.05) throw new ErroAmigavel(`GIF só para vídeos de até ${MAX_SEGUNDOS_GIF} segundos.`)
-  if (!soAudio && !gif && simples(p)) {
+  if (!soAudio && !gif && !quadroPng && simples(p)) {
     const [c] = p.clipes
     const f = fontes[c.fonte]
     const q = quadroGirado(f, p.girar)
@@ -407,8 +431,9 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
       alturaPx = par(c.h * H)
       if (c.tipo === 'imagem') origem = `[${entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, parado)}:v]`
       else {
-        const d = Math.min(c.fim - c.inicio, fonte.duracao || c.fim - c.inicio)
-        const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ['-t', String(fixo(d + 0.1))])
+        const corte = c.corte ?? 0
+        const d = Math.min(c.fim - c.inicio, (fonte.duracao || Infinity) - corte, c.fim - c.inicio)
+        const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, [...(corte ? ['-ss', String(fixo(corte))] : []), '-t', String(fixo(d + 0.1))])
         origem = `[${k}:v]trim=0:${fixo(d)},setpts=PTS-STARTPTS+${fixo(c.inicio)}/TB,`
         if (!gif && fonte.temAudio && c.volume > 0) {
           const atraso = Math.round(c.inicio * 1000)
@@ -499,6 +524,23 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
       throw new ErroAmigavel('Não foi possível exportar o áudio.')
     })
     return { blob: new Blob([dados], { type: 'audio/mpeg' }), motor: 'webassembly' }
+  }
+
+  if (quadroPng) {
+    f.push(`[${a}]anullsink`)
+    const dados = await executarFfmpeg({
+      entradas: [...entradas].map(([nome, d]) => ({ nome, dados: d })),
+      args: [...args, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-frames:v', '1', '-update', '1'],
+      saida: 'quadro.png',
+      aoProgredir: ctx.progresso,
+      sinal: ctx.sinal,
+      rotulo: 'Gerando a imagem',
+    }).catch((erro) => {
+      if (erro?.name === 'AbortError') throw erro
+      console.error(erro?.log)
+      throw new ErroAmigavel('Não foi possível gerar a imagem deste quadro.')
+    })
+    return { blob: new Blob([dados], { type: 'image/png' }), motor: 'webassembly' }
   }
 
   if (gif) {

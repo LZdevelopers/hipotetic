@@ -393,6 +393,52 @@ export default [
     },
   },
   {
+    nome: 'video/editor: Q/W, quadro a quadro, congelar quadro e salvar quadro (PNG)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      const seg = (txt) => { const [m, s] = txt.replace('/', '').trim().split(':'); return Number(m) * 60 + Number(s) }
+      const total = async () => seg(await t.js("return document.querySelector('[title=\"Duração do vídeo final\"]').textContent"))
+      const relogio = async () => seg(await t.js("return document.querySelector('main section[aria-label=Player] p.font-display span').textContent"))
+      const tecla = (key, extra = '') => t.js(`dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true${extra} }))`)
+      const irPara = (fracao) => t.js(`const r = document.querySelector('main [aria-label="Zoom da linha do tempo"]').closest('div.flex.flex-col').querySelector('.overflow-auto .sticky.top-0 > div:last-child'); const b = r.getBoundingClientRect()
+        const clipe = document.querySelector('main [aria-label^="Clipe 1"]').getBoundingClientRect()
+        r.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: clipe.left + clipe.width * ${fracao}, pointerId: 3 })); r.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 3 }))`)
+      const original = await total()
+      await irPara(0.4)
+      const cursor = await relogio()
+      // W: corta do cursor até o fim do clipe.
+      await tecla('w')
+      await t.esperar(200)
+      assert.ok(Math.abs((await total()) - cursor) < 0.15, `W deveria deixar ${cursor}s, ficou ${await total()}s`)
+      await tecla('z', ', ctrlKey: true')
+      await t.esperar(200)
+      assert.equal(await total(), original, 'Ctrl+Z desfaz o corte')
+      // Quadro a quadro.
+      await irPara(0.4)
+      const t0 = await relogio()
+      for (let i = 0; i < 3; i += 1) await tecla('.')
+      await t.esperar(150)
+      assert.ok(Math.abs((await relogio()) - t0 - 0.1) < 0.06, 'três quadros ≈ 0,1 s')
+      // Congelar quadro: o clipe se divide e entra uma imagem de 2 s.
+      await t.js("document.querySelector('main [aria-label^=\"Clipe 1\"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 4 })); document.querySelector('main [aria-label^=\"Clipe 1\"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 4 }))")
+      await irPara(0.4)
+      await aba(t, 'Clipe')
+      await t.clicar('Congelar quadro')
+      await t.aguardar("document.querySelectorAll('main [aria-label^=\"Clipe \"]').length === 3", 10000)
+      assert.ok(Math.abs((await total()) - original - 2) < 0.15, 'congelar soma 2 s')
+      assert.ok(await t.js("return document.querySelector('main [aria-label^=\"Clipe 2\"]').getAttribute('aria-label').includes('quadro-')"), 'o clipe do meio é a imagem congelada')
+      // Salvar quadro (PNG): intercepta o download.
+      await t.js(`window.__baixado = null; const orig = HTMLAnchorElement.prototype.click
+        HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__baixado = { nome: this.download, href: this.href }; return } return orig.call(this) }`)
+      await t.js("document.querySelector('main button[aria-label=\"Salvar este quadro (PNG)\"]').click()")
+      await t.aguardar('window.__baixado', 60000)
+      const png = await t.js(`const b = await (await fetch(window.__baixado.href)).blob(); const bmp = await createImageBitmap(b); return { nome: window.__baixado.nome, tipo: b.type, w: bmp.width, h: bmp.height }`)
+      assert.ok(png.nome.endsWith('.png'), png.nome)
+      assert.deepEqual([png.tipo, png.w, png.h], ['image/png', 640, 360])
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {

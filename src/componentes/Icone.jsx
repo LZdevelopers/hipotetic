@@ -120,6 +120,10 @@ import {
   ZoomIn,
   ZoomOut,
   MoveHorizontal,
+  Camera,
+  Snowflake,
+  Wand,
+  Clapperboard,
 } from 'lucide-react'
 
 /**
@@ -187,6 +191,10 @@ const ICONES = {
   zoomMais: ZoomIn,
   zoomMenos: ZoomOut,
   encaixar: MoveHorizontal,
+  camera: Camera,
+  congelar: Snowflake,
+  filtro: Wand,
+  transicao: Clapperboard,
 
   // operações
   ajustar: SlidersHorizontal,
