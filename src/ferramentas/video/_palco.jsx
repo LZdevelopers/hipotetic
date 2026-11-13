@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -46,6 +46,31 @@ class ClipeImagem {
       this._marco = null
     }
   }
+}
+
+/**
+ * Efeito de transição na prévia: `a` é o palco do clipe que sai, `b` o do que
+ * entra (ambos do tamanho do quadro), q vai de 0 a 1. Imita o xfade do ffmpeg.
+ */
+function efeitoTransicao({ tipo, q }, a, b, veu) {
+  if (!a || !b) return
+  b.style.zIndex = '1'
+  if (tipo === 'dissolver') b.style.opacity = String(q)
+  else if (tipo === 'preto' || tipo === 'branco') {
+    b.style.opacity = q >= 0.5 ? '1' : '0'
+    if (veu) {
+      veu.style.background = tipo === 'preto' ? '#000' : '#fff'
+      veu.style.opacity = String(q < 0.5 ? q * 2 : (1 - q) * 2)
+    }
+  } else if (tipo === 'deslizar-esq') {
+    a.style.translate = `${-q * 100}% 0`
+    b.style.translate = `${(1 - q) * 100}% 0`
+  } else if (tipo === 'deslizar-dir') {
+    a.style.translate = `${q * 100}% 0`
+    b.style.translate = `${-(1 - q) * 100}% 0`
+  } else if (tipo === 'limpar-esq') b.style.clipPath = `inset(0 0 0 ${(1 - q) * 100}%)`
+  else if (tipo === 'limpar-dir') b.style.clipPath = `inset(0 ${(1 - q) * 100}% 0 0)`
+  else if (tipo === 'circulo') b.style.clipPath = `circle(${q * 75}% at 50% 50%)`
 }
 
 /** Vinheta da prévia (a mesma imagem que vai para a exportação). */
@@ -179,6 +204,8 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   const videosCamada = useRef({})
   const musica = useRef(null)
   const veu = useRef(null)
+  const veuTransicao = useRef(null)
+  const palcosClipe = useRef({})
   const m = useRef({ tocando: false, t: 0, ativo: 0, quadro: 0 })
   const atual = useRef({ p, fontes })
   atual.current = { p, fontes }
@@ -208,16 +235,29 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
     const { p: pp, fontes: ff } = atual.current
     if (!pp.clipes.length) return
     const T = duracaoTotal(pp)
-    const loc = localizar(pp, Math.min(t, T - 0.001))
-    m.current.ativo = loc.indice
+    // Durante uma transição aparecem dois clipes: o que sai (principal, dita o tempo) e o que entra.
+    const est = transicaoNoTempo(pp, Math.min(t, T - 0.001))
+    m.current.ativo = est.principal
     pp.clipes.forEach((c, i) => {
+      const caixa = palcosClipe.current[c.id]
+      if (caixa) {
+        caixa.style.opacity = ''
+        caixa.style.translate = ''
+        caixa.style.clipPath = ''
+        caixa.style.zIndex = ''
+      }
       const v = videos.current[c.id]
       if (!v) return
-      v.style.visibility = i === loc.indice ? 'visible' : 'hidden'
-      if (i !== loc.indice && !v.paused) v.pause()
+      const visivel = i === est.principal || i === est.entrando
+      v.style.visibility = visivel ? 'visible' : 'hidden'
+      if (!visivel && !v.paused) v.pause()
     })
-    const c = pp.clipes[loc.indice]
+    if (veuTransicao.current) veuTransicao.current.style.opacity = '0'
+    if (est.entrando >= 0) efeitoTransicao(est, palcosClipe.current[pp.clipes[est.principal].id], palcosClipe.current[pp.clipes[est.entrando].id], veuTransicao.current)
+    const inicios = iniciosNaLinha(pp)
+    const c = pp.clipes[est.principal]
     const v = videos.current[c.id]
+    const loc = { local: Math.min(c.fim, c.inicio + (t - inicios[est.principal]) * c.velocidade) }
     // Fades: véu preto e volume.
     const rampa = (ini, fim) => {
       let x = 0
@@ -235,7 +275,22 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
       v.playbackRate = c.velocidade
       v.preservesPitch = true
       v.muted = c.mudo
-      v.volume = Math.max(0, Math.min(1, c.volume * geral * (pp.musica ? pp.musica.volumeOriginal : 1) * (1 - fadeSom)))
+      v.volume = Math.max(0, Math.min(1, c.volume * geral * (pp.musica ? pp.musica.volumeOriginal : 1) * (1 - fadeSom) * (est.entrando >= 0 ? 1 - est.q : 1)))
+    }
+    // O clipe que entra toca junto, acompanhando o tempo (e o som cruza).
+    if (est.entrando >= 0) {
+      const n = pp.clipes[est.entrando]
+      const nv = videos.current[n.id]
+      if (nv) {
+        const local = Math.min(n.fim, n.inicio + (t - inicios[est.entrando]) * n.velocidade)
+        if ((buscarVideos && Math.abs(nv.currentTime - local) > 0.04) || Math.abs(nv.currentTime - local) > 0.25) nv.currentTime = local
+        nv.playbackRate = n.velocidade
+        nv.preservesPitch = true
+        nv.muted = n.mudo
+        nv.volume = Math.max(0, Math.min(1, n.volume * geral * (pp.musica ? pp.musica.volumeOriginal : 1) * (1 - fadeSom) * est.q))
+        if (m.current.tocando && nv.paused) nv.play().catch(() => {})
+        if (!m.current.tocando && !nv.paused) nv.pause()
+      }
     }
     // Camadas: visíveis só no intervalo delas; vídeos sobrepostos acompanham.
     for (const cam of pp.camadas) {
@@ -306,10 +361,13 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
       const n = pp.clipes[i]
       const nv = videos.current[n.id]
       m.current.ativo = i
-      t = inicios[i]
-      if (nv) {
-        nv.currentTime = n.inicio
-        nv.play().catch(() => {})
+      if (nv && !nv.paused) t = inicios[i] + (nv.currentTime - n.inicio) / n.velocidade
+      else {
+        t = inicios[i]
+        if (nv) {
+          nv.currentTime = n.inicio
+          nv.play().catch(() => {})
+        }
       }
     }
     m.current.t = t
@@ -422,12 +480,14 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
             aoMenu?.(e, { tipo: 'palco', pos: { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height } })
           }}
         >
+          <div className="pointer-events-none absolute inset-0 isolate">
           {p.clipes.map((c) => {
             const fonte = fontes[c.fonte]
             if (!fonte?.url) return null
             const g = geometria(fonte)
             return (
-              <div key={c.id} className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>
+              <div key={c.id} ref={(el) => (el ? (palcosClipe.current[c.id] = el) : delete palcosClipe.current[c.id])} className="absolute inset-0 overflow-hidden">
+              <div className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>
                 {fonte.tipo === 'imagem' ? (
                   <img
                     ref={(el) => (el ? (videos.current[c.id] = el._clipe ??= new ClipeImagem(el)) : delete videos.current[c.id])}
@@ -449,8 +509,11 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
                 />
                 )}
               </div>
+              </div>
             )
           })}
+            <div ref={veuTransicao} className="absolute inset-0 z-[2]" style={{ opacity: 0 }} />
+          </div>
 
           {/* Matriz de cor (sépia, matiz, temperatura) e vinheta */}
           {matriz ? (

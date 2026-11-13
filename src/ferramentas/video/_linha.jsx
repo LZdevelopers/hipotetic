@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { tempo } from '../../componentes/editor/Comum'
-import { duracaoClipe, duracaoTotal, iniciosNaLinha, trechoMusica } from './_projeto'
+import { TRANSICOES, duracaoClipe, duracaoTotal, duracaoTransicao, iniciosNaLinha, trechoMusica } from './_projeto'
 
 const ICONES = { texto: 'texto', imagem: 'imagem', video: 'arquivoVideo', desfoque: 'borracha' }
 const NOMES = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', desfoque: 'Blur' }
@@ -719,6 +719,31 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
                     </div>
                   )
                 })}
+
+                {/* Transições: a sobreposição destacada e um botão em cada junção (como no CapCut) */}
+                {!reordenando && !aparando
+                  ? p.clipes.slice(0, -1).map((c, i) => {
+                      const d = duracaoTransicao(p, i)
+                      const sel = selecao?.tipo === 'transicao' && selecao.id === c.id
+                      const nome = d > 0 ? TRANSICOES.find((y) => y.id === c.transicao.tipo)?.rotulo : null
+                      return (
+                        <div key={`t${c.id}`}>
+                          {d > 0 ? <div className="pointer-events-none absolute top-1.5 bottom-1.5 z-20 rounded-md bg-[repeating-linear-gradient(135deg,rgb(255_255_255/0.28)_0_4px,transparent_4px_8px)] ring-1 ring-white/50" style={{ left: x(posicoes[i + 1].left), width: d * pps }} /> : null}
+                          <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => aoSelecionar({ tipo: 'transicao', id: c.id })}
+                            aria-label={`Transição entre o clipe ${i + 1} e o ${i + 2}`}
+                            title={nome ? `Transição: ${nome} (${tempo(d)})` : 'Adicionar transição'}
+                            className={`absolute top-1/2 z-30 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md border-2 border-white shadow-md transition-[opacity,transform] hover:scale-110 ${d > 0 || sel ? 'bg-acento text-white' : 'bg-black/70 text-white opacity-75 hover:opacity-100'} ${sel ? 'ring-2 ring-acento ring-offset-2 ring-offset-superficie' : ''}`}
+                            style={{ left: x(posicoes[i + 1].left + d / 2) }}
+                          >
+                            <Icone nome="transicao" tamanho={12} />
+                          </button>
+                        </div>
+                      )
+                    })
+                  : null}
 
                 {/* Onde o clipe arrastado vai entrar */}
                 {reordenando

@@ -515,6 +515,45 @@ export default [
     },
   },
   {
+    nome: 'video/editor: transição entre clipes (dissolver) na prévia e na exportação',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t, `, __t.arquivo(await __t.gravarVideo(2, 640, 360), 'zz-segunda.webm')`, 2)
+      const seg = (txt) => { const [m, s] = txt.split(':'); return Number(m) * 60 + Number(s) }
+      const total = async () => seg(await t.js("return document.querySelector('[title=\"Duração do vídeo final\"]').textContent.replace('/', '').trim()"))
+      const original = await total()
+      await t.js("document.querySelector('main button[aria-label=\"Transição entre o clipe 1 e o 2\"]').click()")
+      await t.aguardar("document.querySelector('main aside [role=radiogroup][aria-label=Transições]')", 5000)
+      await t.js("[...document.querySelectorAll('main aside [aria-label=Transições] [role=radio]')].find((b) => b.textContent.trim() === 'Dissolver').click()")
+      await t.js("__t.digitar('Duração da transição', '0.8')")
+      await t.esperar(200)
+      assert.ok(Math.abs((await total()) - (original - 0.8)) < 0.06, 'a transição de 0,8 s encurta o vídeo')
+      // No meio da transição (2,5 s) aparecem os dois clipes, o segundo meio transparente.
+      const tecla = (key) => t.js(`dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }))`)
+      await tecla('Home')
+      await tecla('ArrowRight')
+      await tecla('ArrowRight')
+      for (let i = 0; i < 15; i += 1) await tecla('.')
+      await t.esperar(300)
+      const estado = await t.js(`const vis = [...document.querySelectorAll('main video')].filter((v) => v.closest('.isolate') && v.style.visibility === 'visible').length
+        const palcos = [...document.querySelectorAll('main .isolate > div.overflow-hidden')]
+        return { vis, opacidade: Number(palcos[1]?.style.opacity) }`)
+      assert.equal(estado.vis, 2, 'os dois clipes deveriam aparecer')
+      assert.ok(estado.opacidade > 0.3 && estado.opacidade < 0.7, `o segundo clipe deveria estar no meio do dissolver: ${estado.opacidade}`)
+      // Um 3º clipe (imagem) sem transição: a exportação mistura xfade e concat.
+      await t.js(`__t.enviar([__t.arquivo(await __t.imagem(640, 360), 'foto.png')], 'main input[aria-label="Escolher clipes"]')`)
+      await t.aguardar("document.querySelectorAll('main [aria-label^=\"Clipe \"][role=button]').length === 3", 10000)
+      await t.esperar(300)
+      const esperado = original - 0.8 + 3
+      assert.ok(Math.abs((await total()) - esperado) < 0.06, 'a imagem soma 3 s')
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      perto(m.duracao, esperado, 0.4, 'duração com a transição')
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {

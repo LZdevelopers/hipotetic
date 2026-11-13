@@ -2,7 +2,8 @@
  * Projeto do editor de vídeo e a exportação dele.
  *
  * Projeto (p):
- *   clipes:  [{ id, fonte, inicio, fim, velocidade, volume (0–1), mudo }] — em sequência
+ *   clipes:  [{ id, fonte, inicio, fim, velocidade, volume (0–1), mudo, transicao? }] — em sequência;
+ *            transicao = { tipo, dur }: do clipe para o PRÓXIMO (os dois se sobrepõem)
  *   recorte: null | { x, y, w, h } em frações do quadro (já girado/espelhado)
  *   girar (0/90/180/270), espelhar, cor { brilho, contraste, saturacao }, fadeIn, fadeOut
  *   camadas: [{ id, tipo: 'texto'|'imagem'|'video'|'desfoque', inicio, fim, x, y, w, h, … }]
@@ -18,17 +19,58 @@ import { extensaoDe } from '../../nucleo/arquivos'
 import { ErroAmigavel } from '../../nucleo/tarefa'
 
 export const duracaoClipe = (c) => Math.max(0.05, (c.fim - c.inicio) / c.velocidade)
-export const duracaoTotal = (p) => p.clipes.reduce((s, c) => s + duracaoClipe(c), 0)
 
-/** Onde cada clipe começa na linha do tempo. */
+/* ─── Transições entre clipes ───────────────────────────────────────────── */
+
+/** Transições (o nome do xfade do ffmpeg ao lado). */
+export const TRANSICOES = [
+  { id: 'dissolver', rotulo: 'Dissolver', xfade: 'fade' },
+  { id: 'preto', rotulo: 'Fade pelo preto', xfade: 'fadeblack' },
+  { id: 'branco', rotulo: 'Fade pelo branco', xfade: 'fadewhite' },
+  { id: 'deslizar-esq', rotulo: 'Deslizar ←', xfade: 'slideleft' },
+  { id: 'deslizar-dir', rotulo: 'Deslizar →', xfade: 'slideright' },
+  { id: 'limpar-esq', rotulo: 'Wipe ←', xfade: 'wipeleft' },
+  { id: 'limpar-dir', rotulo: 'Wipe →', xfade: 'wiperight' },
+  { id: 'circulo', rotulo: 'Círculo', xfade: 'circleopen' },
+]
+
+/** Duração real da transição do clipe i para o i+1 (no máximo metade de cada clipe). */
+export function duracaoTransicao(p, i) {
+  const c = p.clipes[i]
+  const n = p.clipes[i + 1]
+  if (!c?.transicao?.tipo || !n) return 0
+  return Math.max(0, Math.min(c.transicao.dur ?? 0.8, duracaoClipe(c) / 2, duracaoClipe(n) / 2))
+}
+
+/** Onde cada clipe começa na linha do tempo (com transição, o próximo começa antes do fim do anterior). */
 export function iniciosNaLinha(p) {
   const r = []
   let t = 0
-  for (const c of p.clipes) {
+  p.clipes.forEach((c, i) => {
     r.push(t)
-    t += duracaoClipe(c)
-  }
+    t += duracaoClipe(c) - duracaoTransicao(p, i)
+  })
   return r
+}
+export const duracaoTotal = (p) => {
+  if (!p.clipes.length) return 0
+  const inicios = iniciosNaLinha(p)
+  return inicios[inicios.length - 1] + duracaoClipe(p.clipes[p.clipes.length - 1])
+}
+
+/**
+ * Estado das transições no instante t: o clipe principal (o que sai, durante
+ * uma transição), o que entra (ou -1) e o progresso (0 → 1).
+ */
+export function transicaoNoTempo(p, t) {
+  const inicios = iniciosNaLinha(p)
+  const loc = localizar(p, t)
+  const i = loc.indice
+  if (i > 0) {
+    const d = duracaoTransicao(p, i - 1)
+    if (d > 0 && t < inicios[i] + d) return { principal: i - 1, entrando: i, q: Math.min(1, Math.max(0, (t - inicios[i]) / d)), tipo: p.clipes[i - 1].transicao.tipo }
+  }
+  return { principal: i, entrando: -1, q: 0, tipo: null }
 }
 
 /** Tempo da linha → { indice do clipe, tempo dentro do arquivo do clipe }. */
@@ -520,7 +562,7 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     const trecho = c.fim - c.inicio
     const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : ['-ss', String(fixo(c.inicio)), '-t', String(fixo(trecho))])
     f.push(
-      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p[v${i}]`,
+      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p,settb=1/${fpsSaida}[v${i}]`,
     )
     if (!ehImagem && !gif && fonte.temAudio && !c.mudo && c.volume > 0) {
       f.push(`[${k}:a]atrim=0:${fixo(trecho)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
@@ -529,7 +571,27 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     }
     pares.push(`[v${i}][a${i}]`)
   })
-  f.push(`${pares.join('')}concat=n=${p.clipes.length}:v=1:a=1[vc][ac]`)
+  if (!p.clipes.some((_, i) => duracaoTransicao(p, i) > 0.01)) f.push(`${pares.join('')}concat=n=${p.clipes.length}:v=1:a=1[vc][ac]`)
+  else {
+    // Junção a junção: xfade (vídeo) + acrossfade (som) onde há transição; concat onde não há.
+    let va = 'v0'
+    let aa = 'a0'
+    let acumulado = duracaoClipe(p.clipes[0])
+    for (let i = 1; i < p.clipes.length; i += 1) {
+      const d = duracaoTransicao(p, i - 1)
+      if (d > 0.01) {
+        const x = TRANSICOES.find((y) => y.id === p.clipes[i - 1].transicao.tipo)?.xfade ?? 'fade'
+        f.push(`[${va}][v${i}]xfade=transition=${x}:duration=${fixo(d)}:offset=${fixo(acumulado - d)},settb=1/${fpsSaida}[vx${i}]`, `[${aa}][a${i}]acrossfade=d=${fixo(d)}:c1=tri:c2=tri[ax${i}]`)
+        acumulado += duracaoClipe(p.clipes[i]) - d
+      } else {
+        f.push(`[${va}][${aa}][v${i}][a${i}]concat=n=2:v=1:a=1[vx${i}c][ax${i}]`, `[vx${i}c]settb=1/${fpsSaida}[vx${i}]`)
+        acumulado += duracaoClipe(p.clipes[i])
+      }
+      va = `vx${i}`
+      aa = `ax${i}`
+    }
+    f.push(`[${va}]null[vc]`, `[${aa}]anull[ac]`)
+  }
 
   // 2. Quadro inteiro: cores e fades.
   let v = 'vc'

@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -205,6 +205,62 @@ function Bloco({ titulo, children }) {
     <div className="flex flex-col gap-3">
       {titulo ? <h3 className="text-xs font-semibold tracking-wide text-fraca uppercase">{titulo}</h3> : null}
       {children}
+    </div>
+  )
+}
+
+/** Miniatura de uma transição (metade do caminho entre o clipe A e o B). */
+function MiniaturaTransicao({ tipo }) {
+  const b = {
+    dissolver: { opacity: 0.5 },
+    'deslizar-esq': { translate: '50% 0' },
+    'deslizar-dir': { translate: '-50% 0' },
+    'limpar-esq': { clipPath: 'inset(0 0 0 50%)' },
+    'limpar-dir': { clipPath: 'inset(0 50% 0 0)' },
+    circulo: { clipPath: 'circle(38% at 50% 50%)' },
+  }[tipo]
+  return (
+    <span className="relative block aspect-video w-full overflow-hidden rounded-md bg-[linear-gradient(135deg,#2563eb,#38bdf8)]">
+      {tipo === 'preto' || tipo === 'branco' ? <span className={`absolute inset-0 ${tipo === 'preto' ? 'bg-black' : 'bg-white'}`} /> : tipo ? <span className="absolute inset-0 bg-[linear-gradient(135deg,#f97316,#facc15)]" style={b} /> : null}
+    </span>
+  )
+}
+
+/** Transição de um clipe para o próximo. */
+function PainelTransicao({ p, clipe, mudarClipe, mudar }) {
+  const i = p.clipes.findIndex((c) => c.id === clipe.id)
+  const prox = p.clipes[i + 1]
+  if (!prox) return <p className="text-sm text-fraca">O último clipe não tem transição depois dele.</p>
+  const atual = clipe.transicao
+  const max = Math.max(0.2, Math.floor((Math.min(duracaoClipe(clipe), duracaoClipe(prox)) / 2) * 10) / 10)
+  const d = duracaoTransicao(p, i)
+  const opcao = (ativo) => `flex flex-col items-center gap-1 rounded-lg border-2 p-1.5 text-[0.6875rem] font-semibold transition-colors ${ativo ? 'border-acento bg-acento-suave text-acento' : 'border-transparent text-suave hover:border-borda-forte hover:text-tinta'}`
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-sm font-semibold text-tinta">
+        Transição: clipe {i + 1} → clipe {i + 2}
+      </p>
+      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Transições">
+        <button type="button" role="radio" aria-checked={!atual} onClick={() => mudarClipe(clipe.id, { transicao: null })} className={opcao(!atual)}>
+          <MiniaturaTransicao tipo={null} />
+          Nenhuma
+        </button>
+        {TRANSICOES.map((x) => (
+          <button key={x.id} type="button" role="radio" aria-checked={atual?.tipo === x.id} onClick={() => mudarClipe(clipe.id, { transicao: { tipo: x.id, dur: atual?.dur ?? Math.min(0.8, max) } })} className={opcao(atual?.tipo === x.id)}>
+            <MiniaturaTransicao tipo={x.id} />
+            {x.rotulo}
+          </button>
+        ))}
+      </div>
+      {atual ? (
+        <>
+          <Deslizante rotulo="Duração da transição" valor={Math.min(atual.dur, max)} aoMudar={(v) => mudarClipe(clipe.id, { transicao: { ...atual, dur: v } })} min={0.2} max={max} passo={0.1} formatar={(v) => `${v.toLocaleString('pt-BR')} s`} dica={d < atual.dur - 0.01 ? `Limitada a ${d.toLocaleString('pt-BR')} s (metade do clipe mais curto).` : undefined} />
+          <Botao variante="secundario" tamanho="p" icone="transicao" onClick={() => mudar((x) => ({ clipes: x.clipes.map((c, j) => (j < x.clipes.length - 1 ? { ...c, transicao: { ...atual } } : c)) }))}>
+            Aplicar em todas as junções
+          </Botao>
+          <p className="text-xs text-fraca">Os dois clipes se sobrepõem durante a transição, então o vídeo fica {d.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s mais curto.</p>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -972,6 +1028,7 @@ export default function EditorVideo() {
     if (s?.tipo === 'clipe') setAba('clipe')
     else if (s?.tipo === 'camada') setAba('camada')
     else if (s?.tipo === 'musica') setAba('musica')
+    else if (s?.tipo === 'transicao') setAba('clipe')
   }
 
   /** Baixa um arquivo gerado sem sair do editor. */
@@ -1032,7 +1089,7 @@ export default function EditorVideo() {
           if (y.id !== c.id) return [y]
           if (imagem || y.fim - loc.local < 0.05) return [y, congelado]
           if (loc.local - y.inicio < 0.05) return [congelado, y]
-          return [{ ...y, fim: loc.local }, congelado, { ...y, ...resto, inicio: loc.local }]
+          return [{ ...y, fim: loc.local, transicao: null }, congelado, { ...y, ...resto, inicio: loc.local }]
         }),
       }))
       selecionar({ tipo: 'clipe', id: congelado.id })
@@ -1089,7 +1146,8 @@ export default function EditorVideo() {
         return
       }
       const novo = { ...c, id: novoId('c'), inicio: loc.local }
-      mudar((x) => ({ clipes: x.clipes.flatMap((y) => (y.id === c.id ? [{ ...y, fim: loc.local }, novo] : [y])) }))
+      // A transição (para o próximo) fica com a segunda parte.
+      mudar((x) => ({ clipes: x.clipes.flatMap((y) => (y.id === c.id ? [{ ...y, fim: loc.local, transicao: null }, novo] : [y])) }))
       selecionar({ tipo: 'clipe', id: novo.id })
     },
     duplicar: (id) => mudar((x) => ({ clipes: x.clipes.flatMap((c) => (c.id === id ? [c, { ...c, id: novoId('c') }] : [c])) })),
@@ -1124,6 +1182,7 @@ export default function EditorVideo() {
       if (s.tipo === 'clipe') mudar((x) => ({ clipes: x.clipes.filter((c) => c.id !== s.id) }))
       else if (s.tipo === 'camada') mudar((x) => ({ camadas: x.camadas.filter((c) => c.id !== s.id) }))
       else if (s.tipo === 'musica') mudar({ musica: null })
+      else if (s.tipo === 'transicao') mudarClipe(s.id, { transicao: null })
       setSelecao(null)
     },
   }
@@ -1158,6 +1217,7 @@ export default function EditorVideo() {
           },
         },
         { rotulo: fontes[c.fonte]?.tipo === 'imagem' ? 'Duração…' : 'Velocidade, volume e trim…', icone: 'ajustar', acao: () => selecionar({ tipo: 'clipe', id: c.id }) },
+        { rotulo: 'Transição para o próximo…', icone: 'transicao', acao: () => selecionar({ tipo: 'transicao', id: c.id }), desativado: i === p.clipes.length - 1 },
         { rotulo: 'Cortar até o cursor', icone: 'cortar', atalho: 'Q', acao: () => acoes.apararNoCursor('antes') },
         { rotulo: 'Cortar a partir do cursor', icone: 'cortar', atalho: 'W', acao: () => acoes.apararNoCursor('depois') },
         { rotulo: 'Congelar quadro (2 s)', icone: 'congelar', acao: acoes.congelar },
@@ -1632,7 +1692,8 @@ export default function EditorVideo() {
             </div>
             <div className="rolagem-fina flex-1 overflow-y-auto p-4">
               {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} miniatura={p.clipes.length ? (fontes[p.clipes[0].fonte]?.quadros?.[Math.floor((fontes[p.clipes[0].fonte]?.quadros?.length ?? 0) / 2)] ?? (fontes[p.clipes[0].fonte]?.tipo === 'imagem' ? fontes[p.clipes[0].fonte].url : null)) : null} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
-              {aba === 'clipe' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} acoes={acoes} /> : null}
+              {aba === 'clipe' && selecao?.tipo === 'transicao' && p.clipes.some((c) => c.id === selecao.id) ? <PainelTransicao p={p} clipe={p.clipes.find((c) => c.id === selecao.id)} mudarClipe={mudarClipe} mudar={mudar} /> : null}
+              {aba === 'clipe' && selecao?.tipo !== 'transicao' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} acoes={acoes} /> : null}
               {aba === 'camada' ? <PainelCamada camada={camadaSel} mudarCamada={mudarCamada} acoes={acoes} total={total} /> : null}
               {aba === 'musica' ? <PainelAudio p={p} fontes={fontes} mudar={mudar} abrir={() => entradas.musica.current?.click()} exportarAudio={exportarAudio} processando={processando} /> : null}
             </div>
