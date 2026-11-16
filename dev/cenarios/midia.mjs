@@ -596,6 +596,39 @@ export default [
     },
   },
   {
+    nome: 'video/editor: clicar fora (área vazia) ou Esc tira a seleção',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      const selClipe = () => t.js("const c = document.querySelector('main [aria-label^=\"Clipe 1\"]'); c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 7 })); c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 7 }))")
+      const temClipe = () => t.js("return document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') === 'true'")
+      const apertar = (sel, onde = 'canto') => t.js(`const el = ${sel}; const r = el.getBoundingClientRect()
+        const x = ${JSON.stringify(onde)} === 'canto' ? r.left + 3 : r.left + r.width / 2; const y = r.top + r.height / 2
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 8, clientX: x, clientY: y }))
+        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 8, clientX: x, clientY: y }))`)
+      await selClipe()
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') === 'true'", 5000)
+      // Um botão (zoom da timeline) não tira a seleção…
+      await t.js("document.querySelector('main button[aria-label=\"Aumentar zoom\"]').click()")
+      await apertar("document.querySelector('main button[aria-label=\"Ajustar à largura\"]')", 'meio')
+      await t.esperar(150)
+      assert.ok(await temClipe(), 'clicar num botão não deveria tirar a seleção')
+      // …mas a área cinza em volta do player tira.
+      await apertar("document.querySelector('main [data-palco]').parentElement")
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') !== 'true'", 3000)
+      // Texto de ajuda embaixo da timeline (área sem nada) também.
+      await selClipe()
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') === 'true'", 3000)
+      await apertar("[...document.querySelectorAll('main p')].find((p) => p.textContent.startsWith('Tudo o que você muda'))", 'meio')
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') !== 'true'", 3000)
+      // Esc.
+      await selClipe()
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') === 'true'", 3000)
+      await t.js("document.activeElement?.blur?.(); dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
+      await t.aguardar("document.querySelector('main [aria-label^=\"Clipe 1\"]').getAttribute('aria-pressed') !== 'true'", 3000)
+    },
+  },
+  {
     nome: 'video/editor: proporção 9:16 com fundo desfocado',
     pagina: '/video/editor',
     async executar(t) {

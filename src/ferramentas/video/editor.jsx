@@ -1145,6 +1145,21 @@ export default function EditorVideo() {
     else if (s?.tipo === 'transicao') setAba('clipe')
   }
 
+  // Clique numa área vazia (fora de botões, campos, painel e itens) tira a seleção.
+  useEffect(() => {
+    if (!selecao) return undefined
+    const aoApertar = (e) => {
+      const alvo = e.target
+      if (e.button !== 0 || !(alvo instanceof Element)) return
+      if (alvo.closest('button, a, input, select, textarea, label, summary, [role=button], [role=slider], [role=radio], [role=tab], [role=menu], [role=menuitem], [role=dialog], dialog,[role=group], [contenteditable], aside, [data-palco], [data-manter-selecao]')) return
+      // Clique na barra de rolagem de uma área com scroll: não é "clicar fora".
+      if (alvo.clientWidth && (e.offsetX > alvo.clientWidth || e.offsetY > alvo.clientHeight)) return
+      setSelecao(null)
+    }
+    document.addEventListener('pointerdown', aoApertar, true)
+    return () => document.removeEventListener('pointerdown', aoApertar, true)
+  }, [selecao])
+
   /** Baixa um arquivo gerado sem sair do editor. */
   const baixarArquivo = (blob, nome) => {
     const url = URL.createObjectURL(blob)
@@ -1524,6 +1539,7 @@ export default function EditorVideo() {
     if (e.target.closest?.('input, textarea, select, button, [role=slider], [contenteditable]') || e.altKey || vazio) return
     if (rascunho && e.key === 'Enter') acoesRecorte.aplicar()
     else if (rascunho && e.key === 'Escape') acoesRecorte.cancelar()
+    else if (e.key === 'Escape' && selecao) setSelecao(null)
     else if (e.code === 'Space') {
       e.preventDefault()
       palco.current?.alternar()

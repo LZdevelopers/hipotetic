@@ -562,7 +562,7 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
           {/* Régua (presa no topo) */}
           <div className="sticky top-0 z-40 flex h-7 border-b border-borda bg-superficie">
             <div className="sticky left-0 z-50 w-24 shrink-0 border-r border-borda bg-superficie" />
-            <div ref={regua} className="relative h-full cursor-pointer" style={largura} onPointerDown={percorrer}>
+            <div ref={regua} data-manter-selecao="" className="relative h-full cursor-pointer" style={largura} onPointerDown={percorrer}>
               {marcas.map((t) => {
                 const principal = Math.abs(t / passo - Math.round(t / passo)) < 1e-6
                 return (
