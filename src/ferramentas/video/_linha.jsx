@@ -557,7 +557,7 @@ export const LinhaDoTempo = forwardRef(function LinhaDoTempo(
         </div>
       </div>
 
-      <div ref={rolagem} className="rolagem-fina relative max-h-[15.5rem] overflow-auto">
+      <div ref={rolagem} className="rolagem-fina relative max-h-[15.5rem] overflow-auto [overflow-anchor:none]">
         <div className="relative" style={{ width: CAB + larguraConteudo }}>
           {/* Régua (presa no topo) */}
           <div className="sticky top-0 z-40 flex h-7 border-b border-borda bg-superficie">

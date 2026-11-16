@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao, corDoClipe, temCor } from './_projeto'
 
 const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -265,10 +265,20 @@ function PainelTransicao({ p, clipe, mudarClipe, mudar }) {
   )
 }
 
-function PainelClipe({ p, fontes, clipe, mudarClipe, acoes }) {
+function PainelClipe({ p, fontes, clipe, mudarClipe, mudar, acoes }) {
   if (!clipe) return <p className="text-sm text-fraca">Clique num clipe da linha do tempo para ajustar velocidade, volume e trecho.</p>
   const fonte = fontes[clipe.fonte]
   const i = p.clipes.findIndex((c) => c.id === clipe.id)
+  const miniatura = fonte?.tipo === 'imagem' ? fonte.url : fonte?.quadros?.[Math.floor((fonte.quadros.length ?? 0) / 2)]
+  const cores = (
+    <CoresDoClipe
+      cor={corDoClipe(clipe)}
+      aoMudar={(c) => mudarClipe(clipe.id, { cor: c })}
+      miniatura={miniatura}
+      varios={p.clipes.length > 1}
+      aoAplicarTodos={() => mudar((x) => ({ clipes: x.clipes.map((y) => ({ ...y, cor: corDoClipe(clipe) })) }))}
+    />
+  )
   if (fonte?.tipo === 'imagem') {
     return (
       <div className="flex flex-col gap-5">
@@ -279,6 +289,7 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, acoes }) {
           <CampoTempo rotulo="Duração" valor={clipe.fim} aoMudar={(v) => mudarClipe(clipe.id, { inicio: 0, fim: Math.min(600, Math.max(0.2, v)) })} />
           <p className="text-xs text-fraca">Ou arraste a ponta do clipe na timeline.</p>
         </Bloco>
+        {cores}
         <div className="grid grid-cols-2 gap-2">
           <Botao variante="secundario" tamanho="p" icone="copiar" onClick={() => acoes.duplicar(clipe.id)}>
             Duplicar
@@ -295,6 +306,7 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, acoes }) {
       <p className="truncate text-sm font-semibold text-tinta" title={fonte?.arquivo.name}>
         Clipe {i + 1} · {fonte?.arquivo.name}
       </p>
+      {cores}
       <Velocidade valor={clipe.velocidade} aoMudar={(v) => mudarClipe(clipe.id, { velocidade: v })} />
       <Bloco titulo="Áudio do clipe">
         {fonte?.temAudio ? (
@@ -613,9 +625,40 @@ function Filtros({ cor, miniatura, aoEscolher }) {
   )
 }
 
-function PainelQuadro({ p, mudar, recorte, acoesRecorte, final, miniatura }) {
-  const cor = { ...PADRAO_COR, ...p.cor }
-  const mc = (d) => mudar((x) => ({ cor: { ...PADRAO_COR, ...x.cor, ...d } }))
+/** Filtros e correção de cor de UM clipe (com a opção de copiar para todos). */
+function CoresDoClipe({ cor, aoMudar, miniatura, aoAplicarTodos, varios }) {
+  const mc = (d) => aoMudar({ ...cor, ...d })
+  return (
+    <>
+      <Bloco titulo="Filtro deste clipe">
+        <Filtros cor={cor} miniatura={miniatura} aoEscolher={(c) => aoMudar(c)} />
+      </Bloco>
+      <Bloco titulo="Correção de cor deste clipe">
+        <Deslizante rotulo="Brilho" valor={Math.round(cor.brilho * 100)} aoMudar={(v) => mc({ brilho: v / 100 })} min={-50} max={50} formatar={(v) => `${v > 0 ? '+' : ''}${v}`} />
+        <Deslizante rotulo="Contraste" valor={Math.round(cor.contraste * 100)} aoMudar={(v) => mc({ contraste: v / 100 })} min={50} max={150} formatar={(v) => `${v}%`} />
+        <Deslizante rotulo="Saturação" valor={Math.round(cor.saturacao * 100)} aoMudar={(v) => mc({ saturacao: v / 100 })} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
+        <Deslizante rotulo="Temperatura" valor={Math.round(cor.temperatura * 100)} aoMudar={(v) => mc({ temperatura: v / 100 })} min={-100} max={100} formatar={(v) => (v ? `${v > 0 ? '+' : ''}${v} ${v > 0 ? 'quente' : 'frio'}` : '0')} />
+        <Deslizante rotulo="Matiz" valor={Math.round(cor.matiz)} aoMudar={(v) => mc({ matiz: v })} min={-180} max={180} formatar={(v) => `${v > 0 ? '+' : ''}${v}°`} />
+        <Deslizante rotulo="Sépia" valor={Math.round(cor.sepia * 100)} aoMudar={(v) => mc({ sepia: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
+        <Deslizante rotulo="Vinheta" valor={Math.round(cor.vinheta * 100)} aoMudar={(v) => mc({ vinheta: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {!mesmaCor(cor, PADRAO_COR) ? (
+            <button type="button" onClick={() => aoMudar({ ...PADRAO_COR })} className="text-xs font-semibold text-suave hover:text-tinta">
+              Redefinir cores
+            </button>
+          ) : null}
+          {varios ? (
+            <button type="button" onClick={aoAplicarTodos} className="text-xs font-semibold text-acento hover:underline">
+              Aplicar estas cores em todos os clipes
+            </button>
+          ) : null}
+        </div>
+      </Bloco>
+    </>
+  )
+}
+
+function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
   return (
     <div className="flex flex-col gap-5">
       <Bloco titulo="Crop">
@@ -688,22 +731,8 @@ function PainelQuadro({ p, mudar, recorte, acoesRecorte, final, miniatura }) {
           <Botao variante={p.espelhar ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" onClick={() => mudar((x) => ({ espelhar: !x.espelhar }))} aria-pressed={p.espelhar} aria-label="Flip horizontal" title="Flip horizontal" />
         </div>
       </Bloco>
-      <Bloco titulo="Filtros">
-        <Filtros cor={cor} miniatura={miniatura} aoEscolher={(c) => mudar({ cor: c })} />
-      </Bloco>
-      <Bloco titulo="Correção de cor">
-        <Deslizante rotulo="Brilho" valor={Math.round(cor.brilho * 100)} aoMudar={(v) => mc({ brilho: v / 100 })} min={-50} max={50} formatar={(v) => `${v > 0 ? '+' : ''}${v}`} />
-        <Deslizante rotulo="Contraste" valor={Math.round(cor.contraste * 100)} aoMudar={(v) => mc({ contraste: v / 100 })} min={50} max={150} formatar={(v) => `${v}%`} />
-        <Deslizante rotulo="Saturação" valor={Math.round(cor.saturacao * 100)} aoMudar={(v) => mc({ saturacao: v / 100 })} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
-        <Deslizante rotulo="Temperatura" valor={Math.round(cor.temperatura * 100)} aoMudar={(v) => mc({ temperatura: v / 100 })} min={-100} max={100} formatar={(v) => (v ? `${v > 0 ? '+' : ''}${v} ${v > 0 ? 'quente' : 'frio'}` : '0')} />
-        <Deslizante rotulo="Matiz" valor={Math.round(cor.matiz)} aoMudar={(v) => mc({ matiz: v })} min={-180} max={180} formatar={(v) => `${v > 0 ? '+' : ''}${v}°`} />
-        <Deslizante rotulo="Sépia" valor={Math.round(cor.sepia * 100)} aoMudar={(v) => mc({ sepia: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
-        <Deslizante rotulo="Vinheta" valor={Math.round(cor.vinheta * 100)} aoMudar={(v) => mc({ vinheta: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
-        {!mesmaCor(cor, PADRAO_COR) ? (
-          <button type="button" onClick={() => mudar({ cor: { ...PADRAO_COR } })} className="self-start text-xs font-semibold text-suave hover:text-tinta">
-            Redefinir cores
-          </button>
-        ) : null}
+      <Bloco titulo="Filtros e cor">
+        <p className="text-xs text-fraca">Agora cada clipe tem o seu filtro: selecione um clipe na timeline e use a aba Clipe.</p>
       </Bloco>
       <Bloco titulo="Fade (preto)">
         <Deslizante rotulo="Fade in" valor={p.fadeIn} aoMudar={(v) => mudar({ fadeIn: v })} min={0} max={5} passo={0.25} formatar={segundos} />
@@ -975,7 +1004,8 @@ export default function EditorVideo() {
       const p2 = {
         ...PADRAO,
         ...salvo.p,
-        clipes: salvo.p.clipes.filter((c) => novas[c.fonte]),
+        clipes: salvo.p.clipes.filter((c) => novas[c.fonte]).map((c) => (c.cor || !temCor(salvo.p.cor) ? c : { ...c, cor: { ...PADRAO_COR, ...salvo.p.cor } })),
+        cor: { ...PADRAO_COR },
         camadas: (salvo.p.camadas ?? []).filter((c) => c.tipo === 'texto' || c.tipo === 'desfoque' || novas[c.fonte]),
         musica: salvo.p.musica && novas[salvo.p.musica.fonte] ? salvo.p.musica : null,
       }
@@ -1081,7 +1111,7 @@ export default function EditorVideo() {
       const fonte = { id: novoId('f'), ...(await lerFonte(arquivo)) }
       setFontes((f) => ({ ...f, [fonte.id]: fonte }))
       guardar(`video:arquivo:${fonte.id}`, arquivo)
-      const congelado = { id: novoId('c'), fonte: fonte.id, inicio: 0, fim: 2, velocidade: 1, volume: 1, mudo: false }
+      const congelado = { id: novoId('c'), fonte: fonte.id, inicio: 0, fim: 2, velocidade: 1, volume: 1, mudo: false, cor: c.cor }
       const resto = { id: novoId('c') }
       const imagem = fontes[c.fonte]?.tipo === 'imagem'
       mudar((x) => ({
@@ -1217,6 +1247,7 @@ export default function EditorVideo() {
           },
         },
         { rotulo: fontes[c.fonte]?.tipo === 'imagem' ? 'Duração…' : 'Velocidade, volume e trim…', icone: 'ajustar', acao: () => selecionar({ tipo: 'clipe', id: c.id }) },
+        { rotulo: 'Filtro e cor deste clipe…', icone: 'filtro', acao: () => selecionar({ tipo: 'clipe', id: c.id }) },
         { rotulo: 'Transição para o próximo…', icone: 'transicao', acao: () => selecionar({ tipo: 'transicao', id: c.id }), desativado: i === p.clipes.length - 1 },
         { rotulo: 'Cortar até o cursor', icone: 'cortar', atalho: 'Q', acao: () => acoes.apararNoCursor('antes') },
         { rotulo: 'Cortar a partir do cursor', icone: 'cortar', atalho: 'W', acao: () => acoes.apararNoCursor('depois') },
@@ -1314,7 +1345,7 @@ export default function EditorVideo() {
     setRascunho(null)
     setSelecao(null)
     // Mantém os clipes (inteiros, na ordem) e zera todo o resto.
-    mudar((x) => ({ ...PADRAO, clipes: x.clipes.map((c) => ({ ...c, inicio: 0, fim: fontes[c.fonte]?.duracao ?? c.fim, velocidade: 1, volume: 1, mudo: false })) }))
+    mudar((x) => ({ ...PADRAO, clipes: x.clipes.map((c) => ({ ...c, inicio: 0, fim: fontes[c.fonte]?.duracao ?? c.fim, velocidade: 1, volume: 1, mudo: false, cor: undefined, transicao: undefined })) }))
     palco.current?.buscar(0)
   }
   const recomecar = () => {
@@ -1691,9 +1722,9 @@ export default function EditorVideo() {
               <Segmentado valor={aba} aoMudar={setAba} opcoes={ABAS} />
             </div>
             <div className="rolagem-fina flex-1 overflow-y-auto p-4">
-              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} miniatura={p.clipes.length ? (fontes[p.clipes[0].fonte]?.quadros?.[Math.floor((fontes[p.clipes[0].fonte]?.quadros?.length ?? 0) / 2)] ?? (fontes[p.clipes[0].fonte]?.tipo === 'imagem' ? fontes[p.clipes[0].fonte].url : null)) : null} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
+              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
               {aba === 'clipe' && selecao?.tipo === 'transicao' && p.clipes.some((c) => c.id === selecao.id) ? <PainelTransicao p={p} clipe={p.clipes.find((c) => c.id === selecao.id)} mudarClipe={mudarClipe} mudar={mudar} /> : null}
-              {aba === 'clipe' && selecao?.tipo !== 'transicao' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} acoes={acoes} /> : null}
+              {aba === 'clipe' && selecao?.tipo !== 'transicao' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} mudar={mudar} acoes={acoes} /> : null}
               {aba === 'camada' ? <PainelCamada camada={camadaSel} mudarCamada={mudarCamada} acoes={acoes} total={total} /> : null}
               {aba === 'musica' ? <PainelAudio p={p} fontes={fontes} mudar={mudar} abrir={() => entradas.musica.current?.click()} exportarAudio={exportarAudio} processando={processando} /> : null}
             </div>

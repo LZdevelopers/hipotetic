@@ -445,6 +445,7 @@ export default [
     pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
+      await aba(t, 'Clipe')
       await t.js("[...document.querySelectorAll('main aside [role=radiogroup][aria-label=Filtros] [role=radio]')].find((b) => b.textContent.trim() === 'P&B').click()")
       await t.aguardar("[...document.querySelectorAll('main aside [aria-label=Filtros] [role=radio]')].find((b) => b.textContent.trim() === 'P&B').getAttribute('aria-checked') === 'true'", 3000)
       await t.js("__t.digitar('Sépia', '100')")
@@ -554,10 +555,36 @@ export default [
     },
   },
   {
+    nome: 'video/editor: filtro só no clipe selecionado (os outros ficam como estão)',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t, `, __t.arquivo(await __t.gravarVideo(2, 640, 360), 'zz-segunda.webm')`, 2)
+      // Seleciona o clipe 2 e aplica P&B só nele.
+      await t.js("const c = document.querySelector('main [aria-label^=\"Clipe 2\"]'); c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 7 })); c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 7 }))")
+      await t.aguardar("document.querySelector('main aside').textContent.includes('Clipe 2 ·')", 5000)
+      await t.js("[...document.querySelectorAll('main aside [aria-label=Filtros] [role=radio]')].find((b) => b.textContent.trim() === 'P&B').click()")
+      // Prévia: só o vídeo do clipe 2 ganha o filtro.
+      await t.aguardar("(() => { const v = [...document.querySelectorAll('main .isolate video')]; return v.length === 2 && !v[0].style.filter && v[1].style.filter.includes('saturate(0)') })()", 5000)
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const px = (seg) => t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const v = document.createElement('video'); v.muted = true; v.src = a.href
+        await new Promise((ok) => (v.onloadeddata = ok)); v.currentTime = ${seg}; await new Promise((ok) => (v.onseeked = ok))
+        const c = document.createElement('canvas'); c.width = 64; c.height = 36; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 64, 36)
+        return [...x.getImageData(20, 10, 1, 1).data]`)
+      const cor = (p) => Math.max(p[0], p[1], p[2]) - Math.min(p[0], p[1], p[2])
+      const clipe1 = await px(1)
+      const clipe2 = await px(4)
+      assert.ok(cor(clipe1) > 30, `o clipe 1 deveria continuar colorido: ${clipe1}`)
+      assert.ok(cor(clipe2) <= 8, `o clipe 2 deveria sair em P&B: ${clipe2}`)
+    },
+  },
+  {
     nome: 'video/editor: cores do quadro saem na exportação (P&B)',
     pagina: '/video/editor',
     async executar(t) {
       await abrirNoEditor(t)
+      await aba(t, 'Clipe')
       await t.js("__t.digitar('Saturação', '0')")
       await t.js("__t.digitar('Contraste', '120')")
       await t.js("__t.digitar('Brilho', '10')")

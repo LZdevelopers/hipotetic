@@ -4,6 +4,7 @@
  * Projeto (p):
  *   clipes:  [{ id, fonte, inicio, fim, velocidade, volume (0–1), mudo, transicao? }] — em sequência;
  *            transicao = { tipo, dur }: do clipe para o PRÓXIMO (os dois se sobrepõem)
+ *            cor = { brilho, contraste, saturacao, temperatura, matiz, sepia, vinheta } — filtro/cor DO CLIPE
  *   recorte: null | { x, y, w, h } em frações do quadro (já girado/espelhado)
  *   girar (0/90/180/270), espelhar, cor { brilho, contraste, saturacao }, fadeIn, fadeOut
  *   camadas: [{ id, tipo: 'texto'|'imagem'|'video'|'desfoque', inicio, fim, x, y, w, h, … }]
@@ -343,6 +344,13 @@ export const FILTROS = [
   { id: 'noir', rotulo: 'Noir', cor: { saturacao: 0, contraste: 1.4, brilho: -0.05, vinheta: 0.7 } },
 ]
 export const corDoFiltro = (f) => ({ ...PADRAO_COR, ...f.cor })
+/** Cor de um clipe (cada clipe tem a sua). */
+export const corDoClipe = (c) => ({ ...PADRAO_COR, ...c?.cor })
+/** Algum ajuste de cor fora do padrão? */
+export const temCor = (bruta) => {
+  const c = { ...PADRAO_COR, ...bruta }
+  return c.brilho !== 0 || c.contraste !== 1 || c.saturacao !== 1 || Boolean(matrizCor(c)) || c.vinheta > 0
+}
 
 /**
  * Matriz 3×3 de sépia → matiz → temperatura (nessa ordem), igual às funções
@@ -487,7 +495,7 @@ function simples(p) {
   const cor = p.cor
   const au = { ...PADRAO_AUDIO, ...p.audio }
   const audioPadrao = au.volume === 1 && !au.mudo && au.ruido === 'nao' && !au.voz && au.normalizar === 'nao' && !au.fadeIn && !au.fadeOut
-  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && cor.brilho === 0 && cor.contraste === 1 && cor.saturacao === 1 && !matrizCor(cor) && !cor.vinheta
+  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && !temCor(cor) && !temCor(c.cor)
 }
 
 function nomeNoFs(id, arquivo) {
@@ -554,23 +562,30 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
   const r = p.recorte
   const recorte = r ? `crop=trunc(iw*${fixo(r.w)}/2)*2:trunc(ih*${fixo(r.h)}/2)*2:trunc(iw*${fixo(r.x)}):trunc(ih*${fixo(r.y)}),` : ''
   const pares = []
-  p.clipes.forEach((c, i) => {
+  for (const [i, c] of p.clipes.entries()) {
     const fonte = fontes[c.fonte]
     const d = duracaoClipe(c)
+    const corC = corDoClipe(c)
+    const coresC = filtrosCor(corC)
     // Imagem como clipe: a foto parada pelo tempo do clipe.
     const ehImagem = fonte.tipo === 'imagem'
     const trecho = c.fim - c.inicio
     const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : ['-ss', String(fixo(c.inicio)), '-t', String(fixo(trecho))])
     f.push(
-      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p,settb=1/${fpsSaida}[v${i}]`,
+      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,${coresC.length ? `${coresC.join(',')},` : ''}pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p,settb=1/${fpsSaida}[v${i}${corC.vinheta > 0 ? 'p' : ''}]`,
     )
+    // Vinheta do clipe: a mesma imagem da prévia por cima dele.
+    if (corC.vinheta > 0) {
+      const kv = entrada(`vinheta${i}.png`, await vinhetaPng(W, H, corC.vinheta), ['-loop', '1', '-framerate', String(fpsSaida), '-t', String(fixo(d + 0.1))])
+      f.push(`[${kv}:v]format=rgba[vin${i}]`, `[v${i}p][vin${i}]overlay=0:0:shortest=1,format=yuv420p,settb=1/${fpsSaida}[v${i}]`)
+    }
     if (!ehImagem && !gif && fonte.temAudio && !c.mudo && c.volume > 0) {
       f.push(`[${k}:a]atrim=0:${fixo(trecho)},asetpts=PTS-STARTPTS,${c.velocidade !== 1 ? `${filtroVelocidadeAudio(c.velocidade)},` : ''}volume=${c.volume},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=${fixo(d)}[a${i}]`)
     } else {
       f.push(`anullsrc=r=48000:cl=stereo,atrim=0:${fixo(d)},aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`)
     }
     pares.push(`[v${i}][a${i}]`)
-  })
+  }
   if (!p.clipes.some((_, i) => duracaoTransicao(p, i) > 0.01)) f.push(`${pares.join('')}concat=n=${p.clipes.length}:v=1:a=1[vc][ac]`)
   else {
     // Junção a junção: xfade (vídeo) + acrossfade (som) onde há transição; concat onde não há.

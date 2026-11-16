@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, corDoClipe, temCor, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -71,6 +71,28 @@ function efeitoTransicao({ tipo, q }, a, b, veu) {
   } else if (tipo === 'limpar-esq') b.style.clipPath = `inset(0 0 0 ${(1 - q) * 100}%)`
   else if (tipo === 'limpar-dir') b.style.clipPath = `inset(0 ${(1 - q) * 100}% 0 0)`
   else if (tipo === 'circulo') b.style.clipPath = `circle(${q * 75}% at 50% 50%)`
+}
+
+/** Filtro CSS de um conjunto de cores ('' se não muda nada). */
+function cssCor(cor, idMatriz) {
+  if (!temCor({ ...cor, vinheta: 0 })) return ''
+  return `brightness(${1 + cor.brilho}) contrast(${cor.contraste}) saturate(${cor.saturacao})${matrizCor(cor) ? ` url(#${idMatriz})` : ''}`
+}
+function MatrizSvg({ id, cor }) {
+  const M = matrizCor(cor)
+  if (!M) return null
+  return (
+    <svg width="0" height="0" className="absolute" aria-hidden="true">
+      <filter id={id} colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values={`${M[0].join(' ')} 0 0 ${M[1].join(' ')} 0 0 ${M[2].join(' ')} 0 0 0 0 0 1 0`} />
+      </filter>
+    </svg>
+  )
+}
+/** Vinheta de um clipe (componente: o hook não pode ficar dentro do map). */
+function Vinheta({ k, final }) {
+  const url = useVinheta(k, final)
+  return url ? <img src={url} alt="" className="pointer-events-none absolute inset-0 size-full" /> : null
 }
 
 /** Vinheta da prévia (a mesma imagem que vai para a exportação). */
@@ -458,10 +480,11 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
       video: { width: fonte.largura * s, height: fonte.altura * s, left: ((q.w - fonte.largura) * s) / 2, top: ((q.h - fonte.altura) * s) / 2 },
     }
   }
+  // Cor geral (projetos antigos) + a cor de cada clipe (a de agora).
   const cor = { ...PADRAO_COR, ...p.cor }
   const idMatriz = `cor${useId().replace(/[^a-z0-9]/gi, '')}`
   const matriz = matrizCor(cor)
-  const filtroCor = `brightness(${1 + cor.brilho}) contrast(${cor.contraste}) saturate(${cor.saturacao})${matriz ? ` url(#${idMatriz})` : ''}`
+  const filtroGeral = cssCor(cor, idMatriz)
   const urlVinheta = useVinheta(cor.vinheta, final)
 
   const [guias, setGuias] = useState(null)
@@ -485,8 +508,12 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
             const fonte = fontes[c.fonte]
             if (!fonte?.url) return null
             const g = geometria(fonte)
+            const corC = corDoClipe(c)
+            const idC = `${idMatriz}${c.id}`
+            const filtroCor = [cssCor(corC, idC), filtroGeral].filter(Boolean).join(' ') || undefined
             return (
               <div key={c.id} ref={(el) => (el ? (palcosClipe.current[c.id] = el) : delete palcosClipe.current[c.id])} className="absolute inset-0 overflow-hidden">
+              <MatrizSvg id={idC} cor={corC} />
               <div className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>
                 {fonte.tipo === 'imagem' ? (
                   <img
@@ -509,6 +536,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
                 />
                 )}
               </div>
+              {corC.vinheta > 0 && !recortando ? <Vinheta k={corC.vinheta} final={final} /> : null}
               </div>
             )
           })}
