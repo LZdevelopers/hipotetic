@@ -5,6 +5,9 @@
  *   clipes:  [{ id, fonte, inicio, fim, velocidade, volume (0–1), mudo, transicao? }] — em sequência;
  *            transicao = { tipo, dur }: do clipe para o PRÓXIMO (os dois se sobrepõem)
  *            cor = { brilho, contraste, saturacao, temperatura, matiz, sepia, vinheta } — filtro/cor DO CLIPE
+ *            enquadro = { modo: 'encaixar'|'preencher', zoom, x, y, fundo: 'preto'|'desfocado' } — onde o
+ *            clipe fica na tela (x/y: deslocamento do centro, em frações do quadro)
+ *   proporcao: null (a do 1º clipe) | '16:9' | '9:16' | '1:1' | '4:5' | '4:3' — formato da tela
  *   recorte: null | { x, y, w, h } em frações do quadro (já girado/espelhado)
  *   girar (0/90/180/270), espelhar, cor { brilho, contraste, saturacao }, fadeIn, fadeOut
  *   camadas: [{ id, tipo: 'texto'|'imagem'|'video'|'desfoque', inicio, fim, x, y, w, h, … }]
@@ -20,6 +23,28 @@ import { extensaoDe } from '../../nucleo/arquivos'
 import { ErroAmigavel } from '../../nucleo/tarefa'
 
 export const duracaoClipe = (c) => Math.max(0.05, (c.fim - c.inicio) / c.velocidade)
+
+/* ─── Enquadramento do clipe na tela ────────────────────────────────────── */
+
+export const PADRAO_ENQUADRO = { modo: 'encaixar', zoom: 1, x: 0, y: 0, fundo: 'preto' }
+export const enquadroDoClipe = (c) => ({ ...PADRAO_ENQUADRO, ...c?.enquadro })
+/** O clipe saiu do jeito padrão (inteiro, centralizado, com barras pretas)? */
+export const temEnquadro = (c) => {
+  const e = enquadroDoClipe(c)
+  return e.modo !== 'encaixar' || Math.abs(e.zoom - 1) > 1e-3 || Math.abs(e.x) > 1e-4 || Math.abs(e.y) > 1e-4 || e.fundo !== 'preto'
+}
+/**
+ * Onde a imagem do clipe (rw × rh, já girada e recortada) fica num quadro W × H:
+ * escala s e o retângulo { x, y, w, h } (pode passar das bordas).
+ * encaixar = inteira (com barras); preencher = cobre a tela (corta as sobras).
+ */
+export function caixaDoClipe(e, rw, rh, W, H) {
+  const s0 = e.modo === 'preencher' ? Math.max(W / rw, H / rh) : Math.min(W / rw, H / rh)
+  const s = s0 * e.zoom
+  const w = rw * s
+  const h = rh * s
+  return { s, w, h, x: (W - w) / 2 + e.x * W, y: (H - h) / 2 + e.y * H }
+}
 
 /* ─── Transições entre clipes ───────────────────────────────────────────── */
 
@@ -114,14 +139,36 @@ export function quadroGirado(f, girar) {
   return girar === 90 || girar === 270 ? { w: f.altura, h: f.largura } : { w: f.largura, h: f.altura }
 }
 
-/** Tamanho final (pares): recorte do 1º clipe, limitado pela resolução escolhida. */
+/** Formatos de tela (proporção do vídeo final). */
+export const PROPORCOES = [
+  { id: null, rotulo: 'Original', dica: 'A do 1º clipe' },
+  { id: '16:9', rotulo: '16:9', dica: 'YouTube' },
+  { id: '9:16', rotulo: '9:16', dica: 'Reels, TikTok, Shorts' },
+  { id: '1:1', rotulo: '1:1', dica: 'Quadrado' },
+  { id: '4:5', rotulo: '4:5', dica: 'Feed do Instagram' },
+  { id: '4:3', rotulo: '4:3', dica: 'Clássico' },
+]
+const razao = (id) => {
+  const [a, b] = String(id).split(':').map(Number)
+  return a > 0 && b > 0 ? a / b : null
+}
+
+/**
+ * Tamanho final (pares): recorte do 1º clipe (ou o formato de tela escolhido,
+ * com o mesmo lado menor), limitado pela resolução escolhida.
+ */
 export function tamanhoFinal(p, fontes) {
   const base = fontes[p.clipes[0]?.fonte]
-  if (!base?.largura) return { w: 1280, h: 720 }
+  const k = p.proporcao ? razao(p.proporcao) : null
+  if (!base?.largura) return k ? (k >= 1 ? { w: Math.round((720 * k) / 2) * 2, h: 720 } : { w: 720, h: Math.round(720 / k / 2) * 2 }) : { w: 1280, h: 720 }
   const q = quadroGirado(base, p.girar)
   const r = p.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
   let w = q.w * r.w
   let h = q.h * r.h
+  if (k) {
+    const menor = Math.min(w, h)
+    ;[w, h] = k >= 1 ? [menor * k, menor] : [menor, menor / k]
+  }
   if (p.resolucao && Math.min(w, h) > p.resolucao) {
     const k = p.resolucao / Math.min(w, h)
     w *= k
@@ -495,7 +542,7 @@ function simples(p) {
   const cor = p.cor
   const au = { ...PADRAO_AUDIO, ...p.audio }
   const audioPadrao = au.volume === 1 && !au.mudo && au.ruido === 'nao' && !au.voz && au.normalizar === 'nao' && !au.fadeIn && !au.fadeOut
-  return p.clipes.length === 1 && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && !temCor(cor) && !temCor(c.cor)
+  return p.clipes.length === 1 && !p.proporcao && !temEnquadro(c) && fontesSimples(p) && audioPadrao && !p.camadas.length && !p.musica && c.velocidade === 1 && c.volume === 1 && !p.fadeIn && !p.fadeOut && !temCor(cor) && !temCor(c.cor)
 }
 
 function nomeNoFs(id, arquivo) {
@@ -571,9 +618,46 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
     const ehImagem = fonte.tipo === 'imagem'
     const trecho = c.fim - c.inicio
     const k = entrada(nomeNoFs(c.fonte, fonte.arquivo), fonte.arquivo, ehImagem ? ['-loop', '1', '-framerate', '30', '-t', String(fixo(d))] : ['-ss', String(fixo(c.inicio)), '-t', String(fixo(trecho))])
-    f.push(
-      `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}scale=${W}:${H}:force_original_aspect_ratio=decrease,${coresC.length ? `${coresC.join(',')},` : ''}pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fpsSaida},format=yuv420p,settb=1/${fpsSaida}[v${i}${corC.vinheta > 0 ? 'p' : ''}]`,
-    )
+    const saidaV = `v${i}${corC.vinheta > 0 ? 'p' : ''}`
+    const fimV = `setsar=1,fps=${fpsSaida},format=yuv420p,settb=1/${fpsSaida}[${saidaV}]`
+    const base = `[${k}:v]${ehImagem ? `trim=0:${fixo(d)},setpts=PTS-STARTPTS` : `trim=0:${fixo(trecho)},setpts=(PTS-STARTPTS)/${c.velocidade}`},${giro}${espelho}${recorte}`
+    const cores = coresC.length ? `${coresC.join(',')},` : ''
+    if (!temEnquadro(c)) f.push(`${base}scale=${W}:${H}:force_original_aspect_ratio=decrease,${cores}pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:black,${fimV}`)
+    else {
+      // Tamanho da imagem do clipe depois de girar/recortar (o crop do ffmpeg arredonda para par).
+      const q = quadroGirado(fonte, p.girar)
+      const rw = r ? Math.floor((q.w * r.w) / 2) * 2 : q.w
+      const rh = r ? Math.floor((q.h * r.h) / 2) * 2 : q.h
+      const e = enquadroDoClipe(c)
+      const b = caixaDoClipe(e, rw, rh, W, H)
+      // Só a parte que aparece na tela: recorta na fonte e escala direto para o tamanho final.
+      const x0 = Math.max(0, Math.round(b.x))
+      const y0 = Math.max(0, Math.round(b.y))
+      const x1 = Math.min(W, Math.round(b.x + b.w))
+      const y1 = Math.min(H, Math.round(b.y + b.h))
+      const aparece = x1 - x0 >= 2 && y1 - y0 >= 2
+      const desfocado = e.fundo === 'desfocado'
+      const ramos = Number(aparece) + Number(desfocado)
+      const fonteV = `src${i}`
+      f.push(`${base}${ramos === 2 ? `split=2[${fonteV}a][${fonteV}b]` : ramos === 1 ? `null[${fonteV}a]` : 'nullsink'}`)
+      const ramoFundo = aparece ? `${fonteV}b` : `${fonteV}a`
+      if (desfocado) {
+        // Fundo: a própria imagem cobrindo a tela, bem pequena e borrada (igual à prévia).
+        const bw = 48
+        const bh = Math.max(2, Math.round((bw * H) / W / 2) * 2)
+        f.push(`[${ramoFundo}]scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},gblur=sigma=1.4,scale=${W}:${H}:flags=bilinear,${cores}format=yuv420p,setsar=1[fundo${i}]`)
+      } else f.push(`color=c=black:s=${W}x${H}:r=${fpsSaida}:d=${fixo(d)},format=yuv420p[fundo${i}]`)
+      if (aparece) {
+        const cx = Math.max(0, (x0 - b.x) / b.s)
+        const cy = Math.max(0, (y0 - b.y) / b.s)
+        const cw = Math.max(1, Math.min(rw - cx, (x1 - x0) / b.s))
+        const ch = Math.max(1, Math.min(rh - cy, (y1 - y0) / b.s))
+        f.push(
+          `[${fonteV}a]crop=${Math.max(1, Math.floor(cw))}:${Math.max(1, Math.floor(ch))}:${Math.floor(cx)}:${Math.floor(cy)},scale=${x1 - x0}:${y1 - y0},setsar=1,${cores}format=yuv420p[frente${i}]`,
+          `[fundo${i}][frente${i}]overlay=${x0}:${y0}:eof_action=repeat,${fimV}`,
+        )
+      } else f.push(`[fundo${i}]${fimV}`)
+    }
     // Vinheta do clipe: a mesma imagem da prévia por cima dele.
     if (corC.vinheta > 0) {
       const kv = entrada(`vinheta${i}.png`, await vinhetaPng(W, H, corC.vinheta), ['-loop', '1', '-framerate', String(fpsSaida), '-t', String(fixo(d + 0.1))])

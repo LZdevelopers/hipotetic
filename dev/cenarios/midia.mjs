@@ -331,9 +331,15 @@ export default [
         h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: x0, clientY: r.top + 5, pointerId: 1 }))
         await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))
         h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, clientX: x0 - 6, clientY: r.top + 5, pointerId: 1 }))
-        await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))
-        const r2 = h.getBoundingClientRect(); window.__x0 = x0
-        return Math.abs(r2.left + r2.width / 2 - (x0 - 6))`)
+        // Dá até 10 quadros para a tela acompanhar (com a máquina ocupada, o React pode levar mais de 2).
+        let dif = Infinity
+        for (let i = 0; i < 10 && dif >= 4; i += 1) {
+          await new Promise((ok) => requestAnimationFrame(ok))
+          const r2 = h.getBoundingClientRect()
+          dif = Math.abs(r2.left + r2.width / 2 - (x0 - 6))
+        }
+        window.__x0 = x0
+        return dif`)
       assert.ok(bordaSegue < 4, `a borda deveria seguir o mouse (diferença de ${bordaSegue}px)`)
       // …e com o mouse muito além da borda (outro monitor), ela para na beirada e a linha rola sozinha.
       await t.js(`const h = document.querySelector(${JSON.stringify(inicio)}); h.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, clientX: -900, clientY: 10, pointerId: 1 }))`)
@@ -552,6 +558,67 @@ export default [
       const m = await t.js('return await __t.midia()')
       assert.deepEqual([m.largura, m.altura], [640, 360])
       perto(m.duracao, esperado, 0.4, 'duração com a transição')
+    },
+  },
+  {
+    nome: 'video/editor: enquadramento do clipe (preencher, mover no player) sem bordas',
+    pagina: '/video/editor',
+    async executar(t) {
+      // Clipe 2 em pé (360×640) num vídeo deitado (640×360): sobram bordas pretas dos lados.
+      await abrirNoEditor(t, `, __t.arquivo(await __t.gravarVideo(2, 360, 640), 'zz-em-pe.webm')`, 2)
+      await t.js("const c = document.querySelector('main [aria-label^=\"Clipe 2\"]'); c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 7 })); c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 7 }))")
+      await t.aguardar("document.querySelector('main aside').textContent.includes('Clipe 2 ·')", 5000)
+      await t.js("dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))")
+      // Cada clipe tem fundo preto próprio (na transição, as bordas não mostram o outro clipe).
+      assert.ok(await t.js("return [...document.querySelectorAll('main .isolate > div.overflow-hidden')].every((d) => getComputedStyle(d).backgroundColor === 'rgb(0, 0, 0)')"), 'palco de cada clipe com fundo preto')
+      await t.js("[...document.querySelectorAll('main aside [role=radio]')].find((b) => b.textContent.trim() === 'Preencher').click()")
+      // Prévia: o vídeo em pé cobre a largura toda do palco.
+      await t.aguardar("(() => { const v = document.querySelectorAll('main .isolate video')[1]; const pal = document.querySelector('main [data-palco]'); return v && Math.abs(v.getBoundingClientRect().width - pal.getBoundingClientRect().width) < 2 })()", 5000)
+      // Caixa de ajuste no player: arrastar para baixo muda a posição vertical.
+      await t.aguardar("document.querySelector('main [aria-label=\"Ajustar o clipe na tela\"]')", 5000)
+      await t.js(`const g = document.querySelector('main [aria-label="Ajustar o clipe na tela"]'); const r = g.getBoundingClientRect()
+        const ev = (tipo, dy) => new PointerEvent(tipo, { bubbles: true, button: 0, pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 + dy })
+        g.dispatchEvent(ev('pointerdown', 0)); g.dispatchEvent(ev('pointermove', r.height * 0.1)); g.dispatchEvent(ev('pointerup', r.height * 0.1))`)
+      await t.aguardar("(() => { const l = [...document.querySelectorAll('main aside label')].find((x) => x.textContent.trim().startsWith('Posição vertical')); return l && document.getElementById(l.htmlFor)?.value === '10' })()", 5000)
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [640, 360])
+      const px = (seg, x, y) => t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const v = document.createElement('video'); v.muted = true; v.src = a.href
+        await new Promise((ok) => (v.onloadeddata = ok)); v.currentTime = ${seg}; await new Promise((ok) => (v.onseeked = ok))
+        const c = document.createElement('canvas'); c.width = 64; c.height = 36; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 64, 36)
+        return [...x.getImageData(${x}, ${y}, 1, 1).data]`)
+      const brilho = (p) => p[0] + p[1] + p[2]
+      // No clipe 2 (perto do fim), o canto esquerdo é vídeo, não borda preta.
+      const canto = await px(m.duracao - 0.5, 2, 10)
+      assert.ok(brilho(canto) > 60, `o clipe 2 deveria cobrir a tela toda: ${canto}`)
+    },
+  },
+  {
+    nome: 'video/editor: proporção 9:16 com fundo desfocado',
+    pagina: '/video/editor',
+    async executar(t) {
+      await abrirNoEditor(t)
+      await aba(t, 'Quadro')
+      await t.js("[...document.querySelectorAll('main aside [aria-label=\"Proporção da tela\"] [role=radio]')].find((b) => b.textContent.includes('9:16')).click()")
+      await t.aguardar("document.querySelector('main').innerText.includes('360 × 640 px')", 5000)
+      await t.js("const c = document.querySelector('main [aria-label^=\"Clipe 1\"]'); c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 7 })); c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 7 }))")
+      await aba(t, 'Clipe')
+      await t.js("[...document.querySelectorAll('main aside [role=radio]')].find((b) => b.textContent.trim() === 'Desfocado').click()")
+      // Prévia: o fundo desfocado é desenhado (pixels de cor no canvas).
+      await t.aguardar("(() => { const c = document.querySelector('main canvas[data-fundo-desfocado]'); if (!c) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / 4) > 30 })()", 8000)
+      await exportarVideo(t)
+      await t.aguardarResultado(300000)
+      const m = await t.js('return await __t.midia()')
+      assert.deepEqual([m.largura, m.altura], [360, 640])
+      // Em cima (fora do vídeo deitado) vem o fundo desfocado, não preto.
+      const topo = await t.js(`const a = document.querySelector('section[aria-label=Resultado] a[download]')
+        const v = document.createElement('video'); v.muted = true; v.src = a.href
+        await new Promise((ok) => (v.onloadeddata = ok)); v.currentTime = 1; await new Promise((ok) => (v.onseeked = ok))
+        const c = document.createElement('canvas'); c.width = 36; c.height = 64; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 36, 64)
+        return [...x.getImageData(18, 4, 1, 1).data]`)
+      assert.ok(topo[0] + topo[1] + topo[2] > 45, `o topo deveria ter o fundo desfocado: ${topo}`)
     },
   },
   {

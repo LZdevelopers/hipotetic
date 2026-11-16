@@ -13,9 +13,9 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao, corDoClipe, temCor } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao, corDoClipe, temCor, PADRAO_ENQUADRO, PROPORCOES, enquadroDoClipe, temEnquadro } from './_projeto'
 
-const PADRAO = { clipes: [], recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
+const PADRAO = { clipes: [], proporcao: null, recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
 /** Botão liga/desliga pequeno (negrito, itálico…). */
 function Alternar({ ativo, aoMudar, rotulo, children, className = '' }) {
@@ -270,6 +270,14 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, mudar, acoes }) {
   const fonte = fontes[clipe.fonte]
   const i = p.clipes.findIndex((c) => c.id === clipe.id)
   const miniatura = fonte?.tipo === 'imagem' ? fonte.url : fonte?.quadros?.[Math.floor((fonte.quadros.length ?? 0) / 2)]
+  const enquadro = (
+    <EnquadroDoClipe
+      enquadro={enquadroDoClipe(clipe)}
+      aoMudar={(e) => mudarClipe(clipe.id, { enquadro: e })}
+      varios={p.clipes.length > 1}
+      aoAplicarTodos={() => mudar((x) => ({ clipes: x.clipes.map((y) => ({ ...y, enquadro: enquadroDoClipe(clipe) })) }))}
+    />
+  )
   const cores = (
     <CoresDoClipe
       cor={corDoClipe(clipe)}
@@ -289,6 +297,7 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, mudar, acoes }) {
           <CampoTempo rotulo="Duração" valor={clipe.fim} aoMudar={(v) => mudarClipe(clipe.id, { inicio: 0, fim: Math.min(600, Math.max(0.2, v)) })} />
           <p className="text-xs text-fraca">Ou arraste a ponta do clipe na timeline.</p>
         </Bloco>
+        {enquadro}
         {cores}
         <div className="grid grid-cols-2 gap-2">
           <Botao variante="secundario" tamanho="p" icone="copiar" onClick={() => acoes.duplicar(clipe.id)}>
@@ -306,6 +315,7 @@ function PainelClipe({ p, fontes, clipe, mudarClipe, mudar, acoes }) {
       <p className="truncate text-sm font-semibold text-tinta" title={fonte?.arquivo.name}>
         Clipe {i + 1} · {fonte?.arquivo.name}
       </p>
+      {enquadro}
       {cores}
       <Velocidade valor={clipe.velocidade} aoMudar={(v) => mudarClipe(clipe.id, { velocidade: v })} />
       <Bloco titulo="Áudio do clipe">
@@ -625,6 +635,51 @@ function Filtros({ cor, miniatura, aoEscolher }) {
   )
 }
 
+/** Onde o clipe fica na tela: encaixar/preencher, zoom, posição e o fundo das sobras. */
+function EnquadroDoClipe({ enquadro: e, aoMudar, aoAplicarTodos, varios }) {
+  const m = (d) => aoMudar({ ...e, ...d })
+  const pct = (v) => `${v > 0 ? '+' : ''}${v}%`
+  return (
+    <Bloco titulo="Enquadramento na tela">
+      <Segmentado
+        rotulo="Ajuste"
+        valor={e.modo}
+        aoMudar={(v) => m({ modo: v, zoom: 1, x: 0, y: 0 })}
+        opcoes={[
+          { valor: 'encaixar', rotulo: 'Encaixar' },
+          { valor: 'preencher', rotulo: 'Preencher' },
+        ]}
+        dica={e.modo === 'encaixar' ? 'O vídeo inteiro aparece; sobra borda se a proporção for diferente.' : 'Cobre a tela toda, sem bordas; corta o que sobrar.'}
+      />
+      <Deslizante rotulo="Zoom" valor={Math.round(e.zoom * 100)} aoMudar={(v) => m({ zoom: v / 100 })} min={20} max={500} passo={1} formatar={(v) => `${v}%`} />
+      <Deslizante rotulo="Posição horizontal" valor={Math.round(e.x * 100)} aoMudar={(v) => m({ x: v / 100 })} min={-100} max={100} formatar={pct} />
+      <Deslizante rotulo="Posição vertical" valor={Math.round(e.y * 100)} aoMudar={(v) => m({ y: v / 100 })} min={-100} max={100} formatar={pct} />
+      <Segmentado
+        rotulo="Fundo das bordas"
+        valor={e.fundo}
+        aoMudar={(v) => m({ fundo: v })}
+        opcoes={[
+          { valor: 'preto', rotulo: 'Preto' },
+          { valor: 'desfocado', rotulo: 'Desfocado' },
+        ]}
+      />
+      <p className="text-xs text-fraca">Ou ajuste direto no player: arraste o vídeo para mover e puxe os cantos para dar zoom. Duplo clique no player seleciona o clipe que está na tela.</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {temEnquadro({ enquadro: e }) ? (
+          <button type="button" onClick={() => aoMudar({ ...PADRAO_ENQUADRO })} className="text-xs font-semibold text-suave hover:text-tinta">
+            Redefinir enquadramento
+          </button>
+        ) : null}
+        {varios ? (
+          <button type="button" onClick={aoAplicarTodos} className="text-xs font-semibold text-acento hover:underline">
+            Aplicar em todos os clipes
+          </button>
+        ) : null}
+      </div>
+    </Bloco>
+  )
+}
+
 /** Filtros e correção de cor de UM clipe (com a opção de copiar para todos). */
 function CoresDoClipe({ cor, aoMudar, miniatura, aoAplicarTodos, varios }) {
   const mc = (d) => aoMudar({ ...cor, ...d })
@@ -661,6 +716,35 @@ function CoresDoClipe({ cor, aoMudar, miniatura, aoAplicarTodos, varios }) {
 function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
   return (
     <div className="flex flex-col gap-5">
+      {recorte ? null : (
+        <Bloco titulo="Proporção da tela">
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Proporção da tela">
+            {PROPORCOES.map((o) => {
+              const ativo = (p.proporcao ?? null) === o.id
+              const [a, b] = o.id ? o.id.split(':').map(Number) : [final.w, final.h]
+              const k = a / b
+              return (
+                <button
+                  key={o.id ?? 'original'}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  title={o.dica}
+                  onClick={() => mudar({ proporcao: o.id })}
+                  className={`flex flex-col items-center gap-1 rounded-lg border-2 px-1 py-1.5 text-[0.6875rem] font-semibold transition-colors ${ativo ? 'border-acento bg-acento-suave text-acento' : 'border-transparent text-suave hover:border-borda-forte hover:text-tinta'}`}
+                >
+                  <span className="grid h-7 place-items-center">
+                    <span className="block rounded-[3px] border-2 border-current" style={{ width: k >= 1 ? 28 : 28 * k, height: k >= 1 ? 28 / k : 28 }} />
+                  </span>
+                  {o.rotulo}
+                  <span className="text-[0.625rem] font-normal text-fraca">{o.dica}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-fraca">Para tirar as bordas de um clipe, use Preencher, zoom ou fundo desfocado na aba Clipe.</p>
+        </Bloco>
+      )}
       <Bloco titulo="Crop">
         {recorte ? (
           <>
@@ -1111,7 +1195,7 @@ export default function EditorVideo() {
       const fonte = { id: novoId('f'), ...(await lerFonte(arquivo)) }
       setFontes((f) => ({ ...f, [fonte.id]: fonte }))
       guardar(`video:arquivo:${fonte.id}`, arquivo)
-      const congelado = { id: novoId('c'), fonte: fonte.id, inicio: 0, fim: 2, velocidade: 1, volume: 1, mudo: false, cor: c.cor }
+      const congelado = { id: novoId('c'), fonte: fonte.id, inicio: 0, fim: 2, velocidade: 1, volume: 1, mudo: false, cor: c.cor, enquadro: c.enquadro }
       const resto = { id: novoId('c') }
       const imagem = fontes[c.fonte]?.tipo === 'imagem'
       mudar((x) => ({
@@ -1345,7 +1429,7 @@ export default function EditorVideo() {
     setRascunho(null)
     setSelecao(null)
     // Mantém os clipes (inteiros, na ordem) e zera todo o resto.
-    mudar((x) => ({ ...PADRAO, clipes: x.clipes.map((c) => ({ ...c, inicio: 0, fim: fontes[c.fonte]?.duracao ?? c.fim, velocidade: 1, volume: 1, mudo: false, cor: undefined, transicao: undefined })) }))
+    mudar((x) => ({ ...PADRAO, clipes: x.clipes.map((c) => ({ ...c, inicio: 0, fim: fontes[c.fonte]?.duracao ?? c.fim, velocidade: 1, volume: 1, mudo: false, cor: undefined, transicao: undefined, enquadro: undefined })) }))
     palco.current?.buscar(0)
   }
   const recomecar = () => {
@@ -1620,6 +1704,7 @@ export default function EditorVideo() {
                 selecao={selecao}
                 aoSelecionar={selecionar}
                 aoMudarCamada={mudarCamada}
+                aoMudarClipe={mudarClipe}
                 recortando={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null}
                 aoTempo={aoTempo}
                 aoTocando={setTocando}

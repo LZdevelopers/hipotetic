@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, corDoClipe, temCor, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, corDoClipe, temCor, enquadroDoClipe, caixaDoClipe, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -119,6 +119,98 @@ function useVinheta(k, final) {
   return url
 }
 
+/**
+ * Fundo desfocado de um clipe: a imagem (girada, recortada) cobrindo a tela
+ * num canvas minúsculo — o CSS amplia e borra. A exportação faz a mesma conta.
+ */
+function desenharFundo(cv, src, fonte, pp) {
+  const el = src instanceof ClipeImagem ? src.el : src
+  if (!cv || !el || !fonte?.largura) return
+  if (el.tagName === 'VIDEO' ? el.readyState < 2 : !el.complete) return
+  const ctx = cv.getContext('2d')
+  const q = quadroGirado(fonte, pp.girar)
+  const r = pp.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
+  const rw = q.w * r.w
+  const rh = q.h * r.h
+  const sc = Math.max(cv.width / rw, cv.height / rh)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, cv.width, cv.height)
+  ctx.translate(cv.width / 2, cv.height / 2)
+  ctx.scale(sc, sc)
+  ctx.translate(-(r.x * q.w + rw / 2) + q.w / 2, -(r.y * q.h + rh / 2) + q.h / 2)
+  if (pp.espelhar) ctx.scale(-1, 1)
+  ctx.rotate((pp.girar * Math.PI) / 180)
+  ctx.drawImage(el, -fonte.largura / 2, -fonte.altura / 2, fonte.largura, fonte.altura)
+}
+const LARGURA_FUNDO = 48
+
+/**
+ * Caixa de ajuste do clipe selecionado no palco: arrastar move, as alças dos
+ * cantos dão zoom (a partir do centro). Gruda no centro, com guias.
+ */
+function AjusteClipe({ caixa: b, palco, enquadro, aoMudar, aoGuias }) {
+  const vis = { x: Math.max(0, b.x), y: Math.max(0, b.y) }
+  vis.w = Math.min(palco.w, b.x + b.w) - vis.x
+  vis.h = Math.min(palco.h, b.y + b.h) - vis.y
+  if (vis.w < 4 || vis.h < 4) return null
+  const mover = (e) => {
+    const e0 = { ...enquadro }
+    arrastar(
+      e,
+      (dx, dy) => {
+        let x = e0.x + dx / palco.w
+        let y = e0.y + dy / palco.h
+        const gx = Math.abs(x) < 8 / palco.w
+        const gy = Math.abs(y) < 8 / palco.h
+        if (gx) x = 0
+        if (gy) y = 0
+        aoGuias({ v: gx, h: gy })
+        aoMudar({ ...e0, x: Math.round(x * 1e4) / 1e4, y: Math.round(y * 1e4) / 1e4 })
+      },
+      () => aoGuias(null),
+    )
+  }
+  const zoom = (e) => {
+    const e0 = { ...enquadro }
+    const area = e.currentTarget.closest('[data-palco]').getBoundingClientRect()
+    const cx = area.left + b.x + b.w / 2
+    const cy = area.top + b.y + b.h / 2
+    const d0 = Math.hypot(e.clientX - cx, e.clientY - cy) || 1
+    arrastar(e, (dx, dy) => {
+      const d = Math.hypot(e.clientX + dx - cx, e.clientY + dy - cy)
+      aoMudar({ ...e0, zoom: Math.round(Math.min(5, Math.max(0.2, (e0.zoom * d) / d0)) * 100) / 100 })
+    })
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Ajustar o clipe na tela"
+      title="Arraste para mover; puxe os cantos para dar zoom"
+      onPointerDown={(e) => e.button === 0 && mover(e)}
+      className="absolute z-[5] cursor-move outline-2 outline-white shadow-[0_0_0_1px_rgb(0_0_0/0.5)]"
+      style={{ left: vis.x, top: vis.y, width: vis.w, height: vis.h }}
+    >
+      {[
+        [0, 0, 'nwse'],
+        [1, 0, 'nesw'],
+        [1, 1, 'nwse'],
+        [0, 1, 'nesw'],
+      ].map(([x, y, cursor]) => (
+        <span
+          key={`${x}${y}`}
+          aria-label="Zoom do clipe"
+          onPointerDown={(e) => e.button === 0 && zoom(e)}
+          className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-black/40 bg-white"
+          style={{ left: `${x * 100}%`, top: `${y * 100}%`, cursor: `${cursor}-resize` }}
+        />
+      ))}
+      <span className="pointer-events-none absolute top-1.5 left-1/2 -translate-x-1/2 rounded bg-black/70 px-1.5 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap text-white tabular-nums">
+        {Math.round(enquadro.zoom * 100)}%
+      </span>
+    </div>
+  )
+}
+
 /** Arrasto genérico: chama mover(dx, dy) em px desde o início; fim() ao soltar. */
 function arrastar(e, mover, fim) {
   e.preventDefault()
@@ -218,7 +310,7 @@ function Recorte({ valor, aoMudar, largura, altura }) {
  * Expõe (ref): tocar(), pausar(), alternar(), buscar(t), tempo(), tocando().
  * Chama aoTempo(t) a cada quadro (sem re-renderizar o editor).
  */
-export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSelecionar, aoMudarCamada, recortando, aoTempo, aoTocando, aoMenu, vazio }, ref) {
+export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSelecionar, aoMudarCamada, aoMudarClipe, recortando, aoTempo, aoTocando, aoMenu, vazio }, ref) {
   const caixa = useRef(null)
   const [tamCaixa, setTamCaixa] = useState({ w: 0, h: 0 })
   const videos = useRef({})
@@ -228,6 +320,8 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   const veu = useRef(null)
   const veuTransicao = useRef(null)
   const palcosClipe = useRef({})
+  const fundos = useRef({})
+  const [visivel, setVisivel] = useState(null) // id do clipe na tela agora (para a caixa de ajuste)
   const m = useRef({ tocando: false, t: 0, ativo: 0, quadro: 0 })
   const atual = useRef({ p, fontes })
   atual.current = { p, fontes }
@@ -269,11 +363,18 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
         caixa.style.zIndex = ''
       }
       const v = videos.current[c.id]
-      if (!v) return
       const visivel = i === est.principal || i === est.entrando
+      if (caixa) caixa.style.visibility = visivel ? 'visible' : 'hidden'
+      if (!v) return
       v.style.visibility = visivel ? 'visible' : 'hidden'
       if (!visivel && !v.paused) v.pause()
+      if (visivel && fundos.current[c.id]) desenharFundo(fundos.current[c.id], v, ff[c.fonte], pp)
     })
+    const idVisivel = pp.clipes[est.principal]?.id ?? null
+    if (m.current.visivel !== idVisivel) {
+      m.current.visivel = idVisivel
+      setVisivel(idVisivel)
+    }
     if (veuTransicao.current) veuTransicao.current.style.opacity = '0'
     if (est.entrando >= 0) efeitoTransicao(est, palcosClipe.current[pp.clipes[est.principal].id], palcosClipe.current[pp.clipes[est.entrando].id], veuTransicao.current)
     const inicios = iniciosNaLinha(pp)
@@ -469,14 +570,17 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
   useEffect(() => () => pausar(), [])
 
   // ─── Geometria de cada clipe (recorte + giro, encaixado no palco) ─────────
-  const geometria = (fonte) => {
+  const geometria = (fonte, c) => {
     const q = quadroGirado(fonte, p.girar)
     const r = recortando || !p.recorte ? { x: 0, y: 0, w: 1, h: 1 } : p.recorte
     const rw = r.w * q.w
     const rh = r.h * q.h
-    const s = Math.min(palco.w / rw, palco.h / rh) || 0
+    // Recortando: o quadro inteiro, encaixado. Senão: o enquadramento do clipe (zoom, posição).
+    const b = recortando ? caixaDoClipe({ modo: 'encaixar', zoom: 1, x: 0, y: 0 }, rw, rh, palco.w, palco.h) : caixaDoClipe(enquadroDoClipe(c), rw, rh, palco.w, palco.h)
+    const s = b.s || 0
     return {
-      caixa: { left: (palco.w - rw * s) / 2 - r.x * q.w * s, top: (palco.h - rh * s) / 2 - r.y * q.h * s, width: q.w * s, height: q.h * s },
+      area: b,
+      caixa: { left: b.x - r.x * q.w * s, top: b.y - r.y * q.h * s, width: q.w * s, height: q.h * s },
       video: { width: fonte.largura * s, height: fonte.altura * s, left: ((q.w - fonte.largura) * s) / 2, top: ((q.h - fonte.altura) * s) / 2 },
     }
   }
@@ -495,7 +599,9 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
         <div
           className="relative overflow-hidden bg-black shadow-[0_10px_40px_-15px_rgb(0_0_0/0.6)]"
           style={{ width: palco.w, height: palco.h }}
+          data-palco=""
           onPointerDown={(e) => e.button === 0 && !recortando && aoSelecionar(null)}
+          onDoubleClick={() => !recortando && visivel && aoSelecionar({ tipo: 'clipe', id: visivel })}
           onContextMenu={(e) => {
             e.preventDefault()
             if (recortando) return
@@ -507,13 +613,24 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
           {p.clipes.map((c) => {
             const fonte = fontes[c.fonte]
             if (!fonte?.url) return null
-            const g = geometria(fonte)
+            const g = geometria(fonte, c)
+            const desfocado = !recortando && enquadroDoClipe(c).fundo === 'desfocado'
             const corC = corDoClipe(c)
             const idC = `${idMatriz}${c.id}`
             const filtroCor = [cssCor(corC, idC), filtroGeral].filter(Boolean).join(' ') || undefined
             return (
-              <div key={c.id} ref={(el) => (el ? (palcosClipe.current[c.id] = el) : delete palcosClipe.current[c.id])} className="absolute inset-0 overflow-hidden">
+              <div key={c.id} ref={(el) => (el ? (palcosClipe.current[c.id] = el) : delete palcosClipe.current[c.id])} className="absolute inset-0 overflow-hidden bg-black" style={{ visibility: 'hidden' }}>
               <MatrizSvg id={idC} cor={corC} />
+              {desfocado ? (
+                <canvas
+                  ref={(el) => (el ? (fundos.current[c.id] = el) : delete fundos.current[c.id])}
+                  width={LARGURA_FUNDO}
+                  height={Math.max(2, Math.round((LARGURA_FUNDO * (palco.h + palco.w * 0.18)) / (palco.w * 1.18 || 1)))}
+                  data-fundo-desfocado=""
+                  className="absolute"
+                  style={{ inset: -palco.w * 0.09, width: palco.w * 1.18, height: palco.h + palco.w * 0.18, filter: [filtroCor, `blur(${(1.4 * palco.w) / LARGURA_FUNDO}px)`].filter(Boolean).join(' ') }}
+                />
+              ) : null}
               <div className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>
                 {fonte.tipo === 'imagem' ? (
                   <img
@@ -533,6 +650,7 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
                   className="absolute max-w-none"
                   style={{ ...g.video, transform: `rotate(${p.girar}deg)`, filter: filtroCor, visibility: 'hidden' }}
                   onLoadedData={() => aplicar(m.current.t, !m.current.tocando)}
+                  onSeeked={desfocado ? (e) => desenharFundo(fundos.current[c.id], e.currentTarget, fonte, atual.current.p) : undefined}
                 />
                 )}
               </div>
@@ -552,6 +670,15 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
             </svg>
           ) : null}
           {urlVinheta && !recortando ? <img src={urlVinheta} alt="" className="pointer-events-none absolute inset-0 size-full" /> : null}
+
+          {/* Clipe selecionado na tela: caixa para mover e dar zoom */}
+          {(() => {
+            if (recortando || selecao?.tipo !== 'clipe' || selecao.id !== visivel || !aoMudarClipe) return null
+            const c = p.clipes.find((x) => x.id === selecao.id)
+            const fonte = c && fontes[c.fonte]
+            if (!fonte?.largura) return null
+            return <AjusteClipe caixa={geometria(fonte, c).area} palco={palco} enquadro={enquadroDoClipe(c)} aoMudar={(e) => aoMudarClipe(c.id, { enquadro: e })} aoGuias={setGuias} />
+          })()}
 
           {/* Camadas (fora do modo recorte) */}
           {recortando
