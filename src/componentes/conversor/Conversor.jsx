@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { converter, destinosPara, identificar, limiteDe, opcoesPadrao } from '../../motores/conversor'
 import { servidorDocumentos } from '../../motores/documentos'
 import { baixarBlob, formatarBytes, zipar } from '../../nucleo/arquivos'
+import { receber } from '../../nucleo/entrega'
 import { Icone } from '../Icone'
 import { Aviso, Botao, Caixa, SeloCategoria } from '../ui'
 import { OpcoesConversao } from './Opcoes'
@@ -235,6 +236,16 @@ export function Conversor() {
     }
     addEventListener('paste', aoColar)
     return () => removeEventListener('paste', aoColar)
+  }, [])
+
+  // Arquivos soltos na página inicial chegam aqui já adicionados.
+  // (o ref evita adicionar duas vezes quando o StrictMode repete o efeito)
+  const recebeu = useRef(false)
+  useEffect(() => {
+    if (recebeu.current) return
+    recebeu.current = true
+    const lista = receber('converter')
+    if (lista?.length) adicionarRef.current(lista)
   }, [])
 
   const escolher = (id, destino) =>

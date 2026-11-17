@@ -320,6 +320,177 @@
   }
 }
 
+/* ==========================================================================
+   PÁGINA INICIAL — objetos 3D em CSS (componentes/inicio/Objetos3D.jsx)
+   ========================================================================== */
+@keyframes flutuar {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 calc(var(--amp, 10px) * -1);
+  }
+}
+@keyframes sombra-flutuar {
+  0%,
+  100% {
+    scale: 1;
+    opacity: 1;
+  }
+  50% {
+    scale: 0.8;
+    opacity: 0.6;
+  }
+}
+@keyframes cintilar {
+  0%,
+  100% {
+    opacity: 0.2;
+    scale: 0.6;
+  }
+  50% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes orbitar {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@layer components {
+  .bloco3d {
+    position: relative;
+    display: block;
+    flex-shrink: 0;
+    width: var(--t);
+    height: var(--t);
+    perspective: calc(var(--t) * 8);
+  }
+  .bloco3d-flutua {
+    position: absolute;
+    inset: 0;
+    display: block;
+    transform-style: preserve-3d;
+    animation: flutuar var(--duracao, 6s) ease-in-out var(--atraso, 0s) infinite;
+  }
+  .bloco3d-corpo {
+    position: absolute;
+    inset: 0;
+    display: block;
+    transform-style: preserve-3d;
+    transform: rotateX(calc((var(--rx) - var(--my, 0) * 14deg) * var(--fator, 1)))
+      rotateY(calc((var(--ry) + var(--mx, 0) * 18deg) * var(--fator, 1))) rotateZ(calc(var(--rz) * var(--fator, 1)))
+      scale(var(--escala, 1));
+    transition: transform 0.7s var(--ease-suave);
+  }
+  .bloco3d-camada {
+    position: absolute;
+    inset: 0;
+    display: block;
+    border-radius: 27%;
+    background: color-mix(in oklab, var(--b), black calc(18% + var(--i) * 4%));
+    transform: translateZ(calc(var(--t) * -0.021 * var(--i)));
+  }
+  .bloco3d-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7%;
+    overflow: hidden;
+    border-radius: 27%;
+    color: #fff;
+    background: linear-gradient(155deg, var(--a) 0%, var(--b) 78%);
+    box-shadow:
+      inset 0 calc(var(--t) * 0.025) 0 rgb(255 255 255 / 0.45),
+      inset 0 calc(var(--t) * -0.07) calc(var(--t) * 0.14) rgb(0 0 0 / 0.22);
+    transform: translateZ(0.5px);
+  }
+  /* reflexo de vidro no alto */
+  .bloco3d-face::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(110% 70% at 18% -6%, rgb(255 255 255 / 0.55), transparent 55%),
+      linear-gradient(180deg, rgb(255 255 255 / 0.12), transparent 40%);
+    pointer-events: none;
+  }
+  .bloco3d-glifo {
+    position: relative;
+    width: 50%;
+    height: 50%;
+    filter: drop-shadow(0 calc(var(--t) * 0.03) calc(var(--t) * 0.04) rgb(0 0 0 / 0.28));
+  }
+  .com-rotulo .bloco3d-glifo {
+    width: 40%;
+    height: 40%;
+  }
+  .bloco3d-rotulo {
+    position: relative;
+    font-family: var(--font-display);
+    font-weight: 750;
+    font-size: calc(var(--t) * 0.112);
+    letter-spacing: -0.01em;
+    line-height: 1;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  }
+  /* sombra no "chão", diminui quando o bloco sobe */
+  .bloco3d-sombra {
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    top: 112%;
+    height: 14%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in oklab, var(--b) 55%, transparent), transparent);
+    filter: blur(calc(var(--t) * 0.05));
+    animation: sombra-flutuar var(--duracao, 6s) ease-in-out var(--atraso, 0s) infinite;
+  }
+  /* luz colorida atrás do bloco (mais forte no escuro) */
+  .bloco3d-brilho {
+    position: absolute;
+    inset: 8%;
+    border-radius: 30%;
+    background: var(--b);
+    opacity: 0.18;
+    filter: blur(calc(var(--t) * 0.28));
+  }
+  :root[data-theme='dark'] .bloco3d-brilho {
+    opacity: 0.42;
+  }
+  /* Bloco que é link: no hover vira de frente e cresce um pouco. */
+  .bloco3d-link:hover,
+  .bloco3d-link:focus-visible {
+    --fator: 0.15;
+    --escala: 1.08;
+  }
+
+  .anel3d {
+    position: absolute;
+    display: block;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in oklab, var(--color-acento) 70%, transparent);
+    box-shadow:
+      0 0 18px color-mix(in oklab, var(--color-acento) 45%, transparent),
+      inset 0 0 18px color-mix(in oklab, var(--color-acento) 30%, transparent);
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.25), #000 55%);
+    pointer-events: none;
+  }
+  .faisca {
+    position: absolute;
+    display: block;
+    color: color-mix(in oklab, var(--color-acento) 80%, white);
+    animation: cintilar 3.2s ease-in-out var(--atraso, 0s) infinite;
+    pointer-events: none;
+  }
+}
+
 /* Onde ajuda ver que rola (painéis longos, linha do tempo): barra fina e discreta. */
 @utility rolagem-fina {
   scrollbar-width: thin;

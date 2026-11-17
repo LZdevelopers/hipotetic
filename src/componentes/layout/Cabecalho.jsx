@@ -4,6 +4,7 @@ import { definirTema, useTema } from '../../nucleo/preferencias'
 import { Link, useRota } from '../../nucleo/roteador'
 import { textos } from '../../textos'
 import { Icone } from '../Icone'
+import { Glifo } from '../inicio/Glifo'
 import { SeloCategoria } from '../ui'
 import { PaletaBusca, useAtalhoBusca } from './Busca'
 import { Marca } from './Marca'
@@ -129,8 +130,9 @@ function MenuCategoria({ categoria, ativo }) {
         }}
         className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors 2xl:px-2.5 ${ativo || aberto ? 'bg-superficie-2 text-tinta' : 'text-suave hover:text-tinta'}`}
       >
+        <Glifo nome={categoria.id} className="mr-0.5 size-[1.05rem]" style={{ color: `var(--color-cat-${categoria.id})`, '--b': 'var(--color-fundo)' }} />
         {categoria.nome}
-        <Icone nome="setaBaixo" tamanho={14} className={`text-fraca transition-transform duration-200 ${aberto ? 'rotate-180' : ''}`} />
+        <Icone nome="setaBaixo" tamanho={14} className={`hidden text-fraca transition-transform duration-200 2xl:block ${aberto ? 'rotate-180' : ''}`} />
       </button>
       <div
         className={`absolute top-full left-1/2 z-50 w-[22rem] -translate-x-1/2 pt-2 transition-[opacity,translate] duration-200 ${aberto ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'}`}
