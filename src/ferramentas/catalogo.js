@@ -99,7 +99,7 @@ const TODAS = [
       'zip', 'rar', '7z', 'tar', 'vídeo para mp3', 'mp4 para mp3', 'vídeo para gif', 'gif para mp4', 'png para jpg', 'webp para png',
       'pdf para jpg', 'jpg para pdf', 'imagem para pdf', 'word para pdf', 'docx para pdf', 'rar para zip', 'extrair áudio',
     ],
-    icone: 'substituir',
+    icone: 'conversor',
     popular: true,
     perguntas: [
       { p: 'Meus arquivos são enviados para algum servidor?', r: 'Vídeos, áudios, imagens, PDFs e compactados são convertidos no seu próprio aparelho e não saem dele. Só documentos (DOCX, ODT, RTF…) vão ao nosso servidor, onde o LibreOffice converte e apaga o arquivo na hora.' },

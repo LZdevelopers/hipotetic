@@ -55,7 +55,7 @@ function MenuCelular({ aberto, aoFechar }) {
       </div>
       <nav className="flex flex-col gap-5 overflow-y-auto p-4">
         <Link para="/converter" className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
-          <SeloCategoria categoria="conversor" icone="substituir" tamanho="p" />
+          <SeloCategoria categoria="conversor" icone="conversor" tamanho="p" />
           Conversor de arquivos
         </Link>
         <Link para="/ferramentas" className="flex items-center gap-2.5 rounded-lg py-1 text-sm font-semibold text-tinta">
@@ -65,7 +65,7 @@ function MenuCelular({ aberto, aoFechar }) {
         {categoriasComFerramentas().map((c) => (
           <div key={c.id}>
             <p className="flex items-center gap-2.5 py-1 text-sm font-semibold text-tinta">
-              <SeloCategoria categoria={c.id} icone={c.icone} tamanho="p" />
+              <SeloCategoria categoria={c.id} icone={c.id} tamanho="p" />
               {c.nome}
             </p>
             <ul className="mt-1.5 ml-[2.6rem] flex flex-col">
@@ -138,6 +138,18 @@ function MenuCategoria({ categoria, ativo }) {
         className={`absolute top-full left-1/2 z-50 w-[22rem] -translate-x-1/2 pt-2 transition-[opacity,translate] duration-200 ${aberto ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'}`}
       >
         <div className="overflow-hidden rounded-2xl border border-borda bg-superficie shadow-[var(--shadow-flutuante)]">
+          <Link
+            para="/converter"
+            onClick={() => fechar(0)}
+            tabIndex={aberto ? 0 : -1}
+            className="flex items-start gap-3 border-b border-borda bg-fundo-suave px-4 py-3 transition-colors hover:bg-superficie-2"
+          >
+            <SeloCategoria categoria="conversor" icone="conversor" tamanho="p" />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-tinta">Converter arquivos</span>
+              <span className="block text-xs leading-snug text-fraca">Qualquer formato para outro: vídeo, áudio, imagem, PDF…</span>
+            </span>
+          </Link>
           <ul className="flex flex-col p-1.5">
             {lista.map((f) => (
               <li key={f.slug}>
@@ -177,34 +189,25 @@ export function Cabecalho() {
   return (
     <header className="sticky top-0 z-40 border-b border-borda bg-fundo/85 backdrop-blur-md supports-[not(backdrop-filter:blur(0))]:bg-fundo">
       {/* Logo à esquerda, categorias no centro, busca e tema à direita. */}
-      <div className="mx-auto flex h-15 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:gap-6">
+      <div className="flex h-15 w-full items-center gap-4 px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:gap-6">
         <Marca className="shrink-0 xl:justify-self-start" />
 
         <nav aria-label="Categorias" className="hidden items-center gap-0.5 xl:flex">
-          <Link
-            para="/converter"
-            aria-current={caminho === '/converter' ? 'page' : undefined}
-            title="Converter arquivos"
-            className={`mr-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold transition-colors 2xl:px-2.5 ${caminho === '/converter' ? 'bg-superficie-2 text-tinta' : 'text-tinta hover:bg-superficie-2'}`}
-          >
-            <Icone nome="substituir" tamanho={15} className="text-acento" />
-            Converter
-          </Link>
           {categoriasComFerramentas().map((c) => (
             <MenuCategoria key={c.id} categoria={c} ativo={categoriaAtual === c.id} />
           ))}
         </nav>
 
-        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5 xl:ml-0">
+        <div className="ml-auto flex items-center justify-end gap-1.5 xl:ml-0 xl:justify-self-end">
           <button
             type="button"
             onClick={abrirBusca}
             aria-label={textos.buscarFerramenta}
-            className="hidden h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-borda bg-fundo-suave pr-2 pl-3.5 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex sm:max-w-sm xl:max-w-[24rem]"
+            className="hidden h-9 w-[15rem] items-center gap-2 rounded-[var(--radius-controle)] border border-borda bg-superficie pr-1.5 pl-3 text-sm text-fraca transition-colors hover:border-borda-forte hover:text-suave sm:flex xl:w-[11.75rem] min-[1360px]:w-[15rem]"
           >
-            <Icone nome="buscar" tamanho={17} />
-            <span className="min-w-0 flex-1 truncate text-left">{textos.buscarFerramenta}</span>
-            <kbd className="rounded border border-borda bg-superficie px-1.5 py-px font-sans text-[0.6875rem] xl:hidden 2xl:inline">{mac ? '⌘K' : 'Ctrl K'}</kbd>
+            <Icone nome="buscar" tamanho={16} className="shrink-0" />
+            <span className="flex-1 text-left whitespace-nowrap">{textos.buscarFerramenta}</span>
+            <kbd className="rounded-md border border-borda bg-fundo-suave px-1.5 py-px font-sans text-[0.6875rem] text-fraca xl:hidden min-[1360px]:inline">{mac ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           <button
             type="button"

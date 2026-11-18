@@ -77,8 +77,16 @@ const DESENHOS = {
     </>
   ),
   coracao: <path d="M12 20.6s-8.3-4.8-8.3-10.8A4.6 4.6 0 0 1 12 7.2a4.6 4.6 0 0 1 8.3 2.6c0 6-8.3 10.8-8.3 10.8z" />,
+  baixar: (
+    <>
+      <path d="M12 2.8a1.4 1.4 0 0 1 1.4 1.4v8l2.5-2.5a1.4 1.4 0 1 1 2 2l-4.9 4.9a1.4 1.4 0 0 1-2 0l-4.9-4.9a1.4 1.4 0 1 1 2-2l2.5 2.5v-8A1.4 1.4 0 0 1 12 2.8z" />
+      <path d="M4.2 16.2a1.3 1.3 0 0 1 1.3 1.3v1.3h13v-1.3a1.3 1.3 0 1 1 2.6 0v2.1a1.9 1.9 0 0 1-1.9 1.9H4.8a1.9 1.9 0 0 1-1.9-1.9v-2.1a1.3 1.3 0 0 1 1.3-1.3z" opacity=".85" />
+    </>
+  ),
   brilho: <path d="M12 1.5c.7 5.3 2.9 8 10.5 10.5-7.6 2.5-9.8 5.2-10.5 10.5-.7-5.3-2.9-8-10.5-10.5C9.1 9.5 11.3 6.8 12 1.5z" />,
 }
+
+export const temGlifo = (nome) => Object.hasOwn(DESENHOS, nome)
 
 export function Glifo({ nome, className = '', style }) {
   const desenho = DESENHOS[nome]

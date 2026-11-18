@@ -145,6 +145,32 @@
   *::-webkit-scrollbar {
     display: none;
   }
+  /* Exceção: na página inicial (longa) a barra aparece, fina e no tom do site,
+     para mostrar que a página rola. */
+  html:has([data-pagina-inicio]) {
+    scrollbar-width: auto;
+  }
+  html:has([data-pagina-inicio])::-webkit-scrollbar {
+    display: block;
+    width: 12px;
+  }
+  html:has([data-pagina-inicio])::-webkit-scrollbar-track {
+    background: var(--color-fundo);
+  }
+  html:has([data-pagina-inicio])::-webkit-scrollbar-thumb {
+    border: 3px solid var(--color-fundo);
+    border-radius: 99px;
+    background: color-mix(in oklab, var(--color-tinta) 28%, var(--color-fundo));
+  }
+  html:has([data-pagina-inicio])::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--color-tinta) 48%, var(--color-fundo));
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    html:has([data-pagina-inicio]) {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in oklab, var(--color-tinta) 30%, var(--color-fundo)) transparent;
+    }
+  }
   html {
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
@@ -471,21 +497,44 @@
     --escala: 1.08;
   }
 
+  /* Ícone pequeno de ferramenta: o mesmo bloco brilhante, sem 3D. */
+  .selo-bloco {
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+    background: linear-gradient(155deg, var(--a) 0%, var(--b) 80%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.45),
+      inset 0 -3px 6px rgb(0 0 0 / 0.18),
+      0 3px 8px -3px color-mix(in oklab, var(--b) 70%, transparent);
+  }
+  .selo-bloco::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(110% 70% at 18% -6%, rgb(255 255 255 / 0.5), transparent 55%);
+    pointer-events: none;
+  }
+  .selo-bloco > svg {
+    filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.25));
+  }
+
+  /* Anéis e estrelinhas: neutros (preto e branco), a cor fica só nos ícones. */
   .anel3d {
     position: absolute;
     display: block;
     border-radius: 50%;
-    border: 1.5px solid color-mix(in oklab, var(--color-acento) 70%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-tinta) 22%, transparent);
     box-shadow:
-      0 0 18px color-mix(in oklab, var(--color-acento) 45%, transparent),
-      inset 0 0 18px color-mix(in oklab, var(--color-acento) 30%, transparent);
-    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.25), #000 55%);
+      0 0 22px color-mix(in oklab, var(--color-tinta) 7%, transparent),
+      inset 0 0 22px color-mix(in oklab, var(--color-tinta) 6%, transparent);
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.2), #000 55%);
     pointer-events: none;
   }
   .faisca {
     position: absolute;
     display: block;
-    color: color-mix(in oklab, var(--color-acento) 80%, white);
+    color: color-mix(in oklab, var(--color-tinta) 45%, transparent);
     animation: cintilar 3.2s ease-in-out var(--atraso, 0s) infinite;
     pointer-events: none;
   }

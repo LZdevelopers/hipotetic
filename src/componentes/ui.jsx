@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Link } from '../nucleo/roteador'
 import { Icone } from './Icone'
+import { CORES_3D, Glifo, temGlifo } from './inicio/Glifo'
 
 /* ==========================================================================
    Primitivas de interface. Todas as ferramentas usam só estas peças, o que
@@ -283,17 +284,21 @@ export function Grupo({ titulo, children, className = '' }) {
 }
 
 /** Ícone de categoria em um quadrado com a cor da categoria. */
+/**
+ * Ícone de ferramenta/categoria: o mesmo "bloco" brilhante da página inicial
+ * (mesmas cores e glifos dos blocos 3D), em tamanho pequeno. Se o ícone tem
+ * glifo próprio (as categorias), usa o glifo; senão, o ícone de traço em branco.
+ */
 export function SeloCategoria({ categoria, icone, tamanho = 'm', className = '' }) {
-  const medidas = { p: ['size-8 rounded-lg', 16], m: ['size-10 rounded-xl', 19], g: ['size-12 rounded-xl', 22] }[tamanho]
+  const medidas = { pp: ['size-7 rounded-[0.5rem]', 14], p: ['size-8 rounded-[0.6rem]', 16], m: ['size-10 rounded-xl', 19], g: ['size-12 rounded-[0.9rem]', 22], gg: ['size-14 rounded-2xl', 26] }[tamanho]
+  const [a, b] = CORES_3D[categoria] ?? CORES_3D.documentos
   return (
-    <span
-      className={`grid shrink-0 place-items-center ${medidas[0]} ${className}`}
-      style={{
-        color: `var(--color-cat-${categoria})`,
-        backgroundColor: `color-mix(in oklab, var(--color-cat-${categoria}) 11%, transparent)`,
-      }}
-    >
-      <Icone nome={icone} tamanho={medidas[1]} colorido={icone === 'youtube'} />
+    <span aria-hidden="true" className={`selo-bloco grid shrink-0 place-items-center ${medidas[0]} ${className}`} style={{ '--a': a, '--b': b }}>
+      {temGlifo(icone) ? (
+        <Glifo nome={icone} className="relative" style={{ width: medidas[1] * 1.15, height: medidas[1] * 1.15 }} />
+      ) : (
+        <Icone nome={icone} tamanho={medidas[1]} strokeWidth={2.2} colorido={icone === 'youtube'} className="relative" />
+      )}
     </span>
   )
 }

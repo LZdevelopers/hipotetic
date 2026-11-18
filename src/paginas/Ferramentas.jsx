@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icone } from '../componentes/Icone'
 import { GradeCartoes } from '../componentes/ListaFerramentas'
+import { SeloCategoria } from '../componentes/ui'
 import { categoriaPorId, categoriasComFerramentas, ferramentaPorSlug, ferramentasDaCategoria, normalizar } from '../ferramentas/catalogo'
 
 /**
@@ -56,10 +57,9 @@ export function Ferramentas() {
                 role="tab"
                 aria-selected={ativa}
                 onClick={() => escolher(c.id)}
-                className={`inline-flex h-12 items-center gap-2.5 rounded-full border-2 px-5 text-base font-semibold transition-colors ${ativa ? (c.id === 'todas' ? 'border-marca bg-marca text-sobre-marca' : 'text-white escuro:text-fundo') : 'border-borda bg-superficie text-texto hover:text-tinta'}`}
-                style={ativa && c.id !== 'todas' ? { backgroundColor: `var(--color-cat-${c.id})`, borderColor: `var(--color-cat-${c.id})` } : !ativa && c.id !== 'todas' ? { borderColor: `color-mix(in oklab, var(--color-cat-${c.id}) 35%, var(--color-borda))` } : undefined}
+                className={`inline-flex h-12 items-center gap-2.5 rounded-full border px-5 text-base font-semibold transition-colors ${ativa ? 'border-marca bg-marca text-sobre-marca' : 'border-borda bg-superficie text-texto hover:border-borda-forte hover:text-tinta'}`}
               >
-                {c.id !== 'todas' ? <Icone nome={c.icone} tamanho={18} style={ativa ? undefined : { color: `var(--color-cat-${c.id})` }} /> : null}
+                {c.id !== 'todas' ? <SeloCategoria categoria={c.id} icone={c.id} tamanho="pp" className="-ml-2.5 !rounded-full" /> : null}
                 {c.nome}
                 <span className={`text-xs tabular-nums ${ativa ? 'opacity-70' : 'text-fraca'}`}>{contagem(c.id)}</span>
               </button>

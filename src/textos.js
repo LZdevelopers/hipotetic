@@ -39,13 +39,12 @@ export const textos = {
 }
 
 export const inicio = {
-  selo: 'Ferramentas de arquivo, tudo em um só lugar',
-  titulo: ['Tudo o que você faz com arquivos,', 'num só lugar'],
+  titulo: ['Tudo o que você faz com arquivos,', 'num só lugar.'],
   subtitulo:
     'Converta, comprima, corte, junte e organize vídeos, áudios, imagens, PDFs e documentos. Quase tudo roda no seu navegador: rápido, gratuito e sem enviar seus arquivos para ninguém.',
-  explorar: 'Explorar ferramentas',
-  converter: 'Converter um arquivo',
+  explorar: (n) => `Explorar as ${n} ferramentas`,
   soltar: {
+    janela: 'Conversor',
     titulo: 'Arraste e solte seu arquivo aqui',
     ou: 'ou',
     escolher: 'escolha um arquivo',
@@ -53,25 +52,21 @@ export const inicio = {
     rotulo: 'Escolher arquivos para converter',
   },
   tudo: {
-    selo: 'Tudo em um só lugar',
     titulo: (n) => `${n} ferramentas para tudo o que você precisa`,
     texto: 'Edite vídeos, comprima imagens, una PDFs, baixe vídeos do YouTube e do TikTok sem marca d’água e muito mais. Sem instalar nada.',
     destaques: [
-      { slug: 'video/editor', glifo: 'video', titulo: 'Editor de vídeo completo', texto: 'Clipes, texto, música, transições e filtros, como num aplicativo.' },
-      { slug: 'converter', glifo: 'conversor', titulo: 'Converta qualquer arquivo', texto: 'Solte o arquivo e escolha o formato. O resto é automático.' },
-      { slug: 'video/baixar', glifo: 'audio', cor: 'audio', titulo: 'Baixe do YouTube e do TikTok', texto: 'Em MP4 ou MP3, e o TikTok sem marca d’água.' },
-      { slug: 'pdf/unir', glifo: 'pdf', titulo: 'PDFs sem complicação', texto: 'Una, divida, organize, assine e comprima.' },
+      { slug: 'video/editor', cor: 'video', glifo: 'video', titulo: 'Editor de vídeo completo', texto: 'Clipes, texto, música, transições e filtros, como num aplicativo.' },
+      { slug: 'video/baixar', cor: 'video', glifo: 'baixar', titulo: 'Baixe do YouTube e do TikTok', texto: 'Em MP4 ou MP3, e o TikTok sem marca d’água.' },
+      { slug: 'audio/editor', cor: 'audio', glifo: 'audio', titulo: 'Editor de áudio', texto: 'Corte com fade, ajuste o volume, tire silêncios e acelere.' },
+      { slug: 'pdf/editar', cor: 'pdf', glifo: 'pdf', titulo: 'Editar e assinar PDF', texto: 'Texto, assinatura, imagens, destaques e notas.' },
     ],
   },
   categorias: {
-    selo: (n) => `${n} categorias para explorar`,
     titulo: 'Ferramentas poderosas, organizadas por categoria',
     texto: 'Cada tipo de arquivo tem o seu lugar. Escolha uma categoria e veja tudo o que dá para fazer com ela.',
-    todas: 'Ver todas as ferramentas',
     quantas: (n) => `${n} ${n === 1 ? 'ferramenta' : 'ferramentas'}`,
   },
   privacidade: {
-    selo: 'Privado e gratuito',
     titulo: 'Sua privacidade em primeiro lugar',
     texto: 'Seus arquivos ficam no seu aparelho. Quase tudo é processado no próprio navegador, e nada é enviado para servidores, a não ser quando a ferramenta precisa e avisa antes.',
   },
@@ -92,10 +87,6 @@ export const inicio = {
       texto: 'Sem cadastro, sem anúncios, sem marca d’água no resultado e sem limite artificial para vender assinatura.',
     },
   ],
-  final: {
-    titulo: 'Pronto para começar?',
-    texto: 'Escolha uma ferramenta ou solte um arquivo no conversor. Sem cadastro, sem instalar nada.',
-  },
 }
 
 export const rodape = {

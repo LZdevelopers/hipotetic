@@ -1,28 +1,21 @@
 import { caminhoDa, corDa } from '../ferramentas/catalogo'
 import { Link } from '../nucleo/roteador'
 import { Icone } from './Icone'
+import { SeloCategoria } from './ui'
 
 /**
- * Cartão de ferramenta (estilo iLovePDF): ícone colorido em degradê que se
- * mexe no hover, nome em destaque e o que a ferramenta faz.
+ * Cartão de ferramenta: o ícone em bloco colorido (o mesmo da página inicial),
+ * nome em destaque e o que a ferramenta faz. Fora o ícone, tudo em preto e branco.
  */
 export function Cartao({ f, atraso = 0, grande = false }) {
-  const cor = `var(--color-cat-${corDa(f)})`
   return (
     <Link
       para={caminhoDa(f)}
-      className={`group relative flex h-full animate-surgir flex-col rounded-2xl border border-borda bg-superficie transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-transparent hover:shadow-[0_14px_40px_-14px_color-mix(in_oklab,var(--cor)_55%,transparent)] ${grande ? 'min-h-60 p-7' : 'p-5'}`}
-      style={{ '--cor': cor, animationDelay: `${atraso}ms` }}
+      className={`group relative flex h-full animate-surgir flex-col rounded-2xl border border-borda bg-superficie transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-borda-forte hover:shadow-[var(--shadow-flutuante)] ${grande ? 'min-h-60 p-7' : 'p-5'}`}
+      style={{ animationDelay: `${atraso}ms` }}
     >
-      {f.novo ? <span className="absolute top-4 right-4 rounded-full bg-perigo px-2 py-0.5 text-[0.625rem] font-bold tracking-wide text-white uppercase">Novo</span> : null}
-      <span
-        className={`relative grid place-items-center overflow-hidden rounded-2xl ${grande ? 'size-15' : 'size-13'} text-white shadow-[0_6px_16px_-6px_var(--cor)] transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3 escuro:text-fundo`}
-        style={{ background: `linear-gradient(140deg, ${cor}, color-mix(in oklab, ${cor} 55%, white))` }}
-      >
-        <Icone nome={f.icone} tamanho={grande ? 30 : 26} strokeWidth={2} className="relative transition-transform duration-300 group-hover:scale-110" />
-        {/* brilho que atravessa o ícone */}
-        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/45 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-      </span>
+      {f.novo ? <span className="absolute top-4 right-4 rounded-full bg-marca px-2 py-0.5 text-[0.625rem] font-bold tracking-wide text-sobre-marca uppercase">Novo</span> : null}
+      <SeloCategoria categoria={corDa(f)} icone={f.icone} tamanho={grande ? 'gg' : 'g'} className="transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3" />
       <span className={`flex items-center gap-1.5 font-display leading-snug font-bold text-tinta ${grande ? 'mt-5 text-xl' : 'mt-4 text-[1.0625rem]'}`}>
         {f.nome}
         {f.servidor ? <Icone nome="servidor" tamanho={13} className="text-fraca" aria-label="usa o servidor" /> : null}
@@ -56,9 +49,7 @@ export function Pilulas({ lista }) {
             title={f.resumo}
             className="group inline-flex h-10 items-center gap-2 rounded-full border border-borda bg-superficie pr-4 pl-1.5 text-sm font-medium text-texto transition-colors hover:border-borda-forte hover:text-tinta"
           >
-            <span className="grid size-7 place-items-center rounded-full" style={{ color: `var(--color-cat-${corDa(f)})`, backgroundColor: `color-mix(in oklab, var(--color-cat-${corDa(f)}) 13%, transparent)` }}>
-              <Icone nome={f.icone} tamanho={15} />
-            </span>
+            <SeloCategoria categoria={corDa(f)} icone={f.icone} tamanho="pp" className="!rounded-full" />
             {f.nome}
           </Link>
         </li>
