@@ -80,7 +80,7 @@ function CenaAbertura({ className = '' }) {
   const ref = useInclinacao()
   const t = 'clamp(3.25rem, 7.5vw, 5.5rem)'
   return (
-    <div ref={ref} className={`relative aspect-[1.3] w-full ${className}`} style={{ perspective: '1400px' }}>
+    <div ref={ref} className={`relative aspect-[1.12] w-full ${className}`} style={{ perspective: '1400px' }}>
       <Halo className="inset-x-[8%] inset-y-[10%]" />
       <Anel className="inset-x-[2%] top-[36%] h-[40%]" style={{ rotate: '-8deg' }} />
       <Faisca className="top-[3%] left-[40%]" atraso={0.4} />
@@ -97,31 +97,25 @@ function CenaAbertura({ className = '' }) {
   )
 }
 
-/**
- * Abertura em layout editorial: a cena 3D grande no alto, à direita; o título
- * enorme ancorado embaixo, à esquerda; o texto e o único botão no canto
- * oposto, alinhados à base do título.
- */
+/** Abertura: título, texto e o único botão à esquerda; a cena 3D à direita. */
 function Abertura() {
   return (
     <section className="relative isolate">
-      <div className={`${LARGURA} flex min-h-[calc(100svh-3.75rem)] flex-col justify-end gap-10 pt-6 pb-14 lg:gap-6 lg:pb-12`}>
-        <CenaAbertura className="mx-auto max-w-[44rem] lg:-mb-24 lg:w-[51%] lg:max-w-none" />
-        <div className="grid items-end gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <h1 className="animate-surgir text-[clamp(2.6rem,5vw,5.5rem)] leading-[1] font-extrabold tracking-[-0.045em]">
+      <div className={`${LARGURA} grid min-h-[calc(100svh-3.75rem)] items-center gap-x-10 gap-y-14 py-16 lg:grid-cols-[1.05fr_1fr] lg:py-20`}>
+        <div className="animate-surgir">
+          <h1 className="text-[clamp(2.4rem,5.6vw,4.4rem)] leading-[1.02] font-extrabold tracking-[-0.04em]">
             {inicio.titulo[0]} <span className="text-fraca">{inicio.titulo[1]}</span>
           </h1>
-          <div className="animate-surgir lg:pb-2" style={{ animationDelay: '80ms' }}>
-            <p className="text-base leading-relaxed text-suave">{inicio.subtitulo}</p>
-            <Link
-              para="/ferramentas"
-              className="group mt-6 inline-flex h-12 items-center gap-2.5 rounded-[var(--radius-controle)] bg-marca px-5 text-[0.9375rem] font-semibold text-sobre-marca transition-colors hover:bg-marca-hover"
-            >
-              {inicio.explorar(ferramentas.length)}
-              <Icone nome="seta" tamanho={17} className="transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </div>
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-suave sm:text-lg">{inicio.subtitulo}</p>
+          <Link
+            para="/ferramentas"
+            className="group mt-9 inline-flex h-12 items-center gap-2.5 rounded-[var(--radius-controle)] bg-marca px-5 text-[0.9375rem] font-semibold text-sobre-marca transition-colors hover:bg-marca-hover"
+          >
+            {inicio.explorar(ferramentas.length)}
+            <Icone nome="seta" tamanho={17} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
         </div>
+        <CenaAbertura className="mx-auto max-w-[40rem]" />
       </div>
     </section>
   )
