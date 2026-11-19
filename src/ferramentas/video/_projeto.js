@@ -148,7 +148,10 @@ export const PROPORCOES = [
   { id: '4:5', rotulo: '4:5', dica: 'Feed do Instagram' },
   { id: '4:3', rotulo: '4:3', dica: 'Clássico' },
 ]
-const razao = (id) => {
+/** Fundo desfocado: largura do quadro minúsculo e o desfoque nele (prévia e exportação usam os mesmos). */
+export const LARGURA_FUNDO = 48
+export const SIGMA_FUNDO = 1.4
+export const razao = (id) => {
   const [a, b] = String(id).split(':').map(Number)
   return a > 0 && b > 0 ? a / b : null
 }
@@ -160,11 +163,14 @@ const razao = (id) => {
 export function tamanhoFinal(p, fontes) {
   const base = fontes[p.clipes[0]?.fonte]
   const k = p.proporcao ? razao(p.proporcao) : null
-  if (!base?.largura) return k ? (k >= 1 ? { w: Math.round((720 * k) / 2) * 2, h: 720 } : { w: 720, h: Math.round(720 / k / 2) * 2 }) : { w: 1280, h: 720 }
-  const q = quadroGirado(base, p.girar)
-  const r = p.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
-  let w = q.w * r.w
-  let h = q.h * r.h
+  let w = 1280
+  let h = 720
+  if (base?.largura) {
+    const q = quadroGirado(base, p.girar)
+    const r = p.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
+    w = q.w * r.w
+    h = q.h * r.h
+  }
   if (k) {
     const menor = Math.min(w, h)
     ;[w, h] = k >= 1 ? [menor * k, menor] : [menor, menor / k]
@@ -643,9 +649,9 @@ export async function exportarProjeto(p, fontes, ctx, _familia, opcoes = {}) {
       const ramoFundo = aparece ? `${fonteV}b` : `${fonteV}a`
       if (desfocado) {
         // Fundo: a própria imagem cobrindo a tela, bem pequena e borrada (igual à prévia).
-        const bw = 48
+        const bw = LARGURA_FUNDO
         const bh = Math.max(2, Math.round((bw * H) / W / 2) * 2)
-        f.push(`[${ramoFundo}]scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},gblur=sigma=1.4,scale=${W}:${H}:flags=bilinear,${cores}format=yuv420p,setsar=1[fundo${i}]`)
+        f.push(`[${ramoFundo}]scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},gblur=sigma=${SIGMA_FUNDO},scale=${W}:${H}:flags=bilinear,${cores}format=yuv420p,setsar=1[fundo${i}]`)
       } else f.push(`color=c=black:s=${W}x${H}:r=${fpsSaida}:d=${fixo(d)},format=yuv420p[fundo${i}]`)
       if (aparece) {
         const cx = Math.max(0, (x0 - b.x) / b.s)

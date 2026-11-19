@@ -13,7 +13,7 @@ import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
 import { Palco } from './_palco'
-import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao, corDoClipe, temCor, PADRAO_ENQUADRO, PROPORCOES, enquadroDoClipe, temEnquadro } from './_projeto'
+import { ANIMACOES, FILTROS, FONTES, PADRAO_AUDIO, PADRAO_COR, corDoFiltro, matrizCor, PADRAO_BLUR, PADRAO_CAMADA, PADRAO_GIF, PADRAO_TEXTO, duracaoTotal, exportarProjeto, iniciosNaLinha, localizar, projetoNoInstante, quadroGif, tamanhoFinal, trechoMusica, TRANSICOES, duracaoClipe, duracaoTransicao, corDoClipe, temCor, PADRAO_ENQUADRO, PROPORCOES, enquadroDoClipe, temEnquadro, razao } from './_projeto'
 
 const PADRAO = { clipes: [], proporcao: null, recorte: null, girar: 0, espelhar: false, cor: { brilho: 0, contraste: 1, saturacao: 1, temperatura: 0, matiz: 0, sepia: 0, vinheta: 0 }, fadeIn: 0, fadeOut: 0, camadas: [], musica: null, audio: PADRAO_AUDIO, nome: '', formato: 'mp4', resolucao: 0, qualidade: 'alta', alvoMB: 10, fps: 30, gif: PADRAO_GIF }
 const segundos = (v) => (v ? `${v.toLocaleString('pt-BR')} s` : 'off')
@@ -713,7 +713,7 @@ function CoresDoClipe({ cor, aoMudar, miniatura, aoAplicarTodos, varios }) {
   )
 }
 
-function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
+function PainelQuadro({ p, mudar, recorte, acoesRecorte, final, original }) {
   return (
     <div className="flex flex-col gap-5">
       {recorte ? null : (
@@ -721,8 +721,7 @@ function PainelQuadro({ p, mudar, recorte, acoesRecorte, final }) {
           <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Proporção da tela">
             {PROPORCOES.map((o) => {
               const ativo = (p.proporcao ?? null) === o.id
-              const [a, b] = o.id ? o.id.split(':').map(Number) : [final.w, final.h]
-              const k = a / b
+              const k = o.id ? razao(o.id) : original.w / original.h
               return (
                 <button
                   key={o.id ?? 'original'}
@@ -1536,10 +1535,14 @@ export default function EditorVideo() {
       }
       return
     }
+    // Esc tira a seleção mesmo com o foco num botão ou controle deslizante (não em campo de texto nem em menu).
+    if (e.key === 'Escape' && selecao && !rascunho && !e.altKey && !e.target.closest?.('input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable], [role=menu], [role=dialog], dialog')) {
+      setSelecao(null)
+      return
+    }
     if (e.target.closest?.('input, textarea, select, button, [role=slider], [contenteditable]') || e.altKey || vazio) return
     if (rascunho && e.key === 'Enter') acoesRecorte.aplicar()
     else if (rascunho && e.key === 'Escape') acoesRecorte.cancelar()
-    else if (e.key === 'Escape' && selecao) setSelecao(null)
     else if (e.code === 'Space') {
       e.preventDefault()
       palco.current?.alternar()
@@ -1823,7 +1826,7 @@ export default function EditorVideo() {
               <Segmentado valor={aba} aoMudar={setAba} opcoes={ABAS} />
             </div>
             <div className="rolagem-fina flex-1 overflow-y-auto p-4">
-              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
+              {aba === 'quadro' ? <PainelQuadro p={p} mudar={mudar} final={final} original={p.proporcao ? tamanhoFinal({ ...p, proporcao: null }, fontes) : final} recorte={rascunho ? { valor: rascunho, aoMudar: setRascunho } : null} acoesRecorte={acoesRecorte} /> : null}
               {aba === 'clipe' && selecao?.tipo === 'transicao' && p.clipes.some((c) => c.id === selecao.id) ? <PainelTransicao p={p} clipe={p.clipes.find((c) => c.id === selecao.id)} mudarClipe={mudarClipe} mudar={mudar} /> : null}
               {aba === 'clipe' && selecao?.tipo !== 'transicao' ? <PainelClipe p={p} fontes={fontes} clipe={clipeSel} mudarClipe={mudarClipe} mudar={mudar} acoes={acoes} /> : null}
               {aba === 'camada' ? <PainelCamada camada={camadaSel} mudarCamada={mudarCamada} acoes={acoes} total={total} /> : null}

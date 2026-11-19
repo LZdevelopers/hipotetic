@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { CamadaNoPalco } from './_camada'
-import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, corDoClipe, temCor, enquadroDoClipe, caixaDoClipe, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal } from './_projeto'
+import { PADRAO_AUDIO, PADRAO_CAMADA, PADRAO_COR, corDoClipe, temCor, enquadroDoClipe, caixaDoClipe, animacaoNoTempo, transicaoNoTempo, trechoMusica, matrizCor, vinhetaPng, duracaoTotal, iniciosNaLinha, localizar, quadroGirado, tamanhoFinal, LARGURA_FUNDO, SIGMA_FUNDO } from './_projeto'
 
 /** Encaixa uma proporção dentro de uma caixa. */
 function encaixar(caixa, proporcao) {
@@ -122,27 +122,48 @@ function useVinheta(k, final) {
 /**
  * Fundo desfocado de um clipe: a imagem (girada, recortada) cobrindo a tela
  * num canvas minúsculo — o CSS amplia e borra. A exportação faz a mesma conta.
+ * O canvas passa um pouco da tela (BORDA_FUNDO de cada lado) para o blur do CSS
+ * não escurecer as beiradas; a parte que fica na tela é desenhada igual à
+ * exportação (cobrindo exatamente a tela), e a sobra só completa as beiradas.
  */
+const BORDA_FUNDO = 0.09
 function desenharFundo(cv, src, fonte, pp) {
   const el = src instanceof ClipeImagem ? src.el : src
   if (!cv || !el || !fonte?.largura) return
-  if (el.tagName === 'VIDEO' ? el.readyState < 2 : !el.complete) return
+  const imagem = el.tagName !== 'VIDEO'
+  if (imagem ? !el.complete : el.readyState < 2) return
+  // Imagem parada não muda: só redesenha se algo do desenho mudou.
+  const chave = imagem ? [el.src, cv.width, cv.height, pp.girar, pp.espelhar, JSON.stringify(pp.recorte ?? null)].join('|') : null
+  if (chave && cv._chave === chave) return
   const ctx = cv.getContext('2d')
   const q = quadroGirado(fonte, pp.girar)
   const r = pp.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
   const rw = q.w * r.w
   const rh = q.h * r.h
-  const sc = Math.max(cv.width / rw, cv.height / rh)
+  const cobrir = (w, h) => {
+    const sc = Math.max(w / rw, h / rh)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.translate(cv.width / 2, cv.height / 2)
+    ctx.scale(sc, sc)
+    ctx.translate(-(r.x * q.w + rw / 2) + q.w / 2, -(r.y * q.h + rh / 2) + q.h / 2)
+    if (pp.espelhar) ctx.scale(-1, 1)
+    ctx.rotate((pp.girar * Math.PI) / 180)
+    ctx.drawImage(el, -fonte.largura / 2, -fonte.altura / 2, fonte.largura, fonte.altura)
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, cv.width, cv.height)
-  ctx.translate(cv.width / 2, cv.height / 2)
-  ctx.scale(sc, sc)
-  ctx.translate(-(r.x * q.w + rw / 2) + q.w / 2, -(r.y * q.h + rh / 2) + q.h / 2)
-  if (pp.espelhar) ctx.scale(-1, 1)
-  ctx.rotate((pp.girar * Math.PI) / 180)
-  ctx.drawImage(el, -fonte.largura / 2, -fonte.altura / 2, fonte.largura, fonte.altura)
+  cobrir(cv.width, cv.height)
+  const iw = cv.width / (1 + 2 * BORDA_FUNDO)
+  const ih = cv.height - 2 * BORDA_FUNDO * iw
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.beginPath()
+  ctx.rect((cv.width - iw) / 2, (cv.height - ih) / 2, iw, ih)
+  ctx.clip()
+  cobrir(iw, ih)
+  ctx.restore()
+  cv._chave = chave
 }
-const LARGURA_FUNDO = 48
 
 /**
  * Caixa de ajuste do clipe selecionado no palco: arrastar move, as alças dos
@@ -187,7 +208,7 @@ function AjusteClipe({ caixa: b, palco, enquadro, aoMudar, aoGuias }) {
       aria-label="Ajustar o clipe na tela"
       title="Arraste para mover; puxe os cantos para dar zoom"
       onPointerDown={(e) => e.button === 0 && mover(e)}
-      className="absolute z-[5] cursor-move outline-2 outline-white shadow-[0_0_0_1px_rgb(0_0_0/0.5)]"
+      className="absolute cursor-move outline-2 outline-white shadow-[0_0_0_1px_rgb(0_0_0/0.5)]"
       style={{ left: vis.x, top: vis.y, width: vis.w, height: vis.h }}
     >
       {[
@@ -624,11 +645,11 @@ export const Palco = forwardRef(function Palco({ p, fontes, selecao, aoSeleciona
               {desfocado ? (
                 <canvas
                   ref={(el) => (el ? (fundos.current[c.id] = el) : delete fundos.current[c.id])}
-                  width={LARGURA_FUNDO}
-                  height={Math.max(2, Math.round((LARGURA_FUNDO * (palco.h + palco.w * 0.18)) / (palco.w * 1.18 || 1)))}
+                  width={Math.round(LARGURA_FUNDO * (1 + 2 * BORDA_FUNDO))}
+                  height={Math.max(2, Math.round((LARGURA_FUNDO * (palco.h + 2 * BORDA_FUNDO * palco.w)) / (palco.w || 1)))}
                   data-fundo-desfocado=""
                   className="absolute"
-                  style={{ inset: -palco.w * 0.09, width: palco.w * 1.18, height: palco.h + palco.w * 0.18, filter: [filtroCor, `blur(${(1.4 * palco.w) / LARGURA_FUNDO}px)`].filter(Boolean).join(' ') }}
+                  style={{ inset: -palco.w * BORDA_FUNDO, width: palco.w * (1 + 2 * BORDA_FUNDO), height: palco.h + 2 * BORDA_FUNDO * palco.w, filter: [filtroCor, `blur(${(SIGMA_FUNDO * palco.w) / LARGURA_FUNDO}px)`].filter(Boolean).join(' ') }}
                 />
               ) : null}
               <div className="pointer-events-none absolute" style={{ ...g.caixa, transform: p.espelhar ? 'scaleX(-1)' : undefined }}>

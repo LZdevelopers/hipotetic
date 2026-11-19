@@ -263,6 +263,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
           registrar(el)
         }}
         onPointerDown={mover}
+        onDoubleClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -278,7 +279,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
 
       {/* Moldura e alças (fora da camada, para não herdarem a mistura) */}
       {sel ? (
-        <div className="pointer-events-none absolute z-20" style={{ ...geometria, height: altura }}>
+        <div className="pointer-events-none absolute z-20" style={{ ...geometria, height: altura }} onDoubleClick={(e) => e.stopPropagation()}>
           <div className="absolute -inset-px border-2 border-acento" />
           {ALCAS.map(([sx, sy, cursor]) => (
             <span
