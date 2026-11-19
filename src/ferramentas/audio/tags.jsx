@@ -5,7 +5,8 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Entrada, Progresso } from '../../componentes/ui'
 import { executarFfmpeg } from '../../motores/ffmpeg'
 import { detectarTipo, extensaoDe, mimeDe } from '../../nucleo/arquivos'
-import { ErroAmigavel, useTarefa } from '../../nucleo/tarefa'
+import { ErroAmigavel } from '../../nucleo/tarefa'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 import { useUrlObjeto } from '../../nucleo/url'
 
 const FORMATOS = ['mp3', 'm4a', 'flac', 'ogg', 'opus', 'wav']
@@ -92,9 +93,13 @@ function Editor({ arquivo, aoTrocar }) {
   const aceitaCapa = COM_CAPA.includes(ext)
   const [lido, setLido] = useState(null) // { valores, capa }
   const [erro, setErro] = useState(null)
-  const [valores, setValores] = useState(VAZIO)
-  const [capa, setCapa] = useState(null) // Blob | null
-  const tarefa = useTarefa()
+  // O que a pessoa editou fica salvo (por arquivo); sem edição, vale o que foi lido do arquivo.
+  const [edicao, setEdicao] = useSalvo(`edicao:${arquivo.name}:${arquivo.size}`, null)
+  const valores = edicao?.valores ?? lido?.valores ?? VAZIO
+  const capa = edicao ? edicao.capa : (lido?.capa ?? null) // Blob | null
+  const setValores = (f) => setEdicao((e) => ({ capa: e ? e.capa : (lido?.capa ?? null), valores: typeof f === 'function' ? f(e?.valores ?? lido?.valores ?? VAZIO) : f }))
+  const setCapa = (c) => setEdicao((e) => ({ valores: e?.valores ?? lido?.valores ?? VAZIO, capa: c }))
+  const tarefa = useTarefaSalva()
   const entradaCapa = useRef(null)
   const urlCapa = useUrlObjeto(capa)
 
@@ -104,8 +109,6 @@ function Editor({ arquivo, aoTrocar }) {
       .then((r) => {
         if (!vivo) return
         setLido(r)
-        setValores(r.valores)
-        setCapa(r.capa)
       })
       .catch((e) => {
         console.error(e)
@@ -245,7 +248,7 @@ function Editor({ arquivo, aoTrocar }) {
 
 /** Tags e capa: título, artista, álbum, ano, faixa, gênero e capa, sem mexer no som. */
 export default function Tags() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={FORMATOS} descricaoFormatos="MP3, M4A, FLAC, OGG, OPUS, WAV" limiteBytes={1024 * 1024 * 1024} />
   return <Editor key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
 }

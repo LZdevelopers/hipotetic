@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useSalvo } from '../../nucleo/salvo'
 import { baixarBlob, extensaoDe, formatarBytes, variacao, zipar } from '../../nucleo/arquivos'
 import { Icone } from '../Icone'
 import { Botao, Etiqueta } from '../ui'
@@ -33,18 +34,25 @@ function Previa({ item, url }) {
  * Mídia (vídeo/áudio) ganha um player para conferir antes de salvar.
  * Clicar no nome de um arquivo (ou do ZIP) troca o nome antes de baixar.
  */
-export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo = 'Nova operação', nomeZip = 'arquivos.zip', extra }) {
+/** Identifica um resultado (nomes + tamanhos): os nomes trocados ficam salvos por resultado. */
+const assinatura = (itens) => itens.map((i) => `${i.nome}:${i.blob?.size}`).join('|')
+
+export function Resultados(props) {
+  const chave = assinatura(props.itens)
+  return <ListaResultados key={chave} chave={chave} {...props} />
+}
+
+function ListaResultados({ chave, itens, aoReiniciar, aoAjustar, duracao, rotuloNovo = 'Nova operação', nomeZip = 'arquivos.zip', extra }) {
   const urls = useUrls(itens)
   const [zipando, setZipando] = useState(null)
-  // Nomes (renomeáveis) de cada arquivo e do ZIP; voltam ao padrão a cada resultado novo.
-  const [nomes, setNomes] = useState(() => itens.map((i) => i.nome))
-  const [zip, setZip] = useState(nomeZip)
-  useEffect(() => {
-    setNomes(itens.map((i) => i.nome))
-    setZip(nomeZip)
-  }, [itens, nomeZip])
+  // Nomes (renomeáveis) de cada arquivo e do ZIP — salvos junto com o resultado.
+  const [renomeados, setRenomeados] = useSalvo(`nomes:${chave}`, { nomes: itens.map((i) => i.nome), zip: nomeZip })
+  const nomes = renomeados.nomes ?? []
+  const zip = renomeados.zip ?? nomeZip
+  const setZip = (z) => setRenomeados((r) => ({ ...r, zip: z }))
   const nomeDe = (i) => nomes[i] ?? itens[i].nome
-  const renomear = (i, base) => setNomes((l) => itens.map((it, k) => (k === i ? `${base}${partesDoNome(it.nome)[1] ? `.${partesDoNome(it.nome)[1]}` : ''}` : (l[k] ?? it.nome))))
+  const renomear = (i, base) =>
+    setRenomeados((r) => ({ ...r, nomes: itens.map((it, k) => (k === i ? `${base}${partesDoNome(it.nome)[1] ? `.${partesDoNome(it.nome)[1]}` : ''}` : (r.nomes?.[k] ?? it.nome))) }))
   const total = itens.reduce((s, i) => s + i.blob.size, 0)
   const unico = itens.length === 1 ? itens[0] : null
   const ext = unico ? extensaoDe(unico.nome) : ''

@@ -4,6 +4,7 @@ import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao, Deslizante } from '../../componentes/ui'
 import { ehSvg, rasterizarSvg } from '../../motores/imagem'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useSalvo } from '../../nucleo/salvo'
 
 const hex = ([r, g, b]) => `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`
 function hsl([r, g, b]) {
@@ -103,8 +104,8 @@ function Amostra({ cor, aoCopiar, copiado }) {
 function Painel({ arquivo, aoTrocar }) {
   const url = useUrlObjeto(arquivo)
   const [pixels, setPixels] = useState(null)
-  const [quantidade, setQuantidade] = useState(6)
-  const [escolhidas, setEscolhidas] = useState([])
+  const [quantidade, setQuantidade] = useSalvo('quantidade', 6)
+  const [escolhidas, setEscolhidas] = useSalvo('escolhidas', [])
   const [copiado, setCopiado] = useState(null)
   const canvasCompleto = useRef(null)
 
@@ -233,7 +234,7 @@ function Painel({ arquivo, aoTrocar }) {
 }
 
 export default function Cores() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) {
     return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={['png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'svg']} descricaoFormatos="PNG, JPG, WebP, AVIF, GIF, SVG" aceitarColar />
   }

@@ -3,6 +3,7 @@ import { DialogoBaixar, OpcoesCartoes } from '../../componentes/ferramenta/Baixa
 import { AreaTexto, Aviso, Botao, Entrada, Grupo, Segmentado, Seletor, Deslizante } from '../../componentes/ui'
 import { baixarBlob } from '../../nucleo/arquivos'
 import { CorDeFundo } from '../imagem/_comum'
+import { useSalvo } from '../../nucleo/salvo'
 
 const TIPOS = [
   { valor: 'link', rotulo: 'Link' },
@@ -88,9 +89,9 @@ function Campos({ tipo, c, mudar }) {
 }
 
 export default function QrCode() {
-  const [tipo, setTipo] = useState('link')
-  const [campos, setCampos] = useState({ url: '' })
-  const [estilo, setEstilo] = useState({ frente: '#0b0b0d', fundo: '#ffffff', margem: 2, correcao: 'M', tamanho: 1024 })
+  const [tipo, setTipo] = useSalvo('tipo', 'link')
+  const [campos, setCampos] = useSalvo('campos', { url: '' })
+  const [estilo, setEstilo] = useSalvo('estilo', { frente: '#0b0b0d', fundo: '#ffffff', margem: 2, correcao: 'M', tamanho: 1024 })
   const [svg, setSvg] = useState('')
   const [erro, setErro] = useState(null)
   const conteudo = conteudoQr(tipo, campos)

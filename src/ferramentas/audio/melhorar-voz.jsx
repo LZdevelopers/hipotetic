@@ -6,8 +6,9 @@ import { Aviso, Botao, Caixa, Progresso, Segmentado, SeloCategoria } from '../..
 import { executarFfmpeg } from '../../motores/ffmpeg'
 import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_VIDEO, infoMidia, processarAudio } from '../../motores/midia'
 import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
-import { ErroAmigavel, useTarefa } from '../../nucleo/tarefa'
+import { ErroAmigavel } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 const REDUCAO = { leve: 10, medio: 18, forte: 28 }
 const SEGUNDOS_PREVIA = 20
@@ -98,9 +99,9 @@ function Previa({ arquivo, o }) {
 function Ajustador({ arquivo, aoTrocar }) {
   const video = ehVideo(arquivo)
   const formatoInicial = FORMATOS_AUDIO[extensaoDe(arquivo.name)] ? extensaoDe(arquivo.name) : 'mp3'
-  const [o, setO] = useState({ ruido: 'medio', graves: true, clareza: true, nivelar: true, volume: 'podcast', formato: formatoInicial })
+  const [o, setO] = useSalvo('opcoes', { ruido: 'medio', graves: true, clareza: true, nivelar: true, volume: 'podcast', formato: formatoInicial })
   const [duracao, setDuracao] = useState(null)
-  const tarefa = useTarefa()
+  const tarefa = useTarefaSalva()
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
   useEffect(() => {
@@ -238,7 +239,7 @@ function Ajustador({ arquivo, aoTrocar }) {
 
 /** Limpar e melhorar voz: ruído, zumbido, clareza, nivelamento e volume padrão — com antes/depois. */
 export default function MelhorarVoz() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) {
     return (
       <SeletorArquivos

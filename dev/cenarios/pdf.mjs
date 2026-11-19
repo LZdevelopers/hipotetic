@@ -183,37 +183,58 @@ export default [
     },
   },
   {
-    nome: 'pdf/organizar: excluir a 1ª página e girar a 2ª',
+    nome: 'pdf/editor: organizar, juntar, salvar e voltar (pelo endereço antigo)',
     pagina: '/pdf/organizar',
     async executar(t) {
+      // O endereço antigo abre o editor novo.
+      assert.ok((await t.js('return document.querySelector("h1").textContent')).includes('Editor de PDF'))
+      const paginas = 'document.querySelectorAll("main ol[aria-label=\\"Ordem das páginas\\"] > li").length'
       await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(3))}])`)
-      await t.aguardar('document.querySelectorAll("main li[draggable]").length === 3', 15000)
-      await t.js(`document.querySelector('[aria-label="Excluir página 1"]').click()`)
-      await t.aguardar('document.querySelectorAll("main li[draggable]").length === 2')
-      await t.js(`document.querySelector('[aria-label="Girar página 1"]').click()`)
-      await t.clicar('Salvar PDF')
+      await t.aguardar(`${paginas} === 3`, 15000)
+      await t.js(`document.querySelector('[aria-label="Excluir a página 1"]').click()`)
+      await t.aguardar(`${paginas} === 2`)
+      await t.js(`document.querySelector('[aria-label="Girar a página 1"]').click()`)
+      // Junta outro PDF no fim.
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2, { prefixo: 'Beta' }), 'b.pdf')}])`)
+      await t.aguardar(`${paginas} === 4`, 15000)
+      // Sai e volta: o projeto continua.
+      await t.esperar(900)
+      await t.navegar('/pdf/editor')
+      await t.aguardar(`${paginas} === 4 && document.querySelector('main').innerText.includes('Recuperamos')`, 20000)
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
-      assert.equal(r.paginas, 2)
-      assert.deepEqual(r.rotacoes, [90, 0])
-      assert.ok(r.textos[0].includes('Pagina 2'), r.textos.join(' | '))
+      assert.equal(r.paginas, 4)
+      assert.deepEqual(r.rotacoes, [90, 0, 0, 0])
+      assert.ok(r.textos[0].includes('Pagina 2') && r.textos[2].includes('Beta 1'), r.textos.join(' | '))
     },
   },
   {
-    nome: 'pdf/editar: texto inserido no PDF',
-    pagina: '/pdf/editar',
+    nome: 'pdf/editor: texto, número da página e um PDF por página',
+    pagina: '/pdf/editor',
     async executar(t) {
-      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(1))}])`)
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2))}])`)
       await t.aguardar(`document.querySelector('main canvas[aria-label="Página 1"]')`, 15000)
       await t.esperar(500)
-      await t.js(`const c = document.querySelector('main canvas[aria-label="Página 1"]').parentElement; const r = c.getBoundingClientRect();
+      await t.clicar('Texto')
+      await t.js(`const c = document.querySelector('main [data-pagina="1"]'); const r = c.getBoundingClientRect();
         c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + r.width * 0.3, clientY: r.top + r.height * 0.5 }))`)
       await t.aguardar('document.querySelectorAll("main textarea").length > 0')
       await t.js(`__t.digitar('Texto', 'Aprovado em 2026')`)
-      await t.clicar('Salvar PDF')
+      await t.js(`[...document.querySelectorAll('main [role=tab]')].find((b) => b.textContent.includes('Números')).click()`)
+      await t.js(`[...document.querySelectorAll('main label')].find((l) => l.textContent.trim() === 'Colocar o número em cada página').click()`)
+      await t.clicar('Baixar')
+      await t.nomeNoModal('contrato')
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('Um PDF por página')).click()")
+      await t.confirmarBaixar()
       await t.aguardarResultado()
-      const r = await lerPdf(await bytesDoResultado(t))
-      assert.ok(r.textos[0].includes('Aprovado em 2026'), r.textos[0])
+      const rs = await t.js('return await __t.resultados()')
+      assert.deepEqual(rs.map((r) => r.nome), ['contrato-1.pdf', 'contrato-2.pdf'])
+      const p1 = await lerPdf(await bytesDoResultado(t, 0))
+      assert.equal(p1.paginas, 1)
+      assert.ok(p1.textos[0].includes('Aprovado em 2026') && p1.textos[0].includes('1 / 2'), p1.textos[0])
+      assert.ok((await lerPdf(await bytesDoResultado(t, 1))).textos[0].includes('2 / 2'))
     },
   },
   {

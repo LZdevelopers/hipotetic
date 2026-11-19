@@ -13,7 +13,7 @@ const RAIZ = fileURLToPath(new URL('..', import.meta.url))
 const DIST = join(RAIZ, 'dist')
 const SSR = join(RAIZ, 'dist-ssr')
 
-const { renderizar, todasAsRotas, conferirCatalogo, produto } = await import(pathToFileURL(join(SSR, 'servidor.js')).href)
+const { renderizar, todasAsRotas, conferirCatalogo, produto, ehApelido } = await import(pathToFileURL(join(SSR, 'servidor.js')).href)
 
 const problemas = conferirCatalogo()
 if (problemas.length) {
@@ -90,7 +90,7 @@ gravar(
   join(DIST, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${rotas.map((r) => `  <url><loc>${produto.url}${r === '/' ? '/' : r}</loc><lastmod>${hoje}</lastmod></url>`).join('\n')}
+${rotas.filter((r) => !ehApelido(r)).map((r) => `  <url><loc>${produto.url}${r === '/' ? '/' : r}</loc><lastmod>${hoje}</lastmod></url>`).join('\n')}
 </urlset>
 `,
 )

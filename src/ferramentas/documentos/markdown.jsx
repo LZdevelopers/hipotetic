@@ -3,6 +3,7 @@ import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { AreaTexto, Botao, Caixa, Segmentado } from '../../componentes/ui'
 import { ESTILO } from '../../motores/markdown'
 import { lerTexto } from '../../nucleo/arquivos'
+import { useSalvo } from '../../nucleo/salvo'
 
 const EXEMPLO = `# Título do documento
 
@@ -22,10 +23,10 @@ Escreva em **Markdown** e veja o resultado ao lado.
 
 /** Markdown → HTML (com página completa e estilo opcional), prévia isolada e "salvar como PDF" pelo próprio navegador. */
 export default function Markdown() {
-  const [texto, setTexto] = useState(EXEMPLO)
+  const [texto, setTexto] = useSalvo('texto', EXEMPLO)
   const [html, setHtml] = useState('')
-  const [completo, setCompleto] = useState(true)
-  const [vista, setVista] = useState('previa')
+  const [completo, setCompleto] = useSalvo('completo', true)
+  const [vista, setVista] = useSalvo('vista', 'previa')
   const quadro = useRef(null)
   const entrada = useRef(null)
   const [pedirNome, dialogoNome] = useBaixarComNome()

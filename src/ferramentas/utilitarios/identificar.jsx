@@ -3,6 +3,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
 import { Etiqueta } from '../../componentes/ui'
 import { detectarTipo, extensaoDe, formatarBytes, formatarDuracao } from '../../nucleo/arquivos'
+import { useSalvo } from '../../nucleo/salvo'
 
 /** Propriedades extras conforme o tipo: dimensões, duração, páginas. */
 async function propriedades(arquivo, real) {
@@ -104,7 +105,7 @@ async function analisar(arquivo) {
 
 /** Identifica o tipo REAL de arquivos pela assinatura dos bytes, e acusa extensões enganosas. */
 export default function Identificar() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   const [analises, setAnalises] = useState([])
 
   useEffect(() => {

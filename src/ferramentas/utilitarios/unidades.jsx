@@ -1,5 +1,6 @@
-import { useState } from 'react'
+
 import { Entrada, Seletor } from '../../componentes/ui'
+import { useSalvo } from '../../nucleo/salvo'
 
 /** Unidades em bytes. Decimais (SI, como os fabricantes de disco) e binárias (como o Windows). */
 export const UNIDADES = [
@@ -24,8 +25,8 @@ export function converter(valor, de, para) {
 const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString('pt-BR', { maximumFractionDigits: n < 1 ? 8 : n < 100 ? 4 : 2 }) : '—')
 
 export default function Unidades() {
-  const [valor, setValor] = useState('1')
-  const [de, setDe] = useState('GB')
+  const [valor, setValor] = useSalvo('valor', '1')
+  const [de, setDe] = useSalvo('unidade', 'GB')
   const n = Number(String(valor).replace(',', '.'))
 
   return (

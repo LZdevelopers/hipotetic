@@ -4,7 +4,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Entrada, Progresso } from '../../componentes/ui'
 import { LIMITE_PDF, abrirEdicao, abrirLeitura, obterPdfLib, salvarPdf } from '../../motores/pdf'
 import { formatarBytes, trocarExtensao } from '../../nucleo/arquivos'
-import { useTarefa } from '../../nucleo/tarefa'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 const CAMPOS = [
   ['Title', 'Título'],
@@ -39,8 +39,12 @@ function nomePapel(w, h) {
 function Painel({ arquivo, aoTrocar, modo }) {
   const [info, setInfo] = useState(null)
   const [erro, setErro] = useState(null)
-  const [campos, setCampos] = useState({})
-  const tarefa = useTarefa()
+  const [lidos, setLidos] = useState({})
+  // Campos editados ficam salvos (por arquivo); sem edição, valem os lidos do PDF.
+  const [editados, setEditados] = useSalvo(`campos:${arquivo.name}:${arquivo.size}`, null)
+  const campos = editados ?? lidos
+  const setCampos = (f) => setEditados((e) => (typeof f === 'function' ? f(e ?? lidos) : f))
+  const tarefa = useTarefaSalva()
 
   useEffect(() => {
     let vivo = true
@@ -52,7 +56,7 @@ function Painel({ arquivo, aoTrocar, modo }) {
         const v = p1.getViewport({ scale: 1 })
         if (!vivo) return
         setInfo({ i, xmp: Boolean(metadata), paginas: doc.numPages, papel: nomePapel(v.width, v.height) })
-        setCampos(Object.fromEntries(CAMPOS.map(([k]) => [k, typeof i[k] === 'string' ? i[k] : ''])))
+        setLidos(Object.fromEntries(CAMPOS.map(([k]) => [k, typeof i[k] === 'string' ? i[k] : ''])))
       } finally {
         doc.destroy()
       }
@@ -144,7 +148,7 @@ function Painel({ arquivo, aoTrocar, modo }) {
 }
 
 export default function Metadados({ modo = 'ver' }) {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={['pdf']} descricaoFormatos="PDF" limiteBytes={LIMITE_PDF} />
   return <Painel key={arquivos[0].id} arquivo={arquivos[0].arquivo} modo={modo} aoTrocar={() => setArquivos([])} />
 }

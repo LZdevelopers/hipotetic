@@ -6,6 +6,7 @@ import { Aviso, Botao, Entrada, Progresso } from '../../componentes/ui'
 import { DESCRICAO_COMPACTADOS, EXTENSOES_COMPACTADOS, LIMITE_COMPACTADO, conferirSeguranca, extrair, listar } from '../../motores/compactados'
 import { baixarBlob, formatarBytes, semExtensao, zipar } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
+import { useSalvo } from '../../nucleo/salvo'
 
 function Painel({ arquivo, aoTrocar }) {
   const [listagem, setListagem] = useState(null)
@@ -177,7 +178,7 @@ function Painel({ arquivo, aoTrocar }) {
 
 /** Ver o conteúdo e extrair ZIP, RAR, 7Z, TAR, GZ… (tudo ou só os escolhidos). */
 export default function Extrair({ formato }) {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) {
     return (
       <SeletorArquivos

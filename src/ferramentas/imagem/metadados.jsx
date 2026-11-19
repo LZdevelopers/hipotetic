@@ -6,8 +6,9 @@ import { Aviso, BotaoLink, Botao, Progresso } from '../../componentes/ui'
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, dimensoes } from '../../motores/imagem'
 import { lerMetadados, removerMetadados } from '../../motores/imagem/metadados'
 import { detectarTipo, formatarBytes } from '../../nucleo/arquivos'
-import { ErroAmigavel, cancelado, useTarefa } from '../../nucleo/tarefa'
+import { ErroAmigavel, cancelado } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 const mdc = (a, b) => (b ? mdc(b, a % b) : a)
 
@@ -97,9 +98,9 @@ function Informacoes({ arquivo }) {
  * e remover SEM recomprimir — a imagem fica idêntica, pixel por pixel.
  */
 export default function MetadadosImagem() {
-  const [arquivos, setArquivos] = useState([])
-  const [selecionado, setSelecionado] = useState(0)
-  const tarefa = useTarefa()
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
+  const [selecionado, setSelecionado] = useSalvo('selecionado', 0)
+  const tarefa = useTarefaSalva()
 
   if (tarefa.fase === 'pronto') {
     return (

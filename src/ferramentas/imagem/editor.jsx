@@ -7,10 +7,10 @@ import { Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, Segmentado, Seleto
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, LIMITE_IMAGEM, dimensoes, formatoOriginal, processarLote } from '../../motores/imagem'
 import { filtroCss } from '../../motores/imagem/nucleo'
 import { extensaoDe, semExtensao, trocarExtensao } from '../../nucleo/arquivos'
-import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
 import { useEmEdicao } from '../../nucleo/edicao'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 /* ─── Dados ──────────────────────────────────────────────────────────────── */
 
@@ -404,15 +404,15 @@ function resumo(o) {
 }
 
 export default function EditorImagem() {
-  const [arquivos, setArquivos] = useState([])
-  const [selecionado, setSelecionado] = useState(0)
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
+  const [selecionado, setSelecionado] = useSalvo('selecionado', 0)
   useEmEdicao(arquivos.length > 0)
-  const [o, setO] = useState(INICIAL)
-  const [aba, setAba] = useState('recortar')
+  const [o, setO] = useSalvo('opcoes', INICIAL)
+  const [aba, setAba] = useSalvo('aba', 'recortar')
   const [nat, setNat] = useState(null)
   // Modal de baixar: nome (só com uma imagem), formato, qualidade e fundo.
   const [baixando, setBaixando] = useState(null)
-  const tarefa = useTarefa()
+  const tarefa = useTarefaSalva()
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
   if (tarefa.fase === 'pronto') {

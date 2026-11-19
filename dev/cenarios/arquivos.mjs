@@ -195,6 +195,17 @@ export default [
     },
   },
   {
+    nome: 'salvo: o texto digitado no QR Code continua ao voltar',
+    pagina: '/utilitarios/qr-code',
+    async executar(t) {
+      await t.js(`__t.digitar('Endereço', 'lzdev.com.br/salvo')`)
+      await t.esperar(900)
+      await t.navegar('/utilitarios/qr-code')
+      await t.aguardar(`[...document.querySelectorAll('main input')].some((i) => i.value === 'lzdev.com.br/salvo')`, 15000)
+      await t.aguardar('document.querySelector("main [role=img] svg")', 15000)
+    },
+  },
+  {
     nome: 'converter: ZIP vira 7Z com o mesmo conteúdo',
     pagina: '/converter',
     async executar(t) {

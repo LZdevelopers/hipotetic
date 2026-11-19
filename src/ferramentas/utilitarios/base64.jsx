@@ -4,6 +4,7 @@ import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { Aviso, AreaTexto, Botao, Segmentado } from '../../componentes/ui'
 import { detectarTipo, formatarBytes, semExtensao } from '../../nucleo/arquivos'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useSalvo } from '../../nucleo/salvo'
 
 function useCopiar() {
   const [copiado, setCopiado] = useState(false)
@@ -26,10 +27,10 @@ const paraBase64 = (arquivo) =>
   })
 
 function Codificar() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   const [b64, setB64] = useState('')
   const [mime, setMime] = useState('')
-  const [formato, setFormato] = useState('uri')
+  const [formato, setFormato] = useSalvo('formato', 'uri')
   const [pedirNome, dialogoNome] = useBaixarComNome()
   const [copiado, copiar] = useCopiar()
   const arquivo = arquivos[0]?.arquivo
@@ -99,7 +100,7 @@ function Codificar() {
 const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif', 'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/x-icon': 'ico', 'application/pdf': 'pdf' }
 
 function Decodificar() {
-  const [texto, setTexto] = useState('')
+  const [texto, setTexto] = useSalvo('texto-decodificar', '')
   const [resultado, setResultado] = useState(null)
   const [pedirNome, dialogoNome] = useBaixarComNome()
 
@@ -165,7 +166,7 @@ function Decodificar() {
 }
 
 export default function Base64({ modo: inicial = 'codificar' }) {
-  const [modo, setModo] = useState(inicial)
+  const [modo, setModo] = useSalvo('modo', inicial)
   return (
     <div className="flex flex-col gap-5">
       <Segmentado

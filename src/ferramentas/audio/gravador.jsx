@@ -3,11 +3,12 @@ import { Icone } from '../../componentes/Icone'
 import { MiniPlayer } from '../../componentes/MiniPlayer'
 import { DialogoBaixar, NomeEditavel } from '../../componentes/ferramenta/Baixar'
 import { Aviso, Botao, Caixa, Seletor } from '../../componentes/ui'
-import { baixarBlob, formatarDuracao, zipar } from '../../nucleo/arquivos'
+import { baixarBlob, formatarBytes, formatarDuracao, zipar } from '../../nucleo/arquivos'
 import { entregar } from '../../nucleo/entrega'
 import { useRota } from '../../nucleo/roteador'
 import { useUrlObjeto } from '../../nucleo/url'
-import { OpcoesSaidaAudio } from './_comum'
+import { OpcoesSaidaAudio, estimarBytesAudio } from './_comum'
+import { useSalvo } from '../../nucleo/salvo'
 
 /** Formato que o navegador grava (Chrome/Edge: WebM Opus; Firefox: Ogg; Safari: MP4). */
 const TIPOS = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm']
@@ -68,9 +69,9 @@ function Tomada({ tomada, indice, salvando, aoBaixar, aoRenomear, aoRemover }) {
 export default function Gravador() {
   const [fase, setFase] = useState('parado') // parado | pedindo | gravando | pausado
   const [erro, setErro] = useState(null)
-  const [tomadas, setTomadas] = useState([])
+  const [tomadas, setTomadas] = useSalvo('gravacoes', [])
   const [dispositivos, setDispositivos] = useState([])
-  const [o, setO] = useState({ dispositivo: '', ruido: true, eco: true, ganho: true, formato: 'mp3', bitrate: 192 })
+  const [o, setO] = useSalvo('opcoes', { dispositivo: '', ruido: true, eco: true, ganho: true, formato: 'mp3', bitrate: 192 })
   const [zipando, setZipando] = useState(false)
   // Modal de baixar: { alvo: id da gravação ou 'todas', formato, bitrate }; e o progresso de quem está salvando.
   const [baixando, setBaixando] = useState(null)
@@ -258,6 +259,8 @@ export default function Gravador() {
     }
   }
   const alvo = baixando && baixando.alvo !== 'todas' ? tomadas.findIndex((x) => x.id === baixando.alvo) : -1
+  // Segundos do que vai ser baixado (para estimar o tamanho no modal).
+  const segundosBaixando = !baixando ? 0 : baixando.alvo === 'todas' ? tomadas.reduce((s, x) => s + x.duracao, 0) : alvo >= 0 ? tomadas[alvo].duracao : 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -369,7 +372,7 @@ export default function Gravador() {
         titulo={baixando?.alvo === 'todas' ? `Baixar ${tomadas.length} gravações` : 'Baixar a gravação'}
         nome={baixando?.alvo === 'todas' ? 'gravacoes' : alvo >= 0 ? nomeDa(tomadas[alvo], alvo) : ''}
         extensao={baixando?.alvo === 'todas' ? 'zip' : baixando?.formato}
-        resumo={baixando?.alvo === 'todas' ? `Um ZIP com cada gravação em ${baixando.formato.toUpperCase()}.` : null}
+        resumo={baixando ? <span data-estimativa="">Tamanho estimado: ~{formatarBytes(estimarBytesAudio(baixando.formato, baixando.bitrate, segundosBaixando))}{baixando.alvo === 'todas' ? ` · um ZIP com cada gravação em ${baixando.formato.toUpperCase()}` : ''}</span> : null}
         aoConfirmar={(nome) => {
           const s = baixando
           mudar({ formato: s.formato, bitrate: s.bitrate })
@@ -383,7 +386,7 @@ export default function Gravador() {
           }
         }}
       >
-        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
+        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} segundos={segundosBaixando} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
       </DialogoBaixar>
     </div>
   )

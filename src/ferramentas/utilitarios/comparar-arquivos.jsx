@@ -1,9 +1,10 @@
-import { useState } from 'react'
+
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Campo, Progresso } from '../../componentes/ui'
 import { detectarTipo, formatarBytes, lerTexto } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { calcularHashes } from './hash'
+import { useSalvo } from '../../nucleo/salvo'
 
 const ehTexto = async (a) => a.size < 5 * 1024 * 1024 && (await detectarTipo(a))?.ext === 'txt' || /\.(txt|md|csv|json|xml|html?|css|js|ts|jsx|py|log|ini|ya?ml|srt|sql)$/i.test(a.name)
 
@@ -26,8 +27,8 @@ async function diferencasBinarias(a, b) {
 }
 
 export default function CompararArquivos() {
-  const [a, setA] = useState([])
-  const [b, setB] = useState([])
+  const [a, setA] = useSalvo('a', [])
+  const [b, setB] = useSalvo('b', [])
   const tarefa = useTarefa()
 
   const comparar = () =>

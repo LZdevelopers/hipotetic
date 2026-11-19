@@ -108,7 +108,7 @@ export function SeletorArquivos({
       const caminho = novo instanceof File ? novo.webkitRelativePath || novo.name : novo.caminho
       const motivo = await validar(arquivo, extensoes, limiteBytes)
       if (motivo) recusados.push({ nome: caminho, motivo })
-      else aceitos.push({ id: `a${(proximoId += 1)}`, arquivo, caminho })
+      else aceitos.push({ id: `a${Date.now().toString(36)}${(proximoId += 1)}`, arquivo, caminho })
     }
     setValidando(false)
     setRejeitados(recusados)

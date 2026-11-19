@@ -1,6 +1,7 @@
 import { OpcoesCartoes } from '../../componentes/ferramenta/Baixar'
 import { Seletor } from '../../componentes/ui'
 import { FORMATOS_AUDIO } from '../../motores/midia'
+import { formatarBytes } from '../../nucleo/arquivos'
 
 export const DICAS_FORMATO_AUDIO = {
   manter: 'Cada arquivo sai no formato em que entrou (MP3 continua MP3…).',
@@ -22,8 +23,20 @@ const QUALIDADES = [
   [320, 'Máximo'],
 ]
 
-/** Opções de áudio do modal de baixar: formato e qualidade (kbps). */
-export function OpcoesSaidaAudio({ formato, bitrate, aoMudar }) {
+/**
+ * Tamanho estimado do arquivo final: com perdas, kbps × duração (+ ~1% de
+ * cabeçalhos); WAV a 44,1 kHz estéreo 16 bits; FLAC cerca de 55% do WAV.
+ */
+export function estimarBytesAudio(formato, bitrate, segundos) {
+  if (!segundos) return 0
+  if (formato === 'wav') return 44 + segundos * 44100 * 2 * 2
+  if (formato === 'flac') return segundos * 44100 * 2 * 2 * 0.55
+  return ((bitrate * 1000) / 8) * segundos * 1.01
+}
+
+/** Opções de áudio do modal de baixar: formato e qualidade (kbps), com o tamanho de cada uma. */
+export function OpcoesSaidaAudio({ formato, bitrate, aoMudar, segundos }) {
+  const mb = (f, k) => (segundos ? `~${formatarBytes(estimarBytesAudio(f, k, segundos))}` : null)
   return (
     <>
       <OpcoesCartoes
@@ -40,7 +53,7 @@ export function OpcoesSaidaAudio({ formato, bitrate, aoMudar }) {
           valor={bitrate}
           aoMudar={(v) => aoMudar({ bitrate: v })}
           colunas="grid-cols-3 sm:grid-cols-5"
-          opcoes={QUALIDADES.map(([k, d]) => ({ valor: k, rotulo: `${k} kbps`, dica: d }))}
+          opcoes={QUALIDADES.map(([k, d]) => ({ valor: k, rotulo: `${k} kbps`, dica: mb(formato, k) ? `${d} · ${mb(formato, k)}` : d }))}
         />
       )}
     </>

@@ -1,7 +1,8 @@
-import { useState } from 'react'
+
 import { Entrada, Seletor } from '../../componentes/ui'
 import { formatarBytes } from '../../nucleo/arquivos'
 import { UNIDADES, converter } from './unidades'
+import { useSalvo } from '../../nucleo/salvo'
 
 const VELOCIDADES = [
   { id: 'kbps', rotulo: 'kbit/s', bits: 1e3 },
@@ -25,9 +26,9 @@ const opcoesUnidade = UNIDADES.filter((u) => u.id !== 'bit').map((u) => ({ valor
 
 /** Tempo de download/upload e taxa de compressão. */
 export default function Calculadora() {
-  const [tam, setTam] = useState({ valor: '4.7', unidade: 'GB' })
-  const [vel, setVel] = useState({ valor: '100', unidade: 'Mbps' })
-  const [comp, setComp] = useState({ antes: '120', depois: '45', unidade: 'MB' })
+  const [tam, setTam] = useSalvo('tamanho', { valor: '4.7', unidade: 'GB' })
+  const [vel, setVel] = useSalvo('velocidade', { valor: '100', unidade: 'Mbps' })
+  const [comp, setComp] = useSalvo('comparar', { antes: '120', depois: '45', unidade: 'MB' })
 
   const bytes = converter(num(tam.valor), tam.unidade, 'B')
   const bitsPorSegundo = num(vel.valor) * VELOCIDADES.find((v) => v.id === vel.unidade).bits

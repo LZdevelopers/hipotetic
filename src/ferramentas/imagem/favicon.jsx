@@ -3,8 +3,8 @@ import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Campo, Deslizante, Entrada, Grupo, Progresso, Segmentado } from '../../componentes/ui'
 import { ehSvg, rasterizarSvg } from '../../motores/imagem'
-import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo } from './_comum'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 /** Desenha o ícone num quadrado de `lado` px, com fundo, margem e cantos. */
 function desenhar(fonte, lado, { fundo, transparente, margem, cantos }) {
@@ -77,8 +77,8 @@ function codigoHtml(nome, svg) {
 function Gerador({ arquivo, aoTrocar }) {
   const [fonte, setFonte] = useState(null)
   const [svg, setSvg] = useState(false)
-  const [o, setO] = useState({ transparente: true, fundo: '#ffffff', margem: 6, cantos: 22, nome: '' })
-  const tarefa = useTarefa()
+  const [o, setO] = useSalvo('opcoes', { transparente: true, fundo: '#ffffff', margem: 6, cantos: 22, nome: '' })
+  const tarefa = useTarefaSalva()
   const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
@@ -227,7 +227,7 @@ function Gerador({ arquivo, aoTrocar }) {
 }
 
 export default function Favicon() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) {
     return (
       <SeletorArquivos

@@ -3,7 +3,8 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Entrada, Progresso, Segmentado } from '../../componentes/ui'
 import { formatarBytes } from '../../nucleo/arquivos'
-import { cancelado, useTarefa } from '../../nucleo/tarefa'
+import { cancelado } from '../../nucleo/tarefa'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 const ALGORITMOS = ['MD5', 'SHA-1', 'SHA-256', 'SHA-512', 'CRC32']
 const PEDACO = 8 * 1024 * 1024
@@ -51,11 +52,11 @@ function Linha({ algoritmo, valor, esperado }) {
 }
 
 export default function Hash() {
-  const [modo, setModo] = useState('arquivo')
-  const [arquivos, setArquivos] = useState([])
-  const [texto, setTexto] = useState('')
-  const [esperado, setEsperado] = useState('')
-  const tarefa = useTarefa()
+  const [modo, setModo] = useSalvo('modo', 'arquivo')
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
+  const [texto, setTexto] = useSalvo('texto', '')
+  const [esperado, setEsperado] = useSalvo('esperado', '')
+  const tarefa = useTarefaSalva()
 
   const calcular = () =>
     tarefa.executar(async ({ progresso, sinal }) => {

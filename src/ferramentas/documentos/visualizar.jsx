@@ -3,6 +3,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao } from '../../componentes/ui'
 import { extrairTextoDocumento } from '../../motores/documentos'
 import { detectarTipo, extensaoDe, formatarBytes } from '../../nucleo/arquivos'
+import { useSalvo } from '../../nucleo/salvo'
 
 /**
  * Visualizar documentos sem instalar nada: DOCX com o layout (docx-preview),
@@ -62,7 +63,7 @@ function Painel({ arquivo, aoTrocar }) {
 }
 
 export default function Visualizar() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={['docx', 'odt', 'rtf', 'txt', 'md', 'html', 'htm']} descricaoFormatos="DOCX, ODT, RTF, HTML, TXT, MD" limiteBytes={100 * 1024 * 1024} />
   return <Painel key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
 }

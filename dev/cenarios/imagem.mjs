@@ -141,6 +141,31 @@ export default [
     },
   },
   {
+    nome: 'salvo: a ferramenta recupera arquivos e resultado ao voltar',
+    pagina: '/imagem/comprimir',
+    async executar(t) {
+      await enviar(t, png(300, 200, false))
+      await t.aguardar("document.querySelector('main').innerText.includes('teste.png')", 10000)
+      await t.esperar(900)
+      // Saiu e voltou: o arquivo continua lá, com o aviso.
+      await t.navegar('/imagem/comprimir')
+      await t.aguardar("document.querySelector('main').innerText.includes('Recuperamos o que você estava fazendo')", 15000)
+      await t.aguardar("document.querySelector('main').innerText.includes('teste.png')", 10000)
+      // Processa, sai antes de baixar e volta: o resultado continua.
+      await t.clicar('Comprimir')
+      await t.aguardarResultado()
+      await t.esperar(900)
+      await t.navegar('/imagem/comprimir')
+      await t.aguardarResultado(15000)
+      // Começar do zero apaga tudo.
+      await t.clicar('Começar do zero')
+      await t.aguardar("!document.querySelector('section[aria-label=Resultado]') && !document.querySelector('main').innerText.includes('teste.png')", 10000)
+      await t.navegar('/imagem/comprimir')
+      await t.esperar(1500)
+      assert.equal(await t.js("return document.querySelector('main').innerText.includes('Recuperamos')"), false, 'depois de começar do zero não deveria recuperar nada')
+    },
+  },
+  {
     nome: 'imagem/editor: girar 90° troca largura e altura',
     pagina: '/imagem/editor',
     async executar(t) {

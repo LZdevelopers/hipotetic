@@ -1,4 +1,4 @@
-import { caminhoDa, categoriaDa, categorias, ferramentaPorSlug, ferramentas } from '../ferramentas/catalogo'
+import { APELIDOS, caminhoDa, categoriaDa, categorias, ferramentaPorSlug, ferramentas } from '../ferramentas/catalogo'
 import { paginas, produto } from '../textos'
 import { normalizarCaminho } from './roteador'
 
@@ -22,9 +22,14 @@ export function resolverRota(caminhoBruto) {
   if (partes.length === 2) {
     const ferramenta = ferramentaPorSlug(partes.join('/'))
     if (ferramenta) return { tipo: 'ferramenta', caminho, ferramenta }
+    const nova = ferramentaPorSlug(APELIDOS[partes.join('/')])
+    if (nova) return { tipo: 'ferramenta', caminho: caminhoDa(nova), ferramenta: nova }
   }
   return { tipo: '404', caminho }
 }
+
+/** Endereço antigo que abre outra ferramenta (pré-renderizado, mas fora do sitemap). */
+export const ehApelido = (caminho) => Boolean(APELIDOS[String(caminho).slice(1)])
 
 /** Todos os endereços para pré-renderizar e para o sitemap. */
 export function todasAsRotas() {
@@ -32,6 +37,7 @@ export function todasAsRotas() {
     '/',
     '/ferramentas',
     ...ferramentas.map(caminhoDa),
+    ...Object.keys(APELIDOS).map((s) => `/${s}`),
     ...Object.keys(paginas).map((p) => `/${p}`),
   ]
 }

@@ -1,10 +1,12 @@
-import { Component, Suspense, useEffect, useState } from 'react'
+import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Pilulas } from '../componentes/ListaFerramentas'
 import { Icone } from '../componentes/Icone'
 import { Aviso, Botao, SeloCategoria } from '../componentes/ui'
 import { categoriaDa, corDa, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
 import { ComponenteFerramenta } from '../ferramentas/carregador'
 import { ContextoEdicao } from '../nucleo/edicao'
+import { apagarTudo, haQuanto } from '../nucleo/rascunho'
+import { ContextoSalvo } from '../nucleo/salvo'
 import { registrarUso } from '../nucleo/preferencias'
 import { Link } from '../nucleo/roteador'
 import { textos } from '../textos'
@@ -55,6 +57,25 @@ export function Ferramenta({ ferramenta }) {
     .filter((f) => f.slug !== ferramenta.slug && f.modulo !== ferramenta.modulo)
     .slice(0, 8)
   const [emEdicao, setEmEdicao] = useState(false)
+
+  // O que a pessoa estava fazendo nesta ferramenta fica salvo (nucleo/salvo.js).
+  // Ao voltar, avisa e oferece começar do zero.
+  const prefixo = `ferramenta:${ferramenta.slug}:`
+  const [recuperadoEm, setRecuperadoEm] = useState(null)
+  const [geracao, setGeracao] = useState(0)
+  const descartando = useRef(false)
+  const salvo = useMemo(() => ({ prefixo, descartando, aoRecuperar: (quando) => setRecuperadoEm((q) => q ?? quando ?? Date.now()) }), [prefixo])
+  // Começar do zero: apaga o salvo antes de remontar a ferramenta (senão ela leria o antigo).
+  const comecarDoZero = async () => {
+    descartando.current = true
+    setRecuperadoEm(null)
+    await apagarTudo(prefixo)
+    setGeracao((g) => g + 1)
+  }
+  // Só depois de remontar (a ferramenta antiga grava ao sair; durante o descarte, não).
+  useEffect(() => {
+    descartando.current = false
+  }, [geracao])
 
   useEffect(() => registrarUso(ferramenta.slug), [ferramenta.slug])
 
@@ -115,11 +136,28 @@ export function Ferramenta({ ferramenta }) {
         </div>
       </header>
 
+      {recuperadoEm ? (
+        <Aviso
+          tom="info"
+          className="mb-4"
+          aoFechar={() => setRecuperadoEm(null)}
+          acao={
+            <Botao variante="secundario" tamanho="p" onClick={comecarDoZero}>
+              Começar do zero
+            </Botao>
+          }
+        >
+          Recuperamos o que você estava fazendo ({haQuanto(recuperadoEm)}). Fica salvo só neste navegador.
+        </Aviso>
+      ) : null}
+
       <LimiteErro key={ferramenta.slug}>
         <ContextoEdicao.Provider value={setEmEdicao}>
-          <Suspense fallback={<Carregando />}>
-            <ComponenteFerramenta ferramenta={ferramenta} />
-          </Suspense>
+          <ContextoSalvo.Provider value={salvo}>
+            <Suspense fallback={<Carregando />}>
+              <ComponenteFerramenta key={geracao} ferramenta={ferramenta} />
+            </Suspense>
+          </ContextoSalvo.Provider>
         </ContextoEdicao.Provider>
       </LimiteErro>
 

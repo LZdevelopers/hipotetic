@@ -5,6 +5,7 @@ import { Aviso, Botao, Caixa, Deslizante, Entrada, Grupo, Segmentado, Seletor } 
 import { formatarDuracao, semExtensao } from '../../nucleo/arquivos'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
+import { useSalvo } from '../../nucleo/salvo'
 
 const TAMANHOS = [
   { valor: '1280x720', rotulo: 'YouTube · 1280×720' },
@@ -79,8 +80,8 @@ function Editor({ arquivo, aoTrocar }) {
   const [erro, setErro] = useState(false)
   const [duracao, setDuracao] = useState(0)
   const [tempo, setTempo] = useState(0)
-  const [o, setO] = useState({ tamanho: '1280x720', texto: '', tamanhoTexto: 12, posicao: 'base', cor: '#ffffff', faixa: true, contorno: false, formato: 'jpg', qualidade: 90 })
-  const [resultado, setResultado] = useState(null)
+  const [o, setO] = useSalvo('opcoes', { tamanho: '1280x720', texto: '', tamanhoTexto: 12, posicao: 'base', cor: '#ffffff', faixa: true, contorno: false, formato: 'jpg', qualidade: 90 })
+  const [resultado, setResultado] = useSalvo('resultado', null)
   const mudar = (k) => (v) => setO((x) => ({ ...x, [k]: v }))
 
   // Redesenha a prévia sempre que algo muda (fontes web carregadas antes).
@@ -180,7 +181,7 @@ function Editor({ arquivo, aoTrocar }) {
 }
 
 export default function Miniatura() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) {
     return (
       <SeletorArquivos

@@ -4,6 +4,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { AreaTexto, Aviso, Botao, Caixa, Entrada, Segmentado, Seletor } from '../../componentes/ui'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
+import { useSalvo } from '../../nucleo/salvo'
 
 const CODIFICACOES = [
   { valor: 'auto', rotulo: 'Detectar automaticamente' },
@@ -38,10 +39,10 @@ export function contar(texto) {
 }
 
 function Visualizar() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   const [bytes, setBytes] = useState(null)
-  const [codificacao, setCodificacao] = useState('auto')
-  const [quebrar, setQuebrar] = useState(true)
+  const [codificacao, setCodificacao] = useSalvo('codificacao', 'auto')
+  const [quebrar, setQuebrar] = useSalvo('quebrar', true)
   const [busca, setBusca] = useState('')
   const arquivo = arquivos[0]?.arquivo
 
@@ -61,7 +62,7 @@ function Visualizar() {
       return null
     }
   }, [texto, ext])
-  const [formatarJson, setFormatarJson] = useState(true)
+  const [formatarJson, setFormatarJson] = useSalvo('formatar-json', true)
   const [pedirNome, dialogoNome] = useBaixarComNome()
   const exibido = json && formatarJson ? json : texto
   const linhas = useMemo(() => exibido.split(/\r\n|\r|\n/), [exibido])
@@ -115,11 +116,11 @@ function Visualizar() {
 const EXTENSOES_GERAR = ['txt', 'md', 'csv', 'json', 'html', 'xml', 'log', 'ini', 'srt']
 
 function Gerar() {
-  const [texto, setTexto] = useState('')
-  const [nome, setNome] = useState('arquivo')
-  const [ext, setExt] = useState('txt')
-  const [fimLinha, setFimLinha] = useState('lf')
-  const [bom, setBom] = useState(false)
+  const [texto, setTexto] = useSalvo('gerar-texto', '')
+  const [nome, setNome] = useSalvo('gerar-nome', 'arquivo')
+  const [ext, setExt] = useSalvo('gerar-ext', 'txt')
+  const [fimLinha, setFimLinha] = useSalvo('gerar-fim-linha', 'lf')
+  const [bom, setBom] = useSalvo('gerar-bom', false)
   const c = contar(texto)
 
   const gerar = () => {

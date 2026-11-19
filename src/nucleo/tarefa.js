@@ -71,5 +71,8 @@ export function useTarefa() {
 
   const reiniciar = cancelar
 
-  return { ...estado, executar, cancelar, reiniciar }
+  /** Volta direto ao "pronto" com um resultado salvo (ver nucleo/salvo.js). */
+  const restaurar = useCallback((resultado, duracao) => setEstado({ fase: 'pronto', resultado, duracao }), [])
+
+  return { ...estado, executar, cancelar, reiniciar, restaurar }
 }

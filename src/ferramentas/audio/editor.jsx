@@ -2,10 +2,10 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { DialogoBaixar, NomeEditavel } from '../../componentes/ferramenta/Baixar'
-import { OpcoesSaidaAudio } from './_comum'
+import { OpcoesSaidaAudio, estimarBytesAudio } from './_comum'
 import { Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
 import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
-import { extensaoDe, formatarDuracao, semExtensao } from '../../nucleo/arquivos'
+import { extensaoDe, formatarBytes, formatarDuracao, semExtensao } from '../../nucleo/arquivos'
 import { useTema } from '../../nucleo/preferencias'
 import { useTarefa } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
@@ -830,7 +830,7 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
         titulo="Baixar o áudio"
         nome={nomeAtual}
         extensao={baixando?.formato}
-        resumo={analise ? `${tempo(duracaoFinal)} de áudio` : null}
+        resumo={analise && baixando ? <span data-estimativa="">Tamanho estimado: ~{formatarBytes(estimarBytesAudio(baixando.formato, baixando.bitrate, duracaoFinal))} · {tempo(duracaoFinal)} de áudio</span> : null}
         aoConfirmar={(nome) => {
           const s = { ...baixando, nome }
           setNomeSaida(nome === nomePadrao ? null : nome)
@@ -839,7 +839,7 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
           exportar(s)
         }}
       >
-        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
+        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} segundos={analise ? duracaoFinal : 0} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
       </DialogoBaixar>
     </div>
   )

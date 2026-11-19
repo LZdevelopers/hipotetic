@@ -59,7 +59,7 @@ export const inicio = {
       { slug: 'video/editor', cor: 'video', glifo: 'video', titulo: 'Editor de vídeo completo', texto: 'Clipes, texto, música, transições e filtros, como num aplicativo.' },
       { slug: 'video/baixar', cor: 'video', glifo: 'baixar', titulo: 'Baixe do YouTube e do TikTok', texto: 'Em MP4 ou MP3, e o TikTok sem marca d’água.' },
       { slug: 'audio/editor', cor: 'audio', glifo: 'audio', titulo: 'Editor de áudio', texto: 'Corte com fade, ajuste o volume, tire silêncios e acelere.' },
-      { slug: 'pdf/editar', cor: 'pdf', glifo: 'pdf', titulo: 'Editar e assinar PDF', texto: 'Texto, assinatura, imagens, destaques e notas.' },
+      { slug: 'pdf/editor', cor: 'pdf', glifo: 'pdf', titulo: 'Editor de PDF', texto: 'Organize, junte, anote, assine e numere numa tela só.' },
     ],
   },
   categorias: {

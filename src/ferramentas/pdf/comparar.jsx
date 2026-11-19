@@ -3,6 +3,7 @@ import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Aviso, Botao, Campo, Progresso, Segmentado } from '../../componentes/ui'
 import { LIMITE_PDF, abrirLeitura, desenharPagina, extrairTexto } from '../../motores/pdf'
 import { useTarefa } from '../../nucleo/tarefa'
+import { useSalvo } from '../../nucleo/salvo'
 
 /**
  * Diferença visual: pixels que mudam além de uma tolerância ficam em vermelho
@@ -147,8 +148,8 @@ function Resultado({ r, aoReiniciar }) {
 }
 
 export default function Comparar() {
-  const [a, setA] = useState([])
-  const [b, setB] = useState([])
+  const [a, setA] = useSalvo('a', [])
+  const [b, setB] = useSalvo('b', [])
   const tarefa = useTarefa()
 
   const comparar = () =>

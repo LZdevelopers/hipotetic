@@ -306,27 +306,21 @@ const TODAS = [
     popular: true,
   },
   {
-    slug: 'pdf/organizar',
-    modulo: 'pdf/organizar',
-    nome: 'Organizar PDF',
-    titulo: 'Organizar PDF: reordenar, girar, excluir e adicionar páginas',
-    resumo: 'Reordene, gire, exclua e adicione páginas vendo tudo.',
-    descricao: 'Organize as páginas do PDF arrastando miniaturas: reordene, gire, exclua, duplique e adicione páginas em branco ou de outro PDF.',
-    termos: ['organizar', 'reordenar', 'girar', 'rotacionar', 'excluir páginas', 'apagar páginas', 'duplicar', 'adicionar páginas', 'mover'],
-    icone: 'galeria',
+    slug: 'pdf/editor',
+    modulo: 'pdf/editor',
+    telaCheia: true,
+    nome: 'Editor de PDF',
+    novo: true,
+    titulo: 'Editor de PDF online: organizar, juntar, anotar, assinar e numerar',
+    resumo: 'Organize, junte, anote, assine e numere numa tela só.',
+    descricao: 'Abra um ou vários PDFs e faça tudo numa tela: organize as páginas, junte arquivos, escreva, assine, numere, ponha marca d’água e baixe só o que quiser.',
+    termos: ['editor', 'editar', 'organizar', 'reordenar', 'girar', 'rotacionar', 'excluir páginas', 'apagar páginas', 'duplicar', 'adicionar páginas', 'página em branco', 'juntar', 'unir', 'extrair páginas', 'assinar', 'assinatura', 'escrever', 'preencher', 'anotar', 'destacar', 'imagem', 'nota', 'rubrica', 'numerar', 'número de página', 'marca d’água', 'metadados', 'título', 'autor', 'senha', 'proteger'],
+    icone: 'pdf',
     popular: true,
-  },
-  {
-    slug: 'pdf/editar',
-    modulo: 'pdf/editar',
-    nome: 'Editar e assinar PDF',
-    titulo: 'Editar e assinar PDF',
-    resumo: 'Texto, assinatura, imagens, destaques e notas.',
-    descricao: 'Escreva sobre o PDF, assine (desenhando, digitando ou com foto), insira imagens, destaque trechos e adicione notas. No navegador.',
-    termos: ['editar', 'assinar', 'assinatura', 'escrever', 'preencher', 'anotar', 'destacar', 'imagem', 'nota', 'rubrica'],
-    icone: 'assinatura',
-    popular: true,
-    perguntas: [{ p: 'É uma assinatura digital com certificado?', r: 'Não. É a imagem da sua assinatura no documento, como assinar no papel. Assinaturas com certificado (ICP-Brasil) exigem um certificado próprio.' }],
+    perguntas: [
+      { p: 'É uma assinatura digital com certificado?', r: 'Não. É a imagem da sua assinatura no documento, como assinar no papel. Assinaturas com certificado (ICP-Brasil) exigem um certificado próprio.' },
+      { p: 'Se eu fechar a página, perco o que fiz?', r: 'Não. O projeto (os PDFs e tudo o que você fez) fica salvo só neste navegador e volta quando você abrir o editor de novo.' },
+    ],
   },
   {
     slug: 'pdf/comprimir',
@@ -537,6 +531,12 @@ export const ferramentas = TODAS.filter((f) => !f.requer || RECURSOS[f.requer])
 // ─── Consultas ──────────────────────────────────────────────────────────────
 
 const porSlug = new Map(ferramentas.map((f) => [f.slug, f]))
+
+/** Endereços antigos que viraram outra ferramenta (continuam abrindo a nova). */
+export const APELIDOS = {
+  'pdf/organizar': 'pdf/editor',
+  'pdf/editar': 'pdf/editor',
+}
 
 export const ferramentaPorSlug = (slug) => porSlug.get(slug) ?? null
 export const categoriaPorId = (id) => categorias.find((c) => c.id === id) ?? null

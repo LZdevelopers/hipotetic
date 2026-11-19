@@ -1,6 +1,7 @@
 import { ModeloConversao } from '../../componentes/ferramenta/ModeloConversao'
 import { Caixa, Entrada, Grupo } from '../../componentes/ui'
-import { LIMITE_PDF, executarQpdf, infoCriptografia } from '../../motores/pdf'
+import { LIMITE_PDF, infoCriptografia } from '../../motores/pdf'
+import { protegerPdf } from '../../motores/pdf/otimizar'
 import { trocarExtensao } from '../../nucleo/arquivos'
 import { ErroAmigavel } from '../../nucleo/tarefa'
 
@@ -19,12 +20,6 @@ function Configuracoes({ opcoes, mudar }) {
       </Grupo>
     </div>
   )
-}
-
-/** Gera uma senha de dono aleatória: quem tem só a senha de abrir não muda as permissões. */
-function senhaAleatoria() {
-  const b = crypto.getRandomValues(new Uint8Array(18))
-  return btoa(String.fromCharCode(...b)).replace(/[^a-z0-9]/gi, '')
 }
 
 export default function Proteger() {
@@ -46,18 +41,9 @@ export default function Proteger() {
       processar={async ([item], o, { progresso }) => {
         progresso(null, 'Criptografando')
         if ((await infoCriptografia(item.arquivo)).protegido) throw new ErroAmigavel('Este PDF já está protegido. Desbloqueie antes para trocar a senha.')
-        const r = await executarQpdf(item.arquivo, [
-          '--encrypt',
-          o.senha,
-          senhaAleatoria(),
-          '256',
-          `--print=${o.imprimir ? 'full' : 'none'}`,
-          `--extract=${o.copiar ? 'y' : 'n'}`,
-          `--modify=${o.modificar ? 'all' : 'none'}`,
-          '--',
-        ])
-        if (r.codigo === 2 || !r.saida) throw new ErroAmigavel('Não foi possível proteger este PDF. Ele pode estar corrompido.', r.texto)
-        return [{ nome: trocarExtensao(item.arquivo.name, 'pdf', '-protegido'), blob: new Blob([r.saida], { type: 'application/pdf' }), detalhe: 'AES-256' }]
+        const r = await protegerPdf(item.arquivo, o.senha, { imprimir: o.imprimir, copiar: o.copiar, modificar: o.modificar })
+        if (!r.bytes) throw new ErroAmigavel('Não foi possível proteger este PDF. Ele pode estar corrompido.', r.texto)
+        return [{ nome: trocarExtensao(item.arquivo.name, 'pdf', '-protegido'), blob: new Blob([r.bytes], { type: 'application/pdf' }), detalhe: 'AES-256' }]
       }}
     />
   )

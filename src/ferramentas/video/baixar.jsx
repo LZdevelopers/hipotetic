@@ -3,6 +3,7 @@ import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao } from '../../componentes/ui'
 import { ErroConsulta, PLATAFORMAS, consultarMidia, detectarPlataforma } from './_baixar/api'
 import { Resultado, ResultadoCarregando } from './_baixar/Resultado'
+import { useSalvo } from '../../nucleo/salvo'
 
 /**
  * Downloader por link (YouTube e TikTok). Colar um link já dispara a
@@ -10,8 +11,8 @@ import { Resultado, ResultadoCarregando } from './_baixar/Resultado'
  * reconhecida pelo endereço. Uma consulta nova cancela a anterior.
  */
 export default function Baixar({ plataforma: inicial = null }) {
-  const [plataforma, setPlataforma] = useState(inicial)
-  const [valor, setValor] = useState('')
+  const [plataforma, setPlataforma] = useSalvo('plataforma', inicial)
+  const [valor, setValor] = useSalvo('link', '')
   const [estado, setEstado] = useState({ fase: 'ocioso' })
   const controle = useRef(null)
   const cache = useRef(new Map())

@@ -5,12 +5,12 @@ import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao, Progresso } from '../../componentes/ui'
 import { lerMetadadosDocumento, removerMetadadosDocumento } from '../../motores/documentos'
 import { formatarBytes, trocarExtensao } from '../../nucleo/arquivos'
-import { useTarefa } from '../../nucleo/tarefa'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 function Painel({ arquivo, aoTrocar }) {
   const [info, setInfo] = useState(null)
   const [erro, setErro] = useState(null)
-  const tarefa = useTarefa()
+  const tarefa = useTarefaSalva()
 
   useEffect(() => {
     let vivo = true
@@ -79,7 +79,7 @@ function Painel({ arquivo, aoTrocar }) {
 }
 
 export default function MetadadosDocumento() {
-  const [arquivos, setArquivos] = useState([])
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
   if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} multiplos={false} extensoes={['docx', 'odt']} descricaoFormatos="DOCX ou ODT" limiteBytes={200 * 1024 * 1024} />
   return <Painel key={arquivos[0].id} arquivo={arquivos[0].arquivo} aoTrocar={() => setArquivos([])} />
 }

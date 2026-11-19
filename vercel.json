@@ -26,6 +26,16 @@
   },
   "redirects": [
     {
+      "source": "/pdf/organizar",
+      "destination": "/pdf/editor",
+      "permanent": true
+    },
+    {
+      "source": "/pdf/editar",
+      "destination": "/pdf/editor",
+      "permanent": true
+    },
+    {
       "source": "/video/converter",
       "destination": "/converter",
       "permanent": true

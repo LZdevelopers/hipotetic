@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useTarefa } from '../../nucleo/tarefa'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 import { Aviso, Botao, Progresso } from '../ui'
 import { Resultados } from './Resultados'
 import { SeletorArquivos } from './SeletorArquivos'
@@ -12,6 +11,7 @@ import { SeletorArquivos } from './SeletorArquivos'
  *   3. botão de ação → progresso com cancelar;
  *   4. resultado com prévia e download (um a um ou ZIP);
  *   5. "Nova operação" ou "Ajustar e refazer" (mantém os arquivos).
+ * Arquivos, opções e resultado ficam salvos no navegador (nucleo/salvo.js).
  *
  * `processar(itens, opcoes, { progresso, sinal })` devolve
  * [{ nome, blob, original?, detalhe? }].
@@ -35,9 +35,9 @@ export function ModeloConversao({
   aviso,
   nomeZip,
 }) {
-  const [arquivos, setArquivos] = useState([])
-  const [opcoes, setOpcoes] = useState(opcoesIniciais)
-  const tarefa = useTarefa()
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
+  const [opcoes, setOpcoes] = useSalvo('opcoes', opcoesIniciais)
+  const tarefa = useTarefaSalva()
 
   const mudarOpcao = (chave, valor) => setOpcoes((o) => ({ ...o, [chave]: valor }))
   const problema = arquivos.length >= minimoArquivos ? validarOpcoes?.(opcoes, arquivos) : null

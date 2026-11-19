@@ -3,6 +3,7 @@ import { converter, destinosPara, identificar, limiteDe, opcoesPadrao } from '..
 import { servidorDocumentos } from '../../motores/documentos'
 import { baixarBlob, formatarBytes, zipar } from '../../nucleo/arquivos'
 import { receber } from '../../nucleo/entrega'
+import { useSalvo } from '../../nucleo/salvo'
 import { Icone } from '../Icone'
 import { Aviso, Botao, Caixa, SeloCategoria } from '../ui'
 import { OpcoesConversao } from './Opcoes'
@@ -173,12 +174,13 @@ function Linha({ item, ocupado, aoEscolher, aoMudarOpcoes, aoRemover, aoRenomear
 }
 
 export function Conversor() {
-  const [itens, setItens] = useState([])
+  // A lista (arquivos, destinos, opções e convertidos) fica salva no navegador.
+  const [itens, setItens] = useSalvo('itens', [])
   const [rejeitados, setRejeitados] = useState([])
   const [validando, setValidando] = useState(false)
   const [arrastando, setArrastando] = useState(false)
   const [convertendo, setConvertendo] = useState(false)
-  const [juntarPdf, setJuntarPdf] = useState(false)
+  const [juntarPdf, setJuntarPdf] = useSalvo('juntar-pdf', false)
   const [zipando, setZipando] = useState(null)
   const entradaArquivo = useRef(null)
   const controle = useRef(null)
@@ -186,6 +188,13 @@ export function Conversor() {
   itensRef.current = itens
 
   useEffect(() => () => controle.current?.abort(), [])
+
+  // Conversão interrompida (saiu do site no meio): volta a ficar pronta para converter.
+  useEffect(() => {
+    if (!convertendo && itens.some((i) => i.estado === 'fila' || i.estado === 'convertendo')) {
+      setItens((lista) => lista.map((i) => (i.estado === 'fila' || i.estado === 'convertendo' ? { ...i, estado: 'pronto', progresso: null } : i)))
+    }
+  }, [itens, convertendo, setItens])
 
   const atualizar = (ids, mudanca) => {
     const alvo = new Set(Array.isArray(ids) ? ids : [ids])
@@ -218,7 +227,7 @@ export function Conversor() {
         continue
       }
       if (destinos.some((d) => d.servidor)) aquecerServidor()
-      aceitos.push({ id: `c${(proximoId += 1)}`, arquivo, entrada, destino: null, opcoes: {}, estado: 'pronto' })
+      aceitos.push({ id: `c${Date.now().toString(36)}${(proximoId += 1)}`, arquivo, entrada, destino: null, opcoes: {}, estado: 'pronto' })
     }
     setValidando(false)
     const vagas = MAXIMO - itensRef.current.length

@@ -7,7 +7,7 @@ import { renderToString } from 'react-dom/server'
 import App from './App'
 import { ferramentas } from './ferramentas/catalogo'
 import { existeModulo, precarregar } from './ferramentas/carregador'
-import { metadadosDa, resolverRota, todasAsRotas } from './nucleo/rotas'
+import { ehApelido, metadadosDa, resolverRota, todasAsRotas } from './nucleo/rotas'
 import { produto } from './textos'
 
 export async function renderizar(caminho) {
@@ -35,4 +35,4 @@ export function conferirCatalogo() {
   return problemas
 }
 
-export { todasAsRotas, produto }
+export { ehApelido, todasAsRotas, produto }

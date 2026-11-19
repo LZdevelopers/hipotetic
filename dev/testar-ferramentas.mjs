@@ -200,7 +200,9 @@ for (const cenario of lista) {
   errosJs.length = 0
   consoleErros.length = 0
   try {
-    // Cada cenário começa sem rascunhos dos editores (IndexedDB) de cenários anteriores.
+    // Cada cenário começa sem nada salvo (IndexedDB) de cenários anteriores. Sai da
+    // página antes de limpar: ao sair, ela grava o que tinha (é o "salvar tudo").
+    await navegar(s, 'about:blank')
     await s.enviar("Storage.clearDataForOrigin", { origin: BASE, storageTypes: "indexeddb" }).catch(() => {})
     await navegar(s, BASE + cenario.pagina)
     // Espera a hidratação: antes dela, o HTML pré-renderizado ignora eventos.

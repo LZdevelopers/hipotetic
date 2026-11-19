@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { AreaTexto, Aviso, Botao, Progresso, Segmentado } from '../../componentes/ui'
 import { EXTENSOES_TEXTO_DOC, extrairTextoDocumento } from '../../motores/documentos'
 import { semExtensao } from '../../nucleo/arquivos'
-import { useTarefa } from '../../nucleo/tarefa'
 import { contar } from '../utilitarios/texto'
+import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
 
 const VAZIAS = new Set('a o e de da do das dos em no na nos nas um uma uns umas para por com sem que se ao aos à às é são foi ser ter mais mas ou como seu sua seus suas ele ela eles elas isso este esta esse essa não sim the of and to in is it for on'.split(' '))
 
@@ -66,10 +66,10 @@ function Estatisticas({ texto }) {
  * tempo de leitura — com o .txt para baixar.
  */
 export default function TextoDocumento() {
-  const [origem, setOrigem] = useState('arquivo')
-  const [arquivos, setArquivos] = useState([])
-  const [colado, setColado] = useState('')
-  const tarefa = useTarefa()
+  const [origem, setOrigem] = useSalvo('origem', 'arquivo')
+  const [arquivos, setArquivos] = useSalvo('arquivos', [])
+  const [colado, setColado] = useSalvo('colado', '')
+  const tarefa = useTarefaSalva()
 
   const extrair = () =>
     tarefa.executar(async ({ progresso }) => {
