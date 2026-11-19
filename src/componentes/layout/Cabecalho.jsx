@@ -6,7 +6,7 @@ import { textos } from '../../textos'
 import { Icone } from '../Icone'
 import { Glifo } from '../inicio/Glifo'
 import { SeloCategoria } from '../ui'
-import { ehEditor } from '../ferramenta/Atalhos'
+import { ehEditor, gruposDaCategoria } from '../ferramenta/Atalhos'
 import { PaletaBusca, useAtalhoBusca } from './Busca'
 import { Marca } from './Marca'
 
@@ -93,10 +93,8 @@ function MenuCelular({ aberto, aoFechar }) {
 function MenuCategoria({ categoria, ativo }) {
   const [aberto, setAberto] = useState(false)
   const timer = useRef(null)
-  // O editor da categoria em destaque; as outras viram "Atalhos".
-  const todas = ferramentasDaCategoria(categoria.id)
-  const editor = todas.find(ehEditor)
-  const lista = todas.filter((f) => !ehEditor(f))
+  // O editor em destaque; depois os atalhos dele (abrem o próprio editor) e, à parte, as outras ferramentas.
+  const { editor, atalhos, outras } = gruposDaCategoria(categoria.id)
   const abrir = () => {
     clearTimeout(timer.current)
     timer.current = setTimeout(() => setAberto(true), 90)
@@ -172,20 +170,29 @@ function MenuCategoria({ categoria, ativo }) {
               </span>
             </Link>
           ) : null}
-          {editor && lista.length ? <p className="px-4 pt-3 pb-0.5 text-[0.625rem] font-bold tracking-wider text-fraca uppercase">Atalhos</p> : null}
-          <ul className="flex flex-col p-1.5">
-            {lista.map((f) => (
-              <li key={f.slug}>
-                <Link para={caminhoDa(f)} onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-start gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-superficie-2">
-                  <SeloCategoria categoria={categoria.id} icone={f.icone} tamanho="p" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-tinta">{f.nome}</span>
-                    <span className="block text-xs leading-snug text-fraca">{f.resumo}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {[
+            ['Atalhos do editor', atalhos],
+            [editor ? 'Outras ferramentas' : null, outras],
+          ].map(([titulo, itens]) =>
+            itens.length ? (
+              <div key={titulo ?? 'todas'}>
+                {titulo ? <p className="px-4 pt-3 pb-0.5 text-[0.625rem] font-bold tracking-wider text-fraca uppercase">{titulo}</p> : null}
+                <ul className="flex flex-col p-1.5">
+                  {itens.map((f) => (
+                    <li key={f.slug}>
+                      <Link para={caminhoDa(f)} onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-start gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-superficie-2">
+                        <SeloCategoria categoria={categoria.id} icone={f.icone} tamanho="p" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-tinta">{f.nome}</span>
+                          <span className="block text-xs leading-snug text-fraca">{f.resumo}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null,
+          )}
           <Link para="/ferramentas" onClick={() => fechar(0)} tabIndex={aberto ? 0 : -1} className="flex items-center justify-between border-t border-borda bg-fundo-suave px-4 py-2.5 text-xs font-semibold text-suave hover:text-tinta">
             Todas as ferramentas
             <Icone nome="seta" tamanho={14} />
