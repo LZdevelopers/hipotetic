@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
+import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { Aviso, AreaTexto, Botao, Segmentado } from '../../componentes/ui'
-import { baixarBlob, detectarTipo, formatarBytes, semExtensao } from '../../nucleo/arquivos'
+import { detectarTipo, formatarBytes, semExtensao } from '../../nucleo/arquivos'
 import { useUrlObjeto } from '../../nucleo/url'
 
 function useCopiar() {
@@ -29,6 +30,7 @@ function Codificar() {
   const [b64, setB64] = useState('')
   const [mime, setMime] = useState('')
   const [formato, setFormato] = useState('uri')
+  const [pedirNome, dialogoNome] = useBaixarComNome()
   const [copiado, copiar] = useCopiar()
   const arquivo = arquivos[0]?.arquivo
 
@@ -60,6 +62,7 @@ function Codificar() {
 
   return (
     <div className="flex flex-col gap-4">
+      {dialogoNome}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-suave">
           <strong className="text-tinta">{arquivo.name}</strong> · {formatarBytes(arquivo.size)} → {formatarBytes(saida.length)} de texto
@@ -85,7 +88,7 @@ function Codificar() {
         <Botao icone={copiado ? 'check' : 'copiar'} onClick={() => copiar(saida)}>
           {copiado ? 'Copiado' : 'Copiar'}
         </Botao>
-        <Botao variante="secundario" icone="baixar" onClick={() => baixarBlob(new Blob([saida], { type: 'text/plain' }), `${semExtensao(arquivo.name)}.base64.txt`)}>
+        <Botao variante="secundario" icone="baixar" onClick={() => pedirNome({ nome: `${semExtensao(arquivo.name)}.base64.txt`, gerar: new Blob([saida], { type: 'text/plain' }) })}>
           Baixar como .txt
         </Botao>
       </div>
@@ -98,6 +101,7 @@ const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'im
 function Decodificar() {
   const [texto, setTexto] = useState('')
   const [resultado, setResultado] = useState(null)
+  const [pedirNome, dialogoNome] = useBaixarComNome()
 
   useEffect(() => {
     let vivo = true
@@ -130,6 +134,7 @@ function Decodificar() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
+      {dialogoNome}
       <AreaTexto rotulo="Cole o Base64 ou o data URI" valor={texto} aoMudar={setTexto} placeholder="data:image/png;base64,iVBORw0KGgo…" className="[&_textarea]:h-72" />
       <div className="flex flex-col gap-3">
         <p className="text-[0.8125rem] font-semibold text-tinta">Resultado</p>
@@ -149,7 +154,7 @@ function Decodificar() {
             <p className="text-sm text-suave">
               {resultado.ext.toUpperCase()} · {formatarBytes(resultado.blob.size)}
             </p>
-            <Botao icone="baixar" className="self-start" onClick={() => baixarBlob(resultado.blob, `arquivo.${resultado.ext}`)}>
+            <Botao icone="baixar" className="self-start" onClick={() => pedirNome({ nome: `arquivo.${resultado.ext}`, gerar: resultado.blob })}>
               Baixar arquivo
             </Botao>
           </>

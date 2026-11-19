@@ -119,6 +119,8 @@ export default [
       await t.js(`__t.digitar('Markdown', '# Olá\\n\\nTexto **forte**.')`)
       await t.aguardar('document.querySelector("main iframe")?.srcdoc.includes("<strong>forte</strong>")', 10000)
       await t.clicar('Baixar HTML')
+      await t.confirmarBaixar()
+      await t.aguardar('window.__baixados.length > 0', 10000)
       const html = await t.js('return await window.__baixados.at(-1).text()')
       assert.ok(html.includes('<h1>Olá</h1>') && html.includes('<title>Olá</title>'), html.slice(0, 300))
     },

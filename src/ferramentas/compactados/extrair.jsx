@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SeletorArquivos, iconeDoArquivo } from '../../componentes/ferramenta/SeletorArquivos'
+import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao, Entrada, Progresso } from '../../componentes/ui'
 import { DESCRICAO_COMPACTADOS, EXTENSOES_COMPACTADOS, LIMITE_COMPACTADO, conferirSeguranca, extrair, listar } from '../../motores/compactados'
@@ -14,6 +15,7 @@ function Painel({ arquivo, aoTrocar }) {
   const [selecao, setSelecao] = useState(new Set())
   const [filtro, setFiltro] = useState('')
   const tarefa = useTarefa()
+  const [pedirNome, dialogoNome] = useBaixarComNome()
 
   const abrir = async (s = '') => {
     setErro(null)
@@ -35,7 +37,9 @@ function Painel({ arquivo, aoTrocar }) {
 
   const visiveis = useMemo(() => (listagem?.itens ?? []).filter((i) => !filtro || i.caminho.toLowerCase().includes(filtro.toLowerCase())), [listagem, filtro])
 
-  const baixar = (comoZip) =>
+  // O nome do arquivo baixado (ZIP ou o arquivo único) é perguntado antes, no modal.
+  const nomeZip = `${semExtensao(arquivo.name).replace(/\.tar$/, '')}.zip`
+  const baixar = (comoZip, nome) =>
     tarefa.executar(async ({ progresso }) => {
       progresso(null, 'Extraindo')
       const todos = selecao.size === listagem.itens.length
@@ -43,17 +47,17 @@ function Painel({ arquivo, aoTrocar }) {
       if (comoZip || extraidos.length > 1) {
         progresso(null, 'Juntando em ZIP')
         const zip = await zipar(extraidos.map((e) => ({ nome: e.caminho, blob: e.blob })))
-        baixarBlob(zip, `${semExtensao(arquivo.name).replace(/\.tar$/, '')}.zip`)
+        baixarBlob(zip, nome ?? nomeZip)
       } else if (extraidos[0]) {
-        baixarBlob(extraidos[0].blob, extraidos[0].caminho.split('/').pop())
+        baixarBlob(extraidos[0].blob, nome ?? extraidos[0].caminho.split('/').pop())
       }
       return extraidos.length
     }, 'Extraindo')
 
-  const baixarUm = (item) =>
+  const baixarUm = (item, nome) =>
     tarefa.executar(async () => {
       const [e] = await extrair(listagem, { senha: senhaUsada, selecionados: [item.caminho] })
-      if (e) baixarBlob(e.blob, e.caminho.split('/').pop())
+      if (e) baixarBlob(e.blob, nome ?? e.caminho.split('/').pop())
       return 1
     }, 'Extraindo')
 
@@ -93,6 +97,7 @@ function Painel({ arquivo, aoTrocar }) {
   const tamanhoSel = listagem.itens.filter((i) => selecao.has(i.caminho)).reduce((s, i) => s + i.tamanho, 0)
   return (
     <div className="flex flex-col gap-4">
+      {dialogoNome}
       <div className="cartao flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-tinta">{arquivo.name}</p>
@@ -146,7 +151,7 @@ function Painel({ arquivo, aoTrocar }) {
               </span>
               {item.cifrado ? <Icone nome="bloquear" tamanho={14} className="text-fraca" /> : null}
               <span className="shrink-0 text-xs text-fraca tabular-nums">{formatarBytes(item.tamanho)}</span>
-              <button type="button" onClick={() => baixarUm(item)} disabled={processando} aria-label={`Baixar ${item.caminho}`} className="grid size-8 shrink-0 place-items-center rounded-md text-fraca hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
+              <button type="button" onClick={() => pedirNome({ nome: item.caminho.split('/').pop(), aoBaixar: (n) => baixarUm(item, n) })} disabled={processando} aria-label={`Baixar ${item.caminho}`} className="grid size-8 shrink-0 place-items-center rounded-md text-fraca hover:bg-superficie-2 hover:text-tinta disabled:opacity-40">
                 <Icone nome="baixar" tamanho={15} />
               </button>
             </li>
@@ -161,7 +166,7 @@ function Painel({ arquivo, aoTrocar }) {
         <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} />
       ) : (
         <div className="flex flex-wrap justify-end gap-2">
-          <Botao icone="baixar" tamanho="g" onClick={() => baixar(false)} disabled={!selecao.size}>
+          <Botao icone="baixar" tamanho="g" onClick={() => pedirNome({ nome: selecao.size === 1 ? [...selecao][0].split('/').pop() : nomeZip, aoBaixar: (n) => baixar(false, n) })} disabled={!selecao.size}>
             {selecao.size === 1 ? 'Baixar o selecionado' : `Baixar ${selecao.size} selecionados (.zip)`}
           </Botao>
         </div>

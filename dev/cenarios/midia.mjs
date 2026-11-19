@@ -809,7 +809,8 @@ export default [
     async executar(t) {
       await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 1.5, hz: 0 }, { s: 1, hz: 440 }, { s: 1.5, hz: 0 }]), 'fala.wav')`, '0:04.0')
       await t.js(`[...document.querySelectorAll('main label')].find((l) => l.textContent.trim().startsWith('Remover silêncio')).click()`)
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 1, 0.25, 'duração sem silêncio')
     },
@@ -820,7 +821,8 @@ export default [
     async executar(t) {
       await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }]), 'aula.wav')`, '0:04.0')
       await t.js("__t.digitar('Velocidade', '2')")
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração a 2×')
     },
@@ -832,7 +834,8 @@ export default [
       await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 4, hz: 440 }], 48000), 'tom48.wav')`, '0:04.0')
       await t.js("__t.digitar('Velocidade', '2')")
       await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.trim() === 'Mudar tom').click()")
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração a 2× com tom')
     },
@@ -843,7 +846,8 @@ export default [
     async executar(t) {
       await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'baixo.wav')`, '0:02.0')
       await t.clicar('Normalizar')
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração')
     },
@@ -915,7 +919,8 @@ export default [
       // Ordem natural pelo nome: "parte 1" primeiro.
       assert.equal(await t.js("return document.querySelector('main ol[aria-label=\"Ordem dos áudios\"] li').textContent.includes('parte 1.wav')"), true)
       await t.aguardar("document.querySelector('[title=\"Duração do áudio final\"]').textContent.includes('0:03.0')", 5000)
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 3, 0.15, 'duração dos dois juntos')
     },
@@ -930,9 +935,34 @@ export default [
       await t.clicar('Início aqui')
       await t.js(`const a = document.querySelector('main audio'); a.currentTime = 3; await new Promise((ok) => a.addEventListener('timeupdate', ok, { once: true }))`)
       await t.clicar('Fim aqui')
-      await t.clicar('Aplicar e baixar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado(120000)
       perto((await t.js('return await __t.midia()')).duracao, 2, 0.2, 'duração do trecho')
+    },
+  },
+  {
+    nome: 'audio/editor: nome e formato só no modal de baixar',
+    pagina: '/audio/editor',
+    async executar(t) {
+      await abrirEditorAudio(t, `__t.arquivo(__t.wav([{ s: 2, hz: 440 }]), 'aula.wav')`, '0:02.0')
+      // Na tela não há mais seletor de formato nem de kbps; o nome é clicável.
+      assert.equal(await t.js("return document.querySelectorAll('main section[aria-label=Player] select').length"), 0, 'seletores de formato deveriam ter saído da tela')
+      assert.match(await t.js("return document.querySelector('main [data-renomear]')?.textContent.trim()"), /^aula-editado.(wav|mp3)$/)
+      // Renomear clicando no nome (Enter confirma).
+      await t.js("document.querySelector('main [data-renomear]').click()")
+      await t.js(`const i = document.querySelector('main input[aria-label="Nome do arquivo"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'minha aula'); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`)
+      await t.aguardar("document.querySelector('main [data-renomear]')?.textContent.trim() .startsWith('minha aula.')", 3000)
+      // No modal: o nome já vem trocado; escolhe MP3 a 128 kbps.
+      await t.clicar('Baixar')
+      await t.aguardar("document.querySelector('dialog[open] input[aria-label=\"Nome do arquivo\"]')?.value === 'minha aula'", 5000)
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('MP3')).click()")
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('128 kbps')).click()")
+      await t.confirmarBaixar()
+      await t.aguardarResultado(120000)
+      const [r] = await t.js('return await __t.resultados()')
+      assert.equal(r.nome, 'minha aula.mp3')
+      assert.equal(r.tipo, 'mp3')
     },
   },
   {
@@ -963,7 +993,8 @@ export default [
       await t.esperar(800)
       await t.js("document.querySelector('main button[aria-label=Parar]').click()")
       await t.aguardar("document.querySelector('main section[aria-label=Gravações]')", 10000)
-      await t.clicar('Baixar MP3')
+      await t.js("document.querySelector('main [data-baixar-gravacao]').click()")
+      await t.confirmarBaixar()
       await t.aguardar("window.__baixados.some((b) => b.type === 'audio/mpeg')", 60000)
       const r = await t.js(`const b = window.__baixados.find((x) => x.type === 'audio/mpeg'); const u = new Uint8Array(await b.slice(0, 3).arrayBuffer())
         const a = new Audio(URL.createObjectURL(b)); await new Promise((ok) => (a.onloadedmetadata = ok)); return [String.fromCharCode(...u), a.duration]`)

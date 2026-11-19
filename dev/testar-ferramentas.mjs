@@ -214,6 +214,16 @@ for (const cenario of lista) {
         await s.avaliar(`__t.clicar(${JSON.stringify(texto)})`)
       },
       aguardar: (expr, ms) => s.aguardar(expr, ms),
+      /** Confirma o modal de baixar (nome e opções do arquivo final). */
+      async confirmarBaixar(ms = 15000) {
+        await s.aguardar("document.querySelector('dialog[open] [data-confirmar-baixar]')", ms)
+        await s.avaliar("document.querySelector('dialog[open] [data-confirmar-baixar]').click()")
+      },
+      /** Escreve no campo de nome do modal de baixar. */
+      async nomeNoModal(nome) {
+        await s.aguardar("document.querySelector('dialog[open] input[aria-label=\"Nome do arquivo\"]')")
+        await s.avaliar(`(() => { const i = document.querySelector('dialog[open] input[aria-label="Nome do arquivo"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, ${JSON.stringify(nome)}); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+      },
       /** Vai para outra página no meio do cenário (reinjeta os ajudantes). */
       async navegar(caminho) {
         await navegar(s, BASE + caminho)

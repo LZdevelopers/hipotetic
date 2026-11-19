@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { AreaTexto, Botao, Caixa, Segmentado } from '../../componentes/ui'
 import { ESTILO } from '../../motores/markdown'
-import { baixarBlob, lerTexto } from '../../nucleo/arquivos'
+import { lerTexto } from '../../nucleo/arquivos'
 
 const EXEMPLO = `# Título do documento
 
@@ -27,6 +28,7 @@ export default function Markdown() {
   const [vista, setVista] = useState('previa')
   const quadro = useRef(null)
   const entrada = useRef(null)
+  const [pedirNome, dialogoNome] = useBaixarComNome()
 
   useEffect(() => {
     let vivo = true
@@ -62,7 +64,7 @@ export default function Markdown() {
         </Botao>
         <Caixa rotulo="Página completa (com estilo)" marcado={completo} aoMudar={setCompleto} className="ml-1" />
         <div className="ml-auto flex flex-wrap gap-2">
-          <Botao tamanho="p" icone="baixar" onClick={() => baixarBlob(new Blob([saida], { type: 'text/html;charset=utf-8' }), `${titulo.slice(0, 60) || 'documento'}.html`)}>
+          <Botao tamanho="p" icone="baixar" onClick={() => pedirNome({ titulo: 'Baixar HTML', nome: `${titulo.slice(0, 60) || 'documento'}.html`, gerar: new Blob([saida], { type: 'text/html;charset=utf-8' }) })}>
             Baixar HTML
           </Botao>
           <Botao variante="secundario" tamanho="p" icone="pdf" onClick={() => quadro.current?.contentWindow?.print()} disabled={vista !== 'previa'}>
@@ -89,6 +91,7 @@ export default function Markdown() {
           )}
         </div>
       </div>
+      {dialogoNome}
       <p className="text-xs text-fraca">“Salvar como PDF” abre a impressão do navegador: escolha “Salvar como PDF” no destino.</p>
     </div>
   )

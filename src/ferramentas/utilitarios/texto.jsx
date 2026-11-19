@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modos } from '../../componentes/ferramenta/Modos'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
+import { useBaixarComNome } from '../../componentes/ferramenta/Baixar'
 import { AreaTexto, Aviso, Botao, Caixa, Entrada, Segmentado, Seletor } from '../../componentes/ui'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
 
@@ -61,6 +62,7 @@ function Visualizar() {
     }
   }, [texto, ext])
   const [formatarJson, setFormatarJson] = useState(true)
+  const [pedirNome, dialogoNome] = useBaixarComNome()
   const exibido = json && formatarJson ? json : texto
   const linhas = useMemo(() => exibido.split(/\r\n|\r|\n/), [exibido])
   const achados = busca ? linhas.filter((l) => l.toLowerCase().includes(busca.toLowerCase())).length : 0
@@ -70,6 +72,7 @@ function Visualizar() {
 
   return (
     <div className="flex flex-col gap-4">
+      {dialogoNome}
       <div className="cartao flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-tinta">{arquivo.name}</p>
@@ -81,7 +84,7 @@ function Visualizar() {
         <Entrada rotulo="Buscar" valor={busca} aoMudar={setBusca} className="w-48" direita={busca ? `${achados}` : undefined} />
         <Caixa rotulo="Quebrar linhas" marcado={quebrar} aoMudar={setQuebrar} />
         {json ? <Caixa rotulo="Formatar JSON" marcado={formatarJson} aoMudar={setFormatarJson} /> : null}
-        <Botao variante="secundario" tamanho="p" icone="baixar" onClick={() => baixarBlob(new Blob([exibido], { type: 'text/plain;charset=utf-8' }), `${semExtensao(arquivo.name)}-utf8.${ext || 'txt'}`)}>
+        <Botao variante="secundario" tamanho="p" icone="baixar" onClick={() => pedirNome({ titulo: 'Salvar em UTF-8', nome: `${semExtensao(arquivo.name)}-utf8.${ext || 'txt'}`, gerar: new Blob([exibido], { type: 'text/plain;charset=utf-8' }) })}>
           Salvar em UTF-8
         </Botao>
         <Botao variante="fantasma" tamanho="p" onClick={() => setArquivos([])}>

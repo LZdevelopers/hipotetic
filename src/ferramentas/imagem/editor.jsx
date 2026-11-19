@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
+import { DialogoBaixar } from '../../componentes/ferramenta/Baixar'
 import { SeletorArquivos } from '../../componentes/ferramenta/SeletorArquivos'
 import { Icone } from '../../componentes/Icone'
 import { Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, Segmentado, Seletor } from '../../componentes/ui'
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, LIMITE_IMAGEM, dimensoes, formatoOriginal, processarLote } from '../../motores/imagem'
 import { filtroCss } from '../../motores/imagem/nucleo'
-import { trocarExtensao } from '../../nucleo/arquivos'
+import { extensaoDe, semExtensao, trocarExtensao } from '../../nucleo/arquivos'
 import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
@@ -258,7 +259,6 @@ const ABAS = [
   { id: 'girar', rotulo: 'Girar', icone: 'girar' },
   { id: 'tamanho', rotulo: 'Tamanho', icone: 'regua' },
   { id: 'cores', rotulo: 'Cores', icone: 'ajustar' },
-  { id: 'salvar', rotulo: 'Salvar como', icone: 'baixar' },
 ]
 
 function Controles({ aba, o, mudar, nat }) {
@@ -375,13 +375,19 @@ function Controles({ aba, o, mudar, nat }) {
       </div>
     )
   }
+  return null
+}
+
+/** Opções do arquivo final, no modal de baixar. */
+function OpcoesSaida({ s, mudar }) {
+  const m = (k) => (v) => mudar({ [k]: v })
   return (
-    <div className="flex flex-col gap-4">
-      <EscolhaFormato valor={o.formato} aoMudar={m('formato')} comOriginal />
-      <Qualidade valor={o.qualidade} aoMudar={m('qualidade')} formato={o.formato} />
-      {o.formato === 'jpg' ? <CorDeFundo valor={o.fundo} aoMudar={m('fundo')} /> : null}
+    <>
+      <EscolhaFormato rotulo="Formato" valor={s.formato} aoMudar={m('formato')} comOriginal />
+      <Qualidade valor={s.qualidade} aoMudar={m('qualidade')} formato={s.formato} />
+      {s.formato === 'jpg' ? <CorDeFundo valor={s.fundo} aoMudar={m('fundo')} /> : null}
       <p className="text-xs text-fraca">Ao salvar, os metadados (EXIF, GPS) saem junto.</p>
-    </div>
+    </>
   )
 }
 
@@ -394,7 +400,6 @@ function resumo(o) {
   if (o.espelharH || o.espelharV) partes.push('espelhar')
   if (o.tamanho !== 'original') partes.push('tamanho')
   if (JSON.stringify(o.ajustes) !== JSON.stringify(NEUTRO)) partes.push('cores')
-  if (o.formato !== 'original') partes.push(o.formato.toUpperCase())
   return partes
 }
 
@@ -405,6 +410,8 @@ export default function EditorImagem() {
   const [o, setO] = useState(INICIAL)
   const [aba, setAba] = useState('recortar')
   const [nat, setNat] = useState(null)
+  // Modal de baixar: nome (só com uma imagem), formato, qualidade e fundo.
+  const [baixando, setBaixando] = useState(null)
   const tarefa = useTarefa()
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
@@ -431,7 +438,11 @@ export default function EditorImagem() {
   const proporcao = proporcaoEfetiva(o.proporcao, o.girar)
   const escalaRef = o.recorte && proporcao && nat ? o.recorte.w / maiorRecorte(nat.largura, nat.altura, proporcao).w : 1
 
-  const aplicar = () =>
+  const unica = arquivos.length === 1
+  const nomePadrao = `${semExtensao(atual.name)}-editada`
+  const extDe = (formato) => (formato === 'original' ? (extensaoDe(atual.name) === 'jpeg' ? 'jpg' : extensaoDe(atual.name)) : formato)
+
+  const aplicar = (s) =>
     tarefa.executar(
       (ctx) =>
         processarLote(
@@ -442,7 +453,7 @@ export default function EditorImagem() {
             let w = recorte ? recorte.largura : d.largura
             let h = recorte ? recorte.altura : d.altura
             if (o.girar % 180) [w, h] = [h, w]
-            const formato = o.formato === 'original' ? await formatoOriginal(item.arquivo) : o.formato
+            const formato = s.formato === 'original' ? await formatoOriginal(item.arquivo) : s.formato
             return {
               recorte,
               girar: o.girar,
@@ -450,8 +461,8 @@ export default function EditorImagem() {
               espelharV: o.espelharV,
               tamanho: calcularTamanho({ largura: w, altura: h }, o),
               ajustes: JSON.stringify(o.ajustes) === JSON.stringify(NEUTRO) ? undefined : o.ajustes,
-              nome: trocarExtensao(item.arquivo.name, formato, '-editada'),
-              saida: { formato, qualidade: o.qualidade, fundo: o.fundo },
+              nome: unica && s.nome ? `${s.nome}.${formato}` : trocarExtensao(item.arquivo.name, formato, '-editada'),
+              saida: { formato, qualidade: s.qualidade, fundo: s.fundo },
             }
           },
           { ...ctx, rotulo: 'Aplicando' },
@@ -476,7 +487,7 @@ export default function EditorImagem() {
       </div>
 
       <aside className="cartao flex flex-col overflow-hidden lg:sticky lg:top-20">
-        <div role="tablist" aria-label="Edição" className="grid grid-cols-5 border-b border-borda">
+        <div role="tablist" aria-label="Edição" className="grid grid-cols-4 border-b border-borda">
           {ABAS.map((a) => (
             <button
               key={a.id}
@@ -509,13 +520,31 @@ export default function EditorImagem() {
               <Botao variante="secundario" onClick={() => setO(INICIAL)} disabled={!mudancas.length}>
                 Desfazer tudo
               </Botao>
-              <Botao className="flex-1" icone="check" onClick={aplicar} disabled={!mudancas.length}>
-                Aplicar{arquivos.length > 1 ? ` em ${arquivos.length}` : ''}
+              <Botao className="flex-1" icone="baixar" onClick={() => setBaixando({ formato: o.formato, qualidade: o.qualidade, fundo: o.fundo })}>
+                Baixar{arquivos.length > 1 ? ` ${arquivos.length} imagens` : ''}
               </Botao>
             </div>
           )}
         </div>
       </aside>
+
+      <DialogoBaixar
+        aberto={Boolean(baixando)}
+        aoFechar={() => setBaixando(null)}
+        titulo={unica ? 'Baixar a imagem' : `Baixar ${arquivos.length} imagens`}
+        nome={unica ? nomePadrao : null}
+        extensao={baixando ? extDe(baixando.formato) : null}
+        rotuloConfirmar={unica ? undefined : `Baixar ${arquivos.length} imagens`}
+        resumo={unica ? null : 'Cada imagem mantém o próprio nome. Dá para renomear no resultado.'}
+        aoConfirmar={(nome) => {
+          const s = { ...baixando, nome }
+          mudar({ formato: s.formato, qualidade: s.qualidade, fundo: s.fundo })
+          setBaixando(null)
+          aplicar(s)
+        }}
+      >
+        {baixando ? <OpcoesSaida s={baixando} mudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
+      </DialogoBaixar>
     </div>
   )
 }

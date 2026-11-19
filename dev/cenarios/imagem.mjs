@@ -112,11 +112,32 @@ export default [
       await enviar(t, png(640, 480, false))
       await t.aguardar(`document.querySelector('main img[alt="Prévia"]')?.naturalWidth > 0`)
       await t.clicar('1:1')
-      await t.clicar('Aplicar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
       assert.deepEqual([r.largura, r.altura], [480, 480])
       assert.equal(r.nome, 'teste-editada.png')
+    },
+  },
+  {
+    nome: 'imagem/editor: formato no modal e renomear no resultado',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await enviar(t, png(640, 480, false))
+      await t.aguardar(`document.querySelector('main img[alt="Prévia"]')?.naturalWidth > 0`)
+      assert.equal(await t.js("return [...document.querySelectorAll('main [role=tab]')].some((b) => b.textContent.includes('Salvar como'))"), false, 'a aba Salvar como deveria ter saído')
+      await t.clicar('Baixar')
+      await t.nomeNoModal('foto final')
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio], dialog[open] button')].find((b) => b.textContent.trim() === 'WebP').click()")
+      await t.confirmarBaixar()
+      await t.aguardarResultado()
+      let [r] = await t.js('return await __t.resultados()')
+      assert.deepEqual([r.nome, r.tipo], ['foto final.webp', 'webp'])
+      // Renomear clicando no nome do resultado.
+      await t.js("document.querySelector('section[aria-label=Resultado] [data-renomear]').click()")
+      await t.js(`const i = document.querySelector('section[aria-label=Resultado] input[aria-label="Nome do arquivo"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'capa'); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`)
+      await t.aguardar("document.querySelector('section[aria-label=Resultado] a[download]')?.getAttribute('download') === 'capa.webp'", 3000)
     },
   },
   {
@@ -126,7 +147,8 @@ export default [
       await enviar(t, png(640, 480, false))
       await aba(t, 'Girar')
       await t.clicar('Horário')
-      await t.clicar('Aplicar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
       assert.deepEqual([r.largura, r.altura], [480, 640])
@@ -139,7 +161,8 @@ export default [
       await enviar(t, png(800, 600, false))
       await aba(t, 'Tamanho')
       await escolher(t, 'rede')
-      await t.clicar('Aplicar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const [r] = await t.js('return await __t.resultados()')
       assert.deepEqual([r.largura, r.altura], [1080, 1080])
@@ -154,7 +177,8 @@ export default [
       await escolher(t, 'porcentagem')
       await aba(t, 'Cores')
       await t.clicar('P&B')
-      await t.clicar('Aplicar')
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const rs = await t.js('return await __t.resultados()')
       assert.deepEqual(

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { MiniPlayer } from '../../componentes/MiniPlayer'
+import { DialogoBaixar, NomeEditavel } from '../../componentes/ferramenta/Baixar'
 import { Aviso, Botao, Caixa, Seletor } from '../../componentes/ui'
-import { FORMATOS_AUDIO } from '../../motores/midia'
 import { baixarBlob, formatarDuracao, zipar } from '../../nucleo/arquivos'
 import { entregar } from '../../nucleo/entrega'
 import { useRota } from '../../nucleo/roteador'
 import { useUrlObjeto } from '../../nucleo/url'
+import { OpcoesSaidaAudio } from './_comum'
 
 /** Formato que o navegador grava (Chrome/Edge: WebM Opus; Firefox: Ogg; Safari: MP4). */
 const TIPOS = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm']
@@ -20,27 +21,18 @@ const cronometro = (ms) => {
   return `${m}:${(s - m * 60).toFixed(1).padStart(4, '0')}`
 }
 
-function Tomada({ tomada, indice, formato, aoRemover }) {
+/** Nome de uma gravação: o que a pessoa deu, ou "gravacao-N". */
+const nomeDa = (tomada, indice) => tomada.nome ?? `gravacao-${indice + 1}`
+
+function Tomada({ tomada, indice, salvando, aoBaixar, aoRenomear, aoRemover }) {
   const url = useUrlObjeto(tomada.blob)
   const { navegar } = useRota()
-  const [salvando, setSalvando] = useState(null)
-  const nome = `gravacao-${indice + 1}`
-
-  const salvar = async () => {
-    setSalvando(0)
-    try {
-      const { converterAudio } = await import('../../motores/midia')
-      const r = await converterAudio(new File([tomada.blob], `${nome}.${extensaoDoTipo(tomada.blob.type)}`, { type: tomada.blob.type }), { formato, bitrate: 192 }, { progresso: (v) => setSalvando(v ?? 0) })
-      baixarBlob(r.blob, `${nome}.${formato}`)
-    } finally {
-      setSalvando(null)
-    }
-  }
+  const nome = nomeDa(tomada, indice)
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3.5 sm:px-5">
-      <div className="w-28 shrink-0">
-        <p className="text-sm font-semibold text-tinta">Gravação {indice + 1}</p>
+      <div className="w-40 min-w-0 shrink-0">
+        <NomeEditavel nome={nome} aoMudar={aoRenomear} rotulo="Renomear a gravação" />
         <p className="text-xs text-fraca tabular-nums">{formatarDuracao(tomada.duracao)}</p>
       </div>
       <MiniPlayer url={url} rotulo={`gravação ${indice + 1}`} duracao={tomada.duracao} className="min-w-48 flex-1" />
@@ -57,8 +49,8 @@ function Tomada({ tomada, indice, formato, aoRemover }) {
         >
           Editar
         </Botao>
-        <Botao tamanho="p" icone="baixar" carregando={salvando != null} onClick={salvar}>
-          {salvando != null ? `${Math.round(salvando * 100)}%` : `Baixar ${formato.toUpperCase()}`}
+        <Botao tamanho="p" icone="baixar" carregando={salvando != null} onClick={aoBaixar} data-baixar-gravacao="">
+          {salvando != null ? `${Math.round(salvando * 100)}%` : 'Baixar'}
         </Botao>
         <button type="button" onClick={aoRemover} aria-label={`Apagar gravação ${indice + 1}`} title="Apagar" className="grid size-8 place-items-center rounded-lg text-fraca transition-colors hover:bg-superficie-2 hover:text-perigo">
           <Icone nome="apagar" tamanho={16} />
@@ -78,8 +70,11 @@ export default function Gravador() {
   const [erro, setErro] = useState(null)
   const [tomadas, setTomadas] = useState([])
   const [dispositivos, setDispositivos] = useState([])
-  const [o, setO] = useState({ dispositivo: '', ruido: true, eco: true, ganho: true, formato: 'mp3' })
+  const [o, setO] = useState({ dispositivo: '', ruido: true, eco: true, ganho: true, formato: 'mp3', bitrate: 192 })
   const [zipando, setZipando] = useState(false)
+  // Modal de baixar: { alvo: id da gravação ou 'todas', formato, bitrate }; e o progresso de quem está salvando.
+  const [baixando, setBaixando] = useState(null)
+  const [salvando, setSalvando] = useState(null)
   const mudar = (m) => setO((x) => ({ ...x, ...m }))
 
   const sessao = useRef(null) // { stream, rec, ctx, analisador, partes, descartar }
@@ -240,21 +235,29 @@ export default function Gravador() {
   })
 
   const ativo = fase === 'gravando' || fase === 'pausado'
-  const baixarTodas = async () => {
+  const converter = async (t, s, progresso) => {
+    const { converterAudio } = await import('../../motores/midia')
+    return (await converterAudio(new File([t.blob], `g.${extensaoDoTipo(t.blob.type)}`, { type: t.blob.type }), { formato: s.formato, bitrate: s.bitrate }, { progresso })).blob
+  }
+  const baixarUma = async (t, s, nome) => {
+    setSalvando({ id: t.id, valor: 0 })
+    try {
+      baixarBlob(await converter(t, s, (v) => setSalvando({ id: t.id, valor: v ?? 0 })), `${nome}.${s.formato}`)
+    } finally {
+      setSalvando(null)
+    }
+  }
+  const baixarTodas = async (s, nomeZip) => {
     setZipando(true)
     try {
-      const { converterAudio } = await import('../../motores/midia')
       const saidas = []
-      for (let i = 0; i < tomadas.length; i += 1) {
-        const t = tomadas[i]
-        const r = await converterAudio(new File([t.blob], `g.${extensaoDoTipo(t.blob.type)}`, { type: t.blob.type }), { formato: o.formato, bitrate: 192 }, {})
-        saidas.push({ nome: `gravacao-${i + 1}.${o.formato}`, blob: r.blob })
-      }
-      baixarBlob(await zipar(saidas), 'gravacoes.zip')
+      for (let i = 0; i < tomadas.length; i += 1) saidas.push({ nome: `${nomeDa(tomadas[i], i)}.${s.formato}`, blob: await converter(tomadas[i], s) })
+      baixarBlob(await zipar(saidas), `${nomeZip}.zip`)
     } finally {
       setZipando(false)
     }
   }
+  const alvo = baixando && baixando.alvo !== 'todas' ? tomadas.findIndex((x) => x.id === baixando.alvo) : -1
 
   return (
     <div className="flex flex-col gap-4">
@@ -338,35 +341,50 @@ export default function Gravador() {
               <span className="font-display text-base font-bold text-tinta">{tomadas.length === 1 ? '1 gravação' : `${tomadas.length} gravações`}</span>
               <span className="text-xs text-fraca">ficam só nesta aba</span>
             </p>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-xs text-fraca">
-                Salvar como
-                <select
-                  value={o.formato}
-                  onChange={(e) => mudar({ formato: e.target.value })}
-                  className="h-8 rounded-lg border border-borda-forte bg-superficie px-2 text-[0.8125rem] font-semibold text-tinta focus:border-acento focus:outline-none"
-                >
-                  {Object.entries(FORMATOS_AUDIO).map(([v, f]) => (
-                    <option key={v} value={v}>
-                      {f.rotulo}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {tomadas.length > 1 ? (
-                <Botao variante="secundario" tamanho="p" icone="pastaCompactada" carregando={zipando} onClick={baixarTodas}>
-                  Baixar todas
-                </Botao>
-              ) : null}
-            </div>
+            {tomadas.length > 1 ? (
+              <Botao variante="secundario" tamanho="p" icone="pastaCompactada" carregando={zipando} onClick={() => setBaixando({ alvo: 'todas', formato: o.formato, bitrate: o.bitrate })}>
+                Baixar todas
+              </Botao>
+            ) : null}
           </header>
           <ul className="divide-y divide-borda">
             {tomadas.map((t, i) => (
-              <Tomada key={t.id} tomada={t} indice={i} formato={o.formato} aoRemover={() => setTomadas((lista) => lista.filter((x) => x.id !== t.id))} />
+              <Tomada
+                key={t.id}
+                tomada={t}
+                indice={i}
+                salvando={salvando?.id === t.id ? salvando.valor : null}
+                aoBaixar={() => setBaixando({ alvo: t.id, formato: o.formato, bitrate: o.bitrate })}
+                aoRenomear={(nome) => setTomadas((lista) => lista.map((x) => (x.id === t.id ? { ...x, nome } : x)))}
+                aoRemover={() => setTomadas((lista) => lista.filter((x) => x.id !== t.id))}
+              />
             ))}
           </ul>
         </section>
       ) : null}
+
+      <DialogoBaixar
+        aberto={Boolean(baixando)}
+        aoFechar={() => setBaixando(null)}
+        titulo={baixando?.alvo === 'todas' ? `Baixar ${tomadas.length} gravações` : 'Baixar a gravação'}
+        nome={baixando?.alvo === 'todas' ? 'gravacoes' : alvo >= 0 ? nomeDa(tomadas[alvo], alvo) : ''}
+        extensao={baixando?.alvo === 'todas' ? 'zip' : baixando?.formato}
+        resumo={baixando?.alvo === 'todas' ? `Um ZIP com cada gravação em ${baixando.formato.toUpperCase()}.` : null}
+        aoConfirmar={(nome) => {
+          const s = baixando
+          mudar({ formato: s.formato, bitrate: s.bitrate })
+          setBaixando(null)
+          if (s.alvo === 'todas') baixarTodas(s, nome)
+          else {
+            const i = tomadas.findIndex((x) => x.id === s.alvo)
+            if (i < 0) return
+            if (nome !== nomeDa(tomadas[i], i)) setTomadas((lista) => lista.map((x) => (x.id === s.alvo ? { ...x, nome } : x)))
+            baixarUma(tomadas[i], s, nome)
+          }
+        }}
+      >
+        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
+      </DialogoBaixar>
     </div>
   )
 }

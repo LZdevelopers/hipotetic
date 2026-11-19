@@ -6,6 +6,7 @@ import { receber } from '../../nucleo/entrega'
 import { Icone } from '../Icone'
 import { Aviso, Botao, Caixa, SeloCategoria } from '../ui'
 import { OpcoesConversao } from './Opcoes'
+import { NomeEditavel, partesDoNome } from '../ferramenta/Baixar'
 import { SeletorFormato } from './SeletorFormato'
 import { useUrlObjeto } from '../../nucleo/url'
 
@@ -88,7 +89,7 @@ function BotaoIcone({ rotulo, icone, ativo, ...props }) {
   )
 }
 
-function Linha({ item, ocupado, aoEscolher, aoMudarOpcoes, aoRemover }) {
+function Linha({ item, ocupado, aoEscolher, aoMudarOpcoes, aoRemover, aoRenomear }) {
   const [ajustes, setAjustes] = useState(false)
   const destinos = useMemo(() => destinosPara(item.entrada, item.arquivo.size), [item.entrada, item.arquivo.size])
   const temAjustes = item.destino && Object.keys(opcoesPadrao(item.entrada, item.destino)).length > 0
@@ -101,9 +102,13 @@ function Linha({ item, ocupado, aoEscolher, aoMudarOpcoes, aoRemover }) {
         <div className="flex min-w-0 flex-[1_1_14rem] items-center gap-3">
           <SeloCategoria categoria={CATEGORIA[item.entrada.tipo]} icone={ICONE[item.entrada.tipo]} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-tinta" title={resultado?.nome ?? item.arquivo.name}>
-              {resultado?.nome ?? item.arquivo.name}
-            </p>
+            {resultado ? (
+              <NomeEditavel nome={partesDoNome(resultado.nome)[0]} extensao={partesDoNome(resultado.nome)[1]} aoMudar={aoRenomear} />
+            ) : (
+              <p className="truncate text-sm font-semibold text-tinta" title={item.arquivo.name}>
+                {item.arquivo.name}
+              </p>
+            )}
             <p className="mt-0.5 truncate text-xs text-fraca tabular-nums">
               {resultado ? (
                 <>
@@ -427,6 +432,7 @@ export function Conversor() {
                 aoEscolher={(d) => escolher(item.id, d)}
                 aoMudarOpcoes={(chave, valor) => atualizar(item.id, (i) => ({ opcoes: { ...i.opcoes, [chave]: valor }, ...(i.estado === 'concluido' || i.estado === 'erro' ? { estado: 'pronto', resultado: null, erro: null } : {}) }))}
                 aoRemover={() => setItens((lista) => lista.filter((i) => i.id !== item.id))}
+                aoRenomear={(n) => atualizar(item.id, (i) => ({ resultado: { ...i.resultado, nome: `${n}${partesDoNome(i.resultado.nome)[1] ? `.${partesDoNome(i.resultado.nome)[1]}` : ''}` } }))}
               />
             ))}
           </ul>

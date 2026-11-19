@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DialogoBaixar, OpcoesCartoes } from '../../componentes/ferramenta/Baixar'
 import { AreaTexto, Aviso, Botao, Entrada, Grupo, Segmentado, Seletor, Deslizante } from '../../componentes/ui'
 import { baixarBlob } from '../../nucleo/arquivos'
 import { CorDeFundo } from '../imagem/_comum'
@@ -116,12 +117,13 @@ export default function QrCode() {
     }
   }, [conteudo, estilo])
 
-  const baixarPng = async () => {
+  const [baixando, setBaixando] = useState(null)
+  const baixarPng = async (tamanho, nome) => {
     const QR = await import('qrcode')
     // Pelo canvas (e não por data URL + fetch, que a CSP do site bloqueia).
     const canvas = document.createElement('canvas')
-    await QR.toCanvas(canvas, conteudo, { errorCorrectionLevel: estilo.correcao, margin: estilo.margem, width: estilo.tamanho, color: { dark: estilo.frente, light: estilo.fundo } })
-    baixarBlob(await new Promise((ok) => canvas.toBlob(ok, 'image/png')), 'qr-code.png')
+    await QR.toCanvas(canvas, conteudo, { errorCorrectionLevel: estilo.correcao, margin: estilo.margem, width: tamanho, color: { dark: estilo.frente, light: estilo.fundo } })
+    baixarBlob(await new Promise((ok) => canvas.toBlob(ok, 'image/png')), nome)
   }
 
   // Contraste baixo = QR que muitas câmeras não leem.
@@ -166,23 +168,50 @@ export default function QrCode() {
         )}
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         {contrastePoucos && svg ? <Aviso tom="alerta">Pouco contraste entre as cores: alguns celulares podem não ler.</Aviso> : null}
-        <Seletor
-          rotulo="Tamanho do PNG"
-          valor={String(estilo.tamanho)}
-          aoMudar={(v) => setEstilo((e) => ({ ...e, tamanho: Number(v) }))}
-          opcoes={[512, 1024, 2048, 4096].map((v) => ({ valor: String(v), rotulo: `${v} × ${v} px` }))}
-          className="w-full"
-        />
-        <div className="grid w-full grid-cols-2 gap-2">
-          <Botao icone="baixar" onClick={baixarPng} disabled={!svg}>
-            PNG
-          </Botao>
-          <Botao variante="secundario" icone="baixar" onClick={() => baixarBlob(new Blob([svg], { type: 'image/svg+xml' }), 'qr-code.svg')} disabled={!svg}>
-            SVG
-          </Botao>
-        </div>
-        <p className="text-center text-xs text-fraca">SVG é vetorial: ideal para impressão em qualquer tamanho.</p>
+        <Botao icone="baixar" className="w-full" onClick={() => setBaixando({ formato: 'png', tamanho: estilo.tamanho })} disabled={!svg}>
+          Baixar
+        </Botao>
       </aside>
+
+      {/* Hora de baixar: nome, formato (PNG ou SVG) e o tamanho do PNG */}
+      <DialogoBaixar
+        aberto={Boolean(baixando)}
+        aoFechar={() => setBaixando(null)}
+        titulo="Baixar o QR Code"
+        nome="qr-code"
+        extensao={baixando?.formato}
+        aoConfirmar={async (nome) => {
+          const b = baixando
+          setBaixando(null)
+          setEstilo((e) => ({ ...e, tamanho: b.tamanho }))
+          if (b.formato === 'svg') baixarBlob(new Blob([svg], { type: 'image/svg+xml' }), `${nome}.svg`)
+          else await baixarPng(b.tamanho, `${nome}.png`)
+        }}
+      >
+        {baixando ? (
+          <>
+            <OpcoesCartoes
+              rotulo="Formato"
+              valor={baixando.formato}
+              aoMudar={(v) => setBaixando((b) => ({ ...b, formato: v }))}
+              colunas="grid-cols-2"
+              opcoes={[
+                { valor: 'png', rotulo: 'PNG', dica: 'Imagem comum: redes, sites, documentos' },
+                { valor: 'svg', rotulo: 'SVG', dica: 'Vetorial: impressão em qualquer tamanho' },
+              ]}
+            />
+            {baixando.formato === 'png' ? (
+              <OpcoesCartoes
+                rotulo="Tamanho"
+                valor={baixando.tamanho}
+                aoMudar={(v) => setBaixando((b) => ({ ...b, tamanho: v }))}
+                colunas="grid-cols-2 sm:grid-cols-4"
+                opcoes={[512, 1024, 2048, 4096].map((v) => ({ valor: v, rotulo: `${v} px`, dica: v <= 1024 ? 'Tela' : 'Impressão' }))}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </DialogoBaixar>
     </div>
   )
 }

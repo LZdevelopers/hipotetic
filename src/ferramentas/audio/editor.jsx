@@ -1,14 +1,16 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
+import { DialogoBaixar, NomeEditavel } from '../../componentes/ferramenta/Baixar'
+import { OpcoesSaidaAudio } from './_comum'
 import { Aviso, Botao, Caixa, Deslizante, Progresso, Segmentado, SeloCategoria } from '../../componentes/ui'
-import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, FORMATOS_AUDIO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
-import { extensaoDe, formatarDuracao, trocarExtensao } from '../../nucleo/arquivos'
+import { DESCRICAO_AUDIO, EXTENSOES_AUDIO, EXTENSOES_VIDEO, LIMITE_AUDIO, filtroVelocidadeAudio, infoMidia, processarAudio } from '../../motores/midia'
+import { extensaoDe, formatarDuracao, semExtensao } from '../../nucleo/arquivos'
 import { useTema } from '../../nucleo/preferencias'
 import { useTarefa } from '../../nucleo/tarefa'
 import { useUrlObjeto } from '../../nucleo/url'
 import { analisarVarios, ganhoNormalizar, silencios } from './_analise'
-import { BotaoAcao, CampoTempo, Painel, SeletorCompacto, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
+import { BotaoAcao, CampoTempo, Painel, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { receber } from '../../nucleo/entrega'
 import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
@@ -299,6 +301,11 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
   const [repetir, setRepetir] = useState(false)
   const tarefa = useTarefa()
   const mudar = (m) => setO((x) => ({ ...x, ...(typeof m === 'function' ? m(x) : m) }))
+  // Arquivo final: nome (clicável no topo) e, no modal de baixar, formato e qualidade.
+  const nomePadrao = arquivos.length > 1 ? 'audios-juntos-editado' : `${semExtensao(primeiro?.name ?? 'audio')}-editado`
+  const [nomeSaida, setNomeSaida] = useState(null)
+  const nomeAtual = nomeSaida ?? nomePadrao
+  const [baixando, setBaixando] = useState(null)
 
   const audio = useRef(null)
   const cabeca = useRef(null)
@@ -526,7 +533,7 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
     return () => removeEventListener('keydown', f)
   }, [])
 
-  const exportar = () =>
+  const exportar = (s) =>
     tarefa.executar((ctx) => {
       pausar()
       const trecho = o.fim - o.inicio
@@ -545,9 +552,9 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
         .join(',')
       const inteiro = o.inicio < 0.05 && o.fim > duracao - 0.05
       const fonte = arquivos.length > 1 ? analise.tocar : primeiro
-      return processarAudio(fonte, { formato: o.formato, bitrate: o.bitrate, inicio: inteiro ? undefined : o.inicio, fim: inteiro ? undefined : o.fim, filtros: filtros || undefined }, ctx, trecho / v).then(async (blob) => {
-        const final = await infoMidia(new File([blob], `x.${o.formato}`)).catch(() => ({}))
-        return [{ nome: arquivos.length > 1 ? `audios-juntos-editado.${o.formato}` : trocarExtensao(primeiro.name, o.formato, '-editado'), blob, detalhe: final.duracao ? `${formatarDuracao(final.duracao)} de áudio` : undefined }]
+      return processarAudio(fonte, { formato: s.formato, bitrate: s.bitrate, inicio: inteiro ? undefined : o.inicio, fim: inteiro ? undefined : o.fim, filtros: filtros || undefined }, ctx, trecho / v).then(async (blob) => {
+        const final = await infoMidia(new File([blob], `x.${s.formato}`)).catch(() => ({}))
+        return [{ nome: `${s.nome}.${s.formato}`, blob, detalhe: final.duracao ? `${formatarDuracao(final.duracao)} de áudio` : undefined }]
       })
     }, 'Processando')
 
@@ -559,8 +566,6 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
   const duracaoFinal = tempoNoResultado(o.fim, o, regioes)
   const maxFade = Math.max(0.5, Math.min(10, Math.floor((o.fim - o.inicio) * 2) / 4))
 
-  const formatos = Object.entries(FORMATOS_AUDIO).map(([v, x]) => ({ valor: v, rotulo: x.rotulo }))
-  const semPerdas = FORMATOS_AUDIO[o.formato]?.semPerdas
   const botaoRedondo = 'grid size-11 place-items-center rounded-full transition-colors disabled:opacity-40'
 
   return (
@@ -570,10 +575,10 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-borda px-4 py-3 sm:px-5">
           <SeloCategoria categoria="audio" icone="arquivoAudio" tamanho="p" />
           <div className="min-w-0 flex-1 basis-40">
-            <p className="truncate text-sm font-semibold text-tinta" title={arquivos.map((a) => a.arquivo.name).join(' + ')}>
-              {vazio ? 'Nenhum áudio aberto' : arquivos.length === 1 ? primeiro.name : `${arquivos.length} áudios em sequência`}
+            {vazio ? <p className="text-sm font-semibold text-tinta">Nenhum áudio aberto</p> : <NomeEditavel key={nomeAtual} nome={nomeAtual} extensao={o.formato} aoMudar={setNomeSaida} desativado={processando} rotulo="Renomear o áudio final" />}
+            <p className="truncate text-xs text-fraca tabular-nums" title={arquivos.map((a) => a.arquivo.name).join(' + ')}>
+              {vazio ? 'Escolha um arquivo para começar' : `${arquivos.length > 1 ? `${arquivos.length} áudios em sequência · ` : ''}${analise ? `${tempo(duracao)} no original` : 'Lendo…'}`}
             </p>
-            <p className="text-xs text-fraca tabular-nums">{vazio ? 'Escolha um arquivo para começar' : analise ? `${tempo(duracao)} no original` : 'Lendo…'}</p>
           </div>
           <input
             ref={entradaArquivos}
@@ -601,22 +606,13 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
             </Botao>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SeletorCompacto rotulo="Formato do arquivo final" valor={o.formato} aoMudar={(v) => mudar({ formato: v })} opcoes={formatos} />
-            {semPerdas ? null : (
-              <SeletorCompacto
-                rotulo="Qualidade do arquivo final"
-                valor={String(o.bitrate)}
-                aoMudar={(v) => mudar({ bitrate: Number(v) })}
-                opcoes={[96, 128, 192, 256, 320].map((k) => ({ valor: String(k), rotulo: `${k} kbps` }))}
-              />
-            )}
             {processando ? (
               <div className="w-60">
                 <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
               </div>
             ) : (
-              <Botao icone="baixar" onClick={exportar} disabled={!analise}>
-                Aplicar e baixar
+              <Botao icone="baixar" onClick={() => setBaixando({ formato: o.formato, bitrate: o.bitrate })} disabled={!analise}>
+                Baixar
               </Botao>
             )}
           </div>
@@ -826,6 +822,25 @@ function Editor({ arquivos, aoMudarArquivos, salvo, aoDescartarSalvo }) {
         onSeeked={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
         onTimeUpdate={(e) => !tocando && mostrar(e.currentTarget.currentTime)}
       />
+
+      {/* Hora de baixar: nome, formato e qualidade do arquivo final */}
+      <DialogoBaixar
+        aberto={Boolean(baixando)}
+        aoFechar={() => setBaixando(null)}
+        titulo="Baixar o áudio"
+        nome={nomeAtual}
+        extensao={baixando?.formato}
+        resumo={analise ? `${tempo(duracaoFinal)} de áudio` : null}
+        aoConfirmar={(nome) => {
+          const s = { ...baixando, nome }
+          setNomeSaida(nome === nomePadrao ? null : nome)
+          mudar({ formato: s.formato, bitrate: s.bitrate })
+          setBaixando(null)
+          exportar(s)
+        }}
+      >
+        {baixando ? <OpcoesSaidaAudio formato={baixando.formato} bitrate={baixando.bitrate} aoMudar={(d) => setBaixando((b) => ({ ...b, ...d }))} /> : null}
+      </DialogoBaixar>
     </div>
   )
 }

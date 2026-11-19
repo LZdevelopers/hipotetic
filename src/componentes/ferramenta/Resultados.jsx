@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { baixarBlob, extensaoDe, formatarBytes, variacao, zipar } from '../../nucleo/arquivos'
 import { Icone } from '../Icone'
 import { Botao, Etiqueta } from '../ui'
+import { NomeEditavel, partesDoNome } from './Baixar'
 import { iconeDoArquivo } from './SeletorArquivos'
 import { useUrlsObjeto } from '../../nucleo/url'
 
@@ -30,10 +31,20 @@ function Previa({ item, url }) {
  * Arquivos gerados: prévia, nome, tamanho (e a variação em relação ao
  * original, quando há), baixar um a um ou tudo em ZIP.
  * Mídia (vídeo/áudio) ganha um player para conferir antes de salvar.
+ * Clicar no nome de um arquivo (ou do ZIP) troca o nome antes de baixar.
  */
 export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo = 'Nova operação', nomeZip = 'arquivos.zip', extra }) {
   const urls = useUrls(itens)
   const [zipando, setZipando] = useState(null)
+  // Nomes (renomeáveis) de cada arquivo e do ZIP; voltam ao padrão a cada resultado novo.
+  const [nomes, setNomes] = useState(() => itens.map((i) => i.nome))
+  const [zip, setZip] = useState(nomeZip)
+  useEffect(() => {
+    setNomes(itens.map((i) => i.nome))
+    setZip(nomeZip)
+  }, [itens, nomeZip])
+  const nomeDe = (i) => nomes[i] ?? itens[i].nome
+  const renomear = (i, base) => setNomes((l) => itens.map((it, k) => (k === i ? `${base}${partesDoNome(it.nome)[1] ? `.${partesDoNome(it.nome)[1]}` : ''}` : (l[k] ?? it.nome))))
   const total = itens.reduce((s, i) => s + i.blob.size, 0)
   const unico = itens.length === 1 ? itens[0] : null
   const ext = unico ? extensaoDe(unico.nome) : ''
@@ -42,7 +53,7 @@ export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo 
   const baixarTudo = async () => {
     setZipando(0)
     try {
-      baixarBlob(await zipar(itens, setZipando), nomeZip)
+      baixarBlob(await zipar(itens.map((it, i) => ({ ...it, nome: nomeDe(i) })), setZipando), zip)
     } finally {
       setZipando(null)
     }
@@ -90,9 +101,7 @@ export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo 
           <li key={`${item.nome}-${i}`} className="flex items-center gap-3 px-4 py-3 sm:px-5">
             <Previa item={item} url={urls[i]} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-tinta" title={item.nome}>
-                {item.nome}
-              </p>
+              <NomeEditavel nome={partesDoNome(nomeDe(i))[0]} extensao={partesDoNome(nomeDe(i))[1]} aoMudar={(n) => renomear(i, n)} />
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fraca tabular-nums">
                 {formatarBytes(item.blob.size)}
                 {item.original ? (
@@ -105,7 +114,7 @@ export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo 
             </div>
             <a
               href={urls[i]}
-              download={item.nome}
+              download={nomeDe(i)}
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-marca px-3.5 text-[0.8125rem] font-semibold text-sobre-marca transition-colors hover:bg-marca-hover"
             >
               <Icone nome="baixar" tamanho={15} />
@@ -116,7 +125,10 @@ export function Resultados({ itens, aoReiniciar, aoAjustar, duracao, rotuloNovo 
       </ul>
 
       {itens.length > 1 ? (
-        <footer className="flex justify-end border-t border-borda px-4 py-3 sm:px-5">
+        <footer className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-borda px-4 py-3 sm:px-5">
+          <span className="min-w-0">
+            <NomeEditavel nome={partesDoNome(zip)[0]} extensao="zip" aoMudar={(n) => setZip(`${n}.zip`)} rotulo="Renomear o ZIP" />
+          </span>
           <Botao icone="pastaCompactada" carregando={zipando != null} onClick={baixarTudo}>
             {zipando != null ? `Compactando ${Math.round(zipando * 100)}%` : 'Baixar tudo (.zip)'}
           </Botao>
