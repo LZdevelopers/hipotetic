@@ -6,6 +6,7 @@ import { textos } from '../../textos'
 import { Icone } from '../Icone'
 import { Glifo } from '../inicio/Glifo'
 import { SeloCategoria } from '../ui'
+import { ehEditor } from '../ferramenta/Atalhos'
 import { PaletaBusca, useAtalhoBusca } from './Busca'
 import { Marca } from './Marca'
 
@@ -69,7 +70,7 @@ function MenuCelular({ aberto, aoFechar }) {
               {c.nome}
             </p>
             <ul className="mt-1.5 ml-[2.6rem] flex flex-col">
-              {ferramentasDaCategoria(c.id).map((f) => (
+              {[...ferramentasDaCategoria(c.id)].sort((x, y) => Number(ehEditor(y)) - Number(ehEditor(x))).map((f) => (
                 <li key={f.slug}>
                   <Link para={caminhoDa(f)} className="block rounded-md py-1.5 text-sm text-suave hover:text-tinta">
                     {f.nome}
@@ -92,7 +93,10 @@ function MenuCelular({ aberto, aoFechar }) {
 function MenuCategoria({ categoria, ativo }) {
   const [aberto, setAberto] = useState(false)
   const timer = useRef(null)
-  const lista = ferramentasDaCategoria(categoria.id)
+  // O editor da categoria em destaque; as outras viram "Atalhos".
+  const todas = ferramentasDaCategoria(categoria.id)
+  const editor = todas.find(ehEditor)
+  const lista = todas.filter((f) => !ehEditor(f))
   const abrir = () => {
     clearTimeout(timer.current)
     timer.current = setTimeout(() => setAberto(true), 90)
@@ -150,6 +154,25 @@ function MenuCategoria({ categoria, ativo }) {
               <span className="block text-xs leading-snug text-fraca">Qualquer formato para outro: vídeo, áudio, imagem, PDF…</span>
             </span>
           </Link>
+          {editor ? (
+            <Link
+              para={caminhoDa(editor)}
+              onClick={() => fechar(0)}
+              tabIndex={aberto ? 0 : -1}
+              data-editor-menu=""
+              className="mx-1.5 mt-1.5 flex items-start gap-3 rounded-xl border border-borda bg-superficie-2 px-2.5 py-2.5 transition-colors hover:border-borda-forte"
+            >
+              <SeloCategoria categoria={categoria.id} icone={editor.icone} tamanho="m" />
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-tinta">
+                  {editor.nome}
+                  <span className="rounded-full bg-marca px-1.5 py-px text-[0.5625rem] font-bold tracking-wide text-sobre-marca uppercase">Editor</span>
+                </span>
+                <span className="block text-xs leading-snug text-fraca">{editor.resumo}</span>
+              </span>
+            </Link>
+          ) : null}
+          {editor && lista.length ? <p className="px-4 pt-3 pb-0.5 text-[0.625rem] font-bold tracking-wider text-fraca uppercase">Atalhos</p> : null}
           <ul className="flex flex-col p-1.5">
             {lista.map((f) => (
               <li key={f.slug}>

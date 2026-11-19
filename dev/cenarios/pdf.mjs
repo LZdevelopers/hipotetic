@@ -7,11 +7,15 @@ const bytesDoResultado = (t, i = 0) => t.js(`return await __t.bytes(${i})`)
 
 export default [
   {
-    nome: 'pdf/unir: 2 + 3 páginas na ordem da lista',
+    nome: 'pdf/unir: 2 + 3 páginas na ordem da lista (editor em modo foco)',
     pagina: '/pdf/unir',
     async executar(t) {
-      await enviar(t, `[${arquivoPdf(await pdfTeste(2, { prefixo: 'Alfa' }), 'a.pdf')}, ${arquivoPdf(await pdfTeste(3, { prefixo: 'Beta' }), 'b.pdf')}]`)
-      await t.clicar('Unir PDFs')
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2, { prefixo: 'Alfa' }), 'a.pdf')}, ${arquivoPdf(await pdfTeste(3, { prefixo: 'Beta' }), 'b.pdf')}])`)
+      await t.aguardar('document.querySelectorAll("main ol[aria-label=\\"Ordem das páginas\\"] > li").length === 5', 15000)
+      // Modo foco: sem o painel de anotações; o editor completo fica a um clique.
+      assert.equal(await t.js("return Boolean(document.querySelector('main [role=tablist][aria-label=Painel]'))"), false, 'o modo foco não deveria mostrar o painel')
+      await t.clicar('Unir e baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
       assert.equal(r.paginas, 5)
@@ -19,34 +23,39 @@ export default [
     },
   },
   {
-    nome: 'pdf/dividir: cada página e por intervalos',
+    nome: 'pdf/dividir: cada página e a cada 2 páginas',
     pagina: '/pdf/dividir',
     async executar(t) {
-      await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
-      await t.clicar('Dividir PDF')
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(3))}])`)
+      await t.aguardar(`document.querySelector('main canvas[aria-label="Página 1"]')`, 15000)
+      await t.clicar('Dividir e baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       assert.equal((await t.js('return await __t.resultados()')).length, 3)
       await t.clicar('Ajustar e refazer')
-      await t.clicar('Intervalos')
-      await t.js(`__t.digitar('Intervalos', '1-2, 3')`)
-      await t.clicar('Dividir PDF')
+      await t.clicar('Dividir e baixar')
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('A cada N páginas')).click()")
+      await t.js("__t.digitar('Páginas em cada parte', '2')")
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const rs = await t.js('return await __t.resultados()')
-      assert.deepEqual(
-        rs.map((r) => r.nome),
-        ['doc-p1-2.pdf', 'doc-p3.pdf'],
-      )
+      assert.equal(rs.length, 2)
+      assert.ok(rs[0].nome.endsWith('-parte-1.pdf'), rs[0].nome)
       assert.equal((await lerPdf(await bytesDoResultado(t, 0))).paginas, 2)
+      assert.equal((await lerPdf(await bytesDoResultado(t, 1))).paginas, 1)
     },
   },
   {
     nome: 'pdf/dividir: extrair 3 e 1, nessa ordem',
     pagina: '/pdf/dividir',
     async executar(t) {
-      await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
-      await t.clicar('Extrair')
-      await t.js(`__t.digitar('Páginas', '3, 1')`)
-      await t.clicar('Dividir PDF')
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(3))}])`)
+      await t.aguardar(`document.querySelector('main canvas[aria-label="Página 1"]')`, 15000)
+      await t.clicar('Dividir e baixar')
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('Digitar')).click()")
+      await t.js("__t.digitar('Páginas', '3, 1')")
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('Um PDF')).click()")
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
       assert.equal(r.paginas, 2)
@@ -101,8 +110,10 @@ export default [
     nome: 'pdf/numerar-marca-dagua: numerar, “2 / 3” na página 2',
     pagina: '/pdf/numerar-marca-dagua',
     async executar(t) {
-      await enviar(t, `[${arquivoPdf(await pdfTeste(3))}]`)
-      await t.clicar('Numerar páginas')
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(3))}])`)
+      await t.aguardar(`document.querySelector('main canvas[aria-label="Página 1"]')`, 15000)
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
       assert.ok(r.textos[1].includes('2 / 3'), r.textos[1])
@@ -112,9 +123,11 @@ export default [
     nome: 'pdf/numerar-marca-dagua: marca d’água em todas as páginas',
     pagina: '/pdf/numerar-marca-dagua',
     async executar(t) {
-      await t.clicar('Marca d’água')
-      await enviar(t, `[${arquivoPdf(await pdfTeste(2))}]`)
-      await t.clicar('Aplicar marca')
+      await t.js(`__t.enviar([${arquivoPdf(await pdfTeste(2))}])`)
+      await t.aguardar(`document.querySelector('main canvas[aria-label="Página 1"]')`, 15000)
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.trim() === 'Escrever em todas as páginas').click()")
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
       await t.aguardarResultado()
       const r = await lerPdf(await bytesDoResultado(t))
       assert.ok(

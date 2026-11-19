@@ -54,7 +54,7 @@ export function Ferramenta({ ferramenta }) {
   const categoria = categoriaDa(ferramenta)
   // Mesma categoria; o conversor (sem categoria) mostra as mais usadas.
   const relacionadas = (categoria ? ferramentasDaCategoria(categoria.id) : populares())
-    .filter((f) => f.slug !== ferramenta.slug && f.modulo !== ferramenta.modulo)
+    .filter((f) => f.slug !== ferramenta.slug)
     .slice(0, 8)
   const [emEdicao, setEmEdicao] = useState(false)
 

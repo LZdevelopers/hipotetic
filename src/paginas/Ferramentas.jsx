@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icone } from '../componentes/Icone'
 import { GradeCartoes } from '../componentes/ListaFerramentas'
+import { ehEditor } from '../componentes/ferramenta/Atalhos'
 import { SeloCategoria } from '../componentes/ui'
 import { categoriaPorId, categoriasComFerramentas, ferramentaPorSlug, ferramentasDaCategoria, normalizar } from '../ferramentas/catalogo'
 
@@ -32,7 +33,7 @@ export function Ferramentas() {
   const lista = useMemo(() => {
     const confere = (f) => !termo || termo.split(/\s+/).every((p) => normalizar([f.nome, f.resumo, ...(f.termos ?? [])].join(' ')).includes(p))
     const conversor = ferramentaPorSlug('converter')
-    const todas = [...(aba === 'todas' && conversor ? [conversor] : []), ...cats.filter((c) => aba === 'todas' || c.id === aba).flatMap((c) => ferramentasDaCategoria(c.id))]
+    const todas = [...(aba === 'todas' && conversor ? [conversor] : []), ...cats.filter((c) => aba === 'todas' || c.id === aba).flatMap((c) => [...ferramentasDaCategoria(c.id)].sort((x, y) => Number(ehEditor(y)) - Number(ehEditor(x))))]
     return todas.filter(confere)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aba, termo])

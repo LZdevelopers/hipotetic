@@ -11,6 +11,8 @@ import { CorDeFundo, EscolhaFormato, Qualidade } from './_comum'
 import { useUrlObjeto } from '../../nucleo/url'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { useSalvo, useTarefaSalva } from '../../nucleo/salvo'
+import { AtalhosDoEditor } from '../../componentes/ferramenta/Atalhos'
+import { COMPRIMIR_INICIAL, OpcoesComprimir, comprimirImagens } from './_comprimir'
 
 /* ─── Dados ──────────────────────────────────────────────────────────────── */
 
@@ -403,7 +405,15 @@ function resumo(o) {
   return partes
 }
 
-export default function EditorImagem() {
+/**
+ * Editor de imagem. Com `modo="comprimir"` (a ferramenta "Comprimir imagens"),
+ * abre em modo foco: prévia + só as opções de compressão; "Editor completo"
+ * libera recortar, girar, tamanho e cores.
+ */
+export default function EditorImagem({ modo }) {
+  const [completo, setCompleto] = useSalvo('completo', false)
+  const foco = modo === 'comprimir' && !completo
+  const [comp, setComp] = useSalvo('comprimir', COMPRIMIR_INICIAL)
   const [arquivos, setArquivos] = useSalvo('arquivos', [])
   const [selecionado, setSelecionado] = useSalvo('selecionado', 0)
   useEmEdicao(arquivos.length > 0)
@@ -420,7 +430,7 @@ export default function EditorImagem() {
       <Resultados
         itens={tarefa.resultado}
         duracao={tarefa.duracao}
-        nomeZip="imagens-editadas.zip"
+        nomeZip={foco ? 'imagens-comprimidas.zip' : 'imagens-editadas.zip'}
         aoAjustar={tarefa.reiniciar}
         aoReiniciar={() => {
           setArquivos([])
@@ -430,7 +440,16 @@ export default function EditorImagem() {
       />
     )
   }
-  if (!arquivos.length) return <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} extensoes={EXTENSOES_IMAGEM.filter((e) => e !== 'svg')} descricaoFormatos={DESCRICAO_IMAGEM.replace(', SVG', '')} limiteBytes={LIMITE_IMAGEM} aceitarColar />
+  if (!arquivos.length) {
+    return (
+      <div className="flex flex-col items-center gap-10">
+        <div className="w-full">
+          <SeletorArquivos arquivos={arquivos} aoMudar={setArquivos} extensoes={EXTENSOES_IMAGEM.filter((e) => e !== 'svg')} descricaoFormatos={DESCRICAO_IMAGEM.replace(', SVG', '')} limiteBytes={LIMITE_IMAGEM} aceitarColar />
+        </div>
+        {modo ? null : <AtalhosDoEditor categoria="imagem" />}
+      </div>
+    )
+  }
 
   const atual = arquivos[Math.min(selecionado, arquivos.length - 1)].arquivo
   const mudancas = resumo(o)
@@ -473,7 +492,7 @@ export default function EditorImagem() {
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
       <div className="flex min-w-0 flex-col gap-3">
-        <Previa key={atual.name + atual.size} arquivo={atual} o={o} mudar={mudar} recortando={aba === 'recortar'} aoDimensoes={setNat} />
+        <Previa key={atual.name + atual.size} arquivo={atual} o={foco ? INICIAL : o} mudar={mudar} recortando={!foco && aba === 'recortar'} aoDimensoes={setNat} />
         {arquivos.length > 1 ? (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {arquivos.map((a, i) => (
@@ -486,6 +505,25 @@ export default function EditorImagem() {
         </div>
       </div>
 
+      {foco ? (
+        <aside className="cartao flex flex-col gap-5 p-4 lg:sticky lg:top-20">
+          <div className={processando ? 'pointer-events-none opacity-60' : ''}>
+            <OpcoesComprimir opcoes={comp} mudar={(k, v) => setComp((c) => ({ ...c, [k]: v }))} />
+          </div>
+          {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
+          {processando ? (
+            <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
+          ) : (
+            <Botao tamanho="g" className="w-full" icone="seta" onClick={() => tarefa.executar((ctx) => comprimirImagens(arquivos, comp, ctx), 'Comprimindo')}>
+              Comprimir{arquivos.length > 1 ? ` ${arquivos.length} imagens` : ''}
+            </Botao>
+          )}
+          <button type="button" onClick={() => setCompleto(true)} className="-mt-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-suave hover:text-tinta">
+            <Icone nome="ampliar" tamanho={13} />
+            Editor completo: recortar, girar, tamanho e cores
+          </button>
+        </aside>
+      ) : (
       <aside className="cartao flex flex-col overflow-hidden lg:sticky lg:top-20">
         <div role="tablist" aria-label="Edição" className="grid grid-cols-4 border-b border-borda">
           {ABAS.map((a) => (
@@ -527,6 +565,7 @@ export default function EditorImagem() {
           )}
         </div>
       </aside>
+      )}
 
       <DialogoBaixar
         aberto={Boolean(baixando)}

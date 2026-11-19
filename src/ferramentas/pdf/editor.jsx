@@ -4,7 +4,8 @@ import { DialogoBaixar, NomeEditavel, OpcoesCartoes } from '../../componentes/fe
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Entrada, Grupo, Progresso, SeloCategoria } from '../../componentes/ui'
-import { LIMITE_PDF, abrirEdicao, abrirLeitura, obterPdfLib, salvarPdf } from '../../motores/pdf'
+import { AtalhosDoEditor } from '../../componentes/ferramenta/Atalhos'
+import { LIMITE_PDF, abrirEdicao, abrirLeitura, lerIntervalos, obterPdfLib, salvarPdf } from '../../motores/pdf'
 import { cor as corPdf, fontePadrao, pontoNaPagina, tamanhoVisual, textoSeguro } from '../../motores/pdf/escrita'
 import { DICAS_COMPRESSAO, otimizarPdf, protegerPdf } from '../../motores/pdf/otimizar'
 import { semExtensao } from '../../nucleo/arquivos'
@@ -23,6 +24,10 @@ import { DialogoAssinatura } from './_assinatura'
  *   - baixar (modal): nome, todas ou só as selecionadas, um PDF ou um por
  *     página, reduzir o tamanho e senha para abrir.
  * O projeto inteiro fica salvo no navegador (nucleo/salvo.js).
+ *
+ * Modo foco: as ferramentas rápidas (Unir, Dividir, Numerar…) abrem este
+ * editor já configurado e simplificado (prop `modo`); "Editor completo"
+ * libera o resto. Sem modo e sem arquivo, mostra os atalhos da categoria.
  */
 
 const A4 = [595.28, 841.89]
@@ -50,6 +55,29 @@ const ABAS = [
   { id: 'paginas', rotulo: 'Números e marca', icone: 'carimbo' },
   { id: 'documento', rotulo: 'Documento', icone: 'info' },
 ]
+/** Ferramentas rápidas que abrem o editor em modo foco (catálogo: predef.modo). */
+const MODOS = {
+  unir: {
+    dica: 'Escolha dois ou mais PDFs. Arraste as miniaturas para pôr as páginas na ordem.',
+    vazio: 'Escolha ou arraste os PDFs que quer unir',
+    acao: 'Unir e baixar',
+    baixar: { separar: 'um' },
+  },
+  dividir: {
+    dica: 'No “Dividir e baixar”: uma página por arquivo, a cada N páginas ou só as que você escolher (selecione na lista ou digite).',
+    vazio: 'Escolha ou arraste o PDF que quer dividir',
+    acao: 'Dividir e baixar',
+    baixar: { separar: 'paginas' },
+  },
+  numerar: {
+    dica: 'Ligue os números e a marca d’água ao lado e confira na prévia antes de baixar.',
+    vazio: 'Escolha ou arraste o PDF',
+    acao: 'Baixar',
+    painel: 'paginas',
+    projeto: { numeros: { ativo: true, posicao: 'base-centro', formato: '{n} / {total}', inicio: 1, tamanho: 11 } },
+  },
+}
+
 const POSICOES = ['topo-esquerda', 'topo-centro', 'topo-direita', 'base-esquerda', 'base-centro', 'base-direita']
 /** Onde o tracinho aparece no botão de cada posição (classes fixas para o Tailwind achar). */
 const ALINHAR = {
@@ -396,7 +424,15 @@ function PainelDocumento({ meta, mudar }) {
 
 /* ─── Exportar ──────────────────────────────────────────────────────────── */
 
-async function gerarPdfs({ p, lista, arquivoDa, opcoes, nome }, { progresso, sinal }) {
+async function gerarPdfs({ p, selecao, arquivoDa, opcoes, nome }, { progresso, sinal }) {
+  // Quais páginas: todas, as selecionadas (na ordem do documento) ou um intervalo digitado (na ordem digitada).
+  const lista =
+    opcoes.paginas === 'selecionadas'
+      ? p.paginas.filter((pg) => selecao.has(pg.id))
+      : opcoes.paginas === 'intervalo'
+        ? lerIntervalos(opcoes.intervalo, p.paginas.length).map((n) => p.paginas[n - 1])
+        : p.paginas
+  if (!lista.length) throw new ErroAmigavel('Nenhuma página para baixar.')
   const { PDFDocument, degrees, rgb, BlendMode } = await obterPdfLib()
   const final = await PDFDocument.create()
   const edicao = new Map()
@@ -480,16 +516,19 @@ async function gerarPdfs({ p, lista, arquivoDa, opcoes, nome }, { progresso, sin
   final.setKeywords(m.palavras ? m.palavras.split(',').map((s) => s.trim()).filter(Boolean) : [])
   final.setProducer('hipotetic')
 
-  // Um PDF, ou um por página.
+  // Um PDF, um por página ou a cada N páginas.
   const partes = []
-  if (opcoes.separar === 'paginas' && paginas.length > 1) {
-    for (let i = 0; i < paginas.length; i += 1) {
+  const tamanhoGrupo = opcoes.separar === 'paginas' ? 1 : opcoes.separar === 'cada' ? Math.max(1, Math.floor(Number(opcoes.cada) || 1)) : 0
+  if (tamanhoGrupo && paginas.length > tamanhoGrupo) {
+    const grupos = Math.ceil(paginas.length / tamanhoGrupo)
+    for (let g = 0; g < grupos; g += 1) {
+      const indices = Array.from({ length: Math.min(tamanhoGrupo, paginas.length - g * tamanhoGrupo) }, (_, k) => g * tamanhoGrupo + k)
       const um = await PDFDocument.create()
-      const [c] = await um.copyPages(final, [i])
-      um.addPage(c)
+      for (const c of await um.copyPages(final, indices)) um.addPage(c)
       um.setTitle(m.titulo || '')
       um.setAuthor(m.autor || '')
-      partes.push({ nome: `${nome}-${String(i + 1).padStart(String(paginas.length).length, '0')}.pdf`, bytes: await um.save({ useObjectStreams: true }), paginas: 1 })
+      const sufixo = tamanhoGrupo === 1 ? String(g + 1).padStart(String(grupos).length, '0') : `parte-${g + 1}`
+      partes.push({ nome: `${nome}-${sufixo}.pdf`, bytes: await um.save({ useObjectStreams: true }), paginas: indices.length })
     }
   } else {
     partes.push({ nome: `${nome}.pdf`, bytes: new Uint8Array(await (await salvarPdf(final)).arrayBuffer()), paginas: paginas.length })
@@ -517,8 +556,12 @@ async function gerarPdfs({ p, lista, arquivoDa, opcoes, nome }, { progresso, sin
 
 /* ─── Editor ────────────────────────────────────────────────────────────── */
 
-export default function EditorPdf() {
-  const [p, setP] = useSalvo('projeto', VAZIO)
+export default function EditorPdf({ modo }) {
+  const m = MODOS[modo] ?? null
+  // Modo foco: só o essencial da tarefa; "Editor completo" libera o resto (fica salvo).
+  const [completo, setCompleto] = useSalvo('completo', false)
+  const foco = Boolean(m) && !completo
+  const [p, setP] = useSalvo('projeto', m?.projeto ? { ...VAZIO, ...m.projeto } : VAZIO)
   const mudar = (d) => setP((x) => ({ ...x, ...(typeof d === 'function' ? d(x) : d) }))
   const vazio = p.fontes.length === 0 && p.paginas.length === 0
   useEmEdicao(!vazio)
@@ -678,6 +721,7 @@ export default function EditorPdf() {
     setFerramenta('selecionar')
   }
   const aoClicar = (pagina, x, y) => {
+    if (foco) return setSelecionado(null)
     if (ferramenta === 'selecionar') return setSelecionado(null)
     if (ferramenta === 'assinatura') {
       if (assinatura) return inserirImagem(pagina, x, y, assinatura.url, assinatura.w, assinatura.h, 160)
@@ -736,10 +780,9 @@ export default function EditorPdf() {
   }
 
   const baixar = (s) => {
-    const lista = s.paginas === 'selecionadas' ? p.paginas.filter((pg) => selecao.has(pg.id)) : p.paginas
     const arquivoDa = (id) => p.fontes.find((f) => f.id === id).arquivo
     mudar({ nome: s.nome })
-    tarefa.executar((ctx) => gerarPdfs({ p, lista, arquivoDa, opcoes: s, nome: s.nome }, ctx), 'Montando o PDF')
+    tarefa.executar((ctx) => gerarPdfs({ p, selecao, arquivoDa, opcoes: s, nome: s.nome }, ctx), 'Montando o PDF')
   }
 
   const nomeAtual = p.nome ?? 'documento-editado'
@@ -760,6 +803,11 @@ export default function EditorPdf() {
           {vazio ? <p className="text-sm font-semibold text-tinta">Nenhum PDF aberto</p> : <NomeEditavel key={nomeAtual} nome={nomeAtual} extensao="pdf" aoMudar={(n) => mudar({ nome: n })} desativado={processando} rotulo="Renomear o PDF final" />}
           <p className="text-xs text-fraca tabular-nums">{vazio ? 'Escolha um ou mais PDFs para começar' : `${total} ${total === 1 ? 'página' : 'páginas'}${p.fontes.length > 1 ? ` de ${p.fontes.length} PDFs` : ''}`}</p>
         </div>
+        {foco ? (
+          <Botao variante="fantasma" tamanho="p" icone="ampliar" onClick={() => setCompleto(true)} title="Mostrar todas as ferramentas do editor de PDF">
+            Editor completo
+          </Botao>
+        ) : null}
         <input
           ref={entradaPdf}
           type="file"
@@ -774,11 +822,13 @@ export default function EditorPdf() {
           }}
         />
         <Botao variante="secundario" tamanho="p" icone="arquivoMais" onClick={() => entradaPdf.current?.click()} disabled={processando}>
-          {vazio ? 'Escolher PDF' : 'Juntar outro PDF'}
+          {vazio ? 'Escolher PDF' : modo === 'unir' ? 'Adicionar PDF' : 'Juntar outro PDF'}
         </Botao>
-        <Botao variante="secundario" tamanho="p" icone="mais" onClick={paginaEmBranco} disabled={processando}>
-          Página em branco
-        </Botao>
+        {foco ? null : (
+          <Botao variante="secundario" tamanho="p" icone="mais" onClick={paginaEmBranco} disabled={processando}>
+            Página em branco
+          </Botao>
+        )}
         <div className="flex items-center gap-0.5">
           <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || processando} />
           <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer || processando} />
@@ -791,11 +841,13 @@ export default function EditorPdf() {
             <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
           </div>
         ) : (
-          <Botao icone="baixar" onClick={() => setBaixando({ paginas: 'todas', separar: 'um', compressao: 'nao', senha: '' })} disabled={!total}>
-            Baixar
+          <Botao icone="baixar" onClick={() => setBaixando({ paginas: 'todas', intervalo: '', separar: 'um', cada: 2, compressao: 'nao', senha: '', ...m?.baixar })} disabled={!total}>
+            {foco ? m.acao : 'Baixar'}
           </Botao>
         )}
       </section>
+
+      {foco ? <p className="-mt-1 px-1 text-sm text-suave">{m.dica}</p> : null}
 
       {erro ? (
         <Aviso tom="erro" aoFechar={() => setErro(null)}>
@@ -804,7 +856,7 @@ export default function EditorPdf() {
       ) : null}
       {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
 
-      <div className={`grid min-h-0 flex-1 gap-3 lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem] ${processando ? 'pointer-events-none opacity-60' : ''}`}>
+      <div className={`grid min-h-0 flex-1 gap-3 ${foco && !m.painel ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem]'} ${processando ? 'pointer-events-none opacity-60' : ''}`}>
         {/* Páginas */}
         <section aria-label="Páginas" className="cartao flex min-h-0 flex-col overflow-hidden max-lg:max-h-[22rem]">
           <div className="flex min-h-11 flex-wrap items-center gap-1 border-b border-borda px-2.5 py-1.5">
@@ -891,11 +943,14 @@ export default function EditorPdf() {
           className={`rolagem-fina relative flex min-h-[24rem] flex-col items-center gap-5 overflow-auto rounded-[var(--radius-cartao)] bg-superficie-2 p-4 ${soltando ? 'outline-2 outline-dashed outline-acento' : ''}`}
         >
           {vazio ? (
-            <button type="button" onClick={() => entradaPdf.current?.click()} className="m-auto flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-borda-forte px-10 py-14 text-center hover:border-fraca">
-              <SeloCategoria categoria="pdf" icone="pdf" tamanho="gg" />
-              <span className="font-display text-lg font-bold text-tinta">Escolha ou arraste PDFs aqui</span>
-              <span className="max-w-xs text-sm text-suave">Organize, junte, anote, assine, numere e baixe — tudo nesta tela. Nada sai do seu aparelho.</span>
-            </button>
+            <div className="m-auto flex w-full flex-col items-center gap-8 py-6">
+              <button type="button" onClick={() => entradaPdf.current?.click()} className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-borda-forte px-10 py-12 text-center hover:border-fraca">
+                <SeloCategoria categoria="pdf" icone="pdf" tamanho="gg" />
+                <span className="font-display text-lg font-bold text-tinta">{foco ? m.vazio : 'Escolha ou arraste PDFs aqui'}</span>
+                <span className="max-w-xs text-sm text-suave">{foco ? 'Nada sai do seu aparelho.' : 'Organize, junte, anote, assine, numere e baixe — tudo nesta tela. Nada sai do seu aparelho.'}</span>
+              </button>
+              {m ? null : <AtalhosDoEditor categoria="pdf" />}
+            </div>
           ) : null}
           {p.paginas.map((pg, i) => {
             const visual = visualDe(pg)
@@ -923,7 +978,12 @@ export default function EditorPdf() {
           })}
         </section>
 
-        {/* Painel */}
+        {/* Painel (no foco: só o do modo, ou nenhum) */}
+        {foco && m.painel === 'paginas' ? (
+          <aside className="cartao rolagem-fina min-h-0 overflow-y-auto p-4">
+            <PainelPaginas numeros={p.numeros} marca={p.marca} mudar={mudar} />
+          </aside>
+        ) : foco ? null : (
         <aside className="cartao flex min-h-0 flex-col overflow-hidden">
           <div role="tablist" aria-label="Painel" className="grid grid-cols-3 border-b border-borda">
             {ABAS.map((a) => (
@@ -950,6 +1010,7 @@ export default function EditorPdf() {
             )}
           </div>
         </aside>
+        )}
       </div>
 
       <input
@@ -999,9 +1060,10 @@ export default function EditorPdf() {
         nome={nomeAtual}
         extensao={baixando?.separar === 'paginas' ? 'zip' : 'pdf'}
         rotuloConfirmar="Baixar"
-        resumo={baixando ? `${baixando.paginas === 'selecionadas' ? nSel : total} ${(baixando.paginas === 'selecionadas' ? nSel : total) === 1 ? 'página' : 'páginas'}${baixando.senha ? ' · com senha' : ''}` : null}
+        resumo={baixando ? `${baixando.paginas === 'intervalo' ? 'Páginas digitadas' : `${baixando.paginas === 'selecionadas' ? nSel : total} ${(baixando.paginas === 'selecionadas' ? nSel : total) === 1 ? 'página' : 'páginas'}`}${baixando.senha ? ' · com senha' : ''}` : null}
         aoConfirmar={(nome) => {
           if (baixando.senha && baixando.senha.length < 4) return // a dica no campo explica
+          if (baixando.paginas === 'intervalo' && !baixando.intervalo.trim()) return
           const s = { ...baixando, nome }
           setBaixando(null)
           baixar(s)
@@ -1013,22 +1075,37 @@ export default function EditorPdf() {
               rotulo="Quais páginas"
               valor={baixando.paginas}
               aoMudar={(v) => setBaixando((b) => ({ ...b, paginas: v }))}
-              colunas="grid-cols-2"
+              colunas="grid-cols-1 sm:grid-cols-3"
               opcoes={[
                 { valor: 'todas', rotulo: `Todas (${total})`, dica: 'O documento inteiro' },
-                { valor: 'selecionadas', rotulo: `Só as selecionadas (${nSel})`, dica: nSel ? 'Extrai essas páginas' : 'Selecione na lista à esquerda', desativado: !nSel },
+                { valor: 'selecionadas', rotulo: `Selecionadas (${nSel})`, dica: nSel ? 'As marcadas na lista' : 'Marque na lista à esquerda', desativado: !nSel },
+                { valor: 'intervalo', rotulo: 'Digitar', dica: 'Ex.: 1-3, 5, 8-' },
               ]}
             />
+            {baixando.paginas === 'intervalo' ? (
+              <Entrada
+                rotulo="Páginas"
+                valor={baixando.intervalo}
+                aoMudar={(v) => setBaixando((b) => ({ ...b, intervalo: v }))}
+                placeholder="1-3, 5, 8-"
+                dica="Na ordem que você digitar. “8-” vai da 8 até o fim."
+                className="-mt-3"
+              />
+            ) : null}
             <OpcoesCartoes
               rotulo="Como salvar"
               valor={baixando.separar}
               aoMudar={(v) => setBaixando((b) => ({ ...b, separar: v }))}
-              colunas="grid-cols-2"
+              colunas="grid-cols-1 sm:grid-cols-3"
               opcoes={[
                 { valor: 'um', rotulo: 'Um PDF', dica: 'Tudo num arquivo só' },
-                { valor: 'paginas', rotulo: 'Um PDF por página', dica: 'Vários arquivos (em ZIP)' },
+                { valor: 'paginas', rotulo: 'Um PDF por página', dica: 'Vários arquivos' },
+                { valor: 'cada', rotulo: 'A cada N páginas', dica: 'Partes do mesmo tamanho' },
               ]}
             />
+            {baixando.separar === 'cada' ? (
+              <Entrada rotulo="Páginas em cada parte" type="number" min="1" valor={String(baixando.cada)} aoMudar={(v) => setBaixando((b) => ({ ...b, cada: v }))} className="-mt-3 max-w-48" />
+            ) : null}
             <OpcoesCartoes
               rotulo="Reduzir o tamanho"
               valor={baixando.compressao}

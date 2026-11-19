@@ -54,7 +54,9 @@ export function useSalvo(nome, inicial) {
     ler(chave).then((salvo) => {
       if (!vivo) return
       carregado.current = true
-      if (!mexeu.current && salvo && salvo.v !== undefined && !iguais(salvo.v, inicialRef.current)) {
+      // A pessoa mexeu enquanto o salvo era lido (banco lento): grava já o que ela fez.
+      if (mexeu.current) return gravar()
+      if (salvo && salvo.v !== undefined && !iguais(salvo.v, inicialRef.current)) {
         setValorBruto(salvo.v)
         ctx?.aoRecuperar?.(salvo.quando)
       }

@@ -199,7 +199,13 @@ export default [
     pagina: '/utilitarios/qr-code',
     async executar(t) {
       await t.js(`__t.digitar('Endereço', 'lzdev.com.br/salvo')`)
-      await t.esperar(900)
+      // Espera o valor chegar ao IndexedDB antes de sair.
+      assert.ok(await t.js(`for (let i = 0; i < 50; i += 1) {
+        const v = await new Promise((ok) => { const r = indexedDB.open('hipotetic', 1); r.onsuccess = () => { try { const g = r.result.transaction('rascunhos').objectStore('rascunhos').get('ferramenta:utilitarios/qr-code:campos'); g.onsuccess = () => { ok(g.result?.v?.url); r.result.close() }; g.onerror = () => ok(null) } catch { ok(null) } }; r.onerror = () => ok(null) })
+        if (v === 'lzdev.com.br/salvo') return true
+        await new Promise((ok) => setTimeout(ok, 100))
+      }
+      return false`), 'o texto não chegou a ser salvo')
       await t.navegar('/utilitarios/qr-code')
       await t.aguardar(`[...document.querySelectorAll('main input')].some((i) => i.value === 'lzdev.com.br/salvo')`, 15000)
       await t.aguardar('document.querySelector("main [role=img] svg")', 15000)

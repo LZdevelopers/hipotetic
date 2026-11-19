@@ -221,7 +221,8 @@ const TODAS = [
   // ─── Imagens ──────────────────────────────────────────────────────────────
   {
     slug: 'imagem/comprimir',
-    modulo: 'imagem/comprimir',
+    modulo: 'imagem/editor',
+    predef: { modo: 'comprimir' },
     nome: 'Comprimir imagens',
     titulo: 'Comprimir imagens JPG, PNG e WebP',
     resumo: 'Reduza o tamanho sem perder qualidade visível.',
@@ -285,7 +286,9 @@ const TODAS = [
   // ─── PDF ──────────────────────────────────────────────────────────────────
   {
     slug: 'pdf/unir',
-    modulo: 'pdf/unir',
+    modulo: 'pdf/editor',
+    predef: { modo: 'unir' },
+    telaCheia: true,
     nome: 'Unir PDF',
     titulo: 'Unir PDF: juntar vários arquivos em um',
     resumo: 'Junte vários PDFs em um só, na ordem que quiser.',
@@ -296,7 +299,9 @@ const TODAS = [
   },
   {
     slug: 'pdf/dividir',
-    modulo: 'pdf/dividir',
+    modulo: 'pdf/editor',
+    predef: { modo: 'dividir' },
+    telaCheia: true,
     nome: 'Dividir PDF',
     titulo: 'Dividir PDF ou extrair páginas',
     resumo: 'Por página, a cada N, por intervalos ou só algumas.',
@@ -345,7 +350,9 @@ const TODAS = [
   },
   {
     slug: 'pdf/numerar-marca-dagua',
-    modulo: 'pdf/numerar-marca',
+    modulo: 'pdf/editor',
+    predef: { modo: 'numerar' },
+    telaCheia: true,
     nome: 'Numerar e marca d’água',
     titulo: 'Numerar páginas e colocar marca d’água no PDF',
     resumo: 'Números de página e marca d’água de texto ou logo.',
