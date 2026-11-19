@@ -380,9 +380,22 @@
     scale: 1;
   }
 }
-@keyframes orbitar {
+@keyframes encher {
+  from {
+    transform: scaleX(0);
+  }
   to {
-    rotate: 360deg;
+    transform: scaleX(1);
+  }
+}
+@keyframes fluxo {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+@keyframes rolar {
+  to {
+    translate: -50% 0;
   }
 }
 

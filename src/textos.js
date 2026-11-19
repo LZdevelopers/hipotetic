@@ -45,11 +45,12 @@ export const inicio = {
   explorar: (n) => `Explorar as ${n} ferramentas`,
   soltar: {
     janela: 'Conversor',
-    titulo: 'Arraste e solte seu arquivo aqui',
-    ou: 'ou',
-    escolher: 'escolha um arquivo',
-    dica: 'Ele abre no conversor, e você escolhe o formato.',
+    titulo: 'Solte um arquivo aqui ou',
+    escolher: 'escolha um',
     rotulo: 'Escolher arquivos para converter',
+    local: 'no seu navegador',
+    convertendo: 'convertendo…',
+    pronto: 'pronto',
   },
   tudo: {
     titulo: (n) => `${n} ferramentas para tudo o que você precisa`,

@@ -1,18 +1,17 @@
-import { useState } from 'react'
 import { Icone } from '../componentes/Icone'
 import { Pilulas } from '../componentes/ListaFerramentas'
 import { Anel, Bloco3D, Faisca, useInclinacao } from '../componentes/inicio/Objetos3D'
+import { PalcoAbertura } from '../componentes/inicio/Palco'
 import { caminhoDa, categoriasComFerramentas, ferramentaPorSlug, ferramentas, ferramentasDaCategoria } from '../ferramentas/catalogo'
-import { entregar } from '../nucleo/entrega'
 import { useRecentes } from '../nucleo/preferencias'
-import { Link, useRota } from '../nucleo/roteador'
+import { Link } from '../nucleo/roteador'
 import { inicio, textos } from '../textos'
 
 /*
  * Página inicial: apresenta o site. Identidade LZdev: preto e branco; cor viva
  * só nos ícones (blocos 3D em CSS puro, componentes/inicio/Objetos3D.jsx).
  * Cada ação aparece uma vez só:
- *   - converter  → a janela de soltar arquivo da abertura;
+ *   - converter  → a janela do conversor no palco da abertura;
  *   - ver tudo   → o botão da abertura (as categorias levam a cada aba).
  */
 
@@ -31,79 +30,32 @@ function Halo({ className = '' }) {
 
 // ─── 1. Abertura ──────────────────────────────────────────────────────────────
 
-/** Janela de vidro onde se solta um arquivo: ele abre no conversor. */
-function SoltarArquivo() {
-  const { navegar } = useRota()
-  const [sobre, setSobre] = useState(false)
-  const enviar = (lista) => {
-    if (!lista?.length) return
-    entregar('converter', [...lista])
-    navegar('/converter')
-  }
+/** Formatos que o conversor abre (os mesmos exemplos da página do conversor). */
+const FORMATOS = ['MP4', 'MOV', 'MP3', 'WAV', 'JPG', 'PNG', 'WEBP', 'GIF', 'PDF', 'DOCX', 'ZIP', 'RAR']
+
+/** Faixa discreta com os formatos, passando devagar. */
+function FaixaFormatos() {
   return (
-    <div
-      className="absolute inset-x-[15%] top-[12%] bottom-[16%] flex flex-col overflow-hidden rounded-3xl border border-borda-forte bg-superficie/80 shadow-[0_40px_80px_-30px_rgb(0_0_0/0.35)] backdrop-blur-xl transition-transform duration-700 ease-[var(--ease-suave)] escuro:shadow-[0_40px_90px_-30px_rgb(0_0_0/0.9)]"
-      style={{ transform: 'rotateY(calc(-11deg + var(--mx, 0) * 5deg)) rotateX(calc(5deg - var(--my, 0) * 4deg))' }}
-    >
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-borda px-4">
-        <span className="size-2.5 rounded-full bg-superficie-3" />
-        <span className="size-2.5 rounded-full bg-superficie-3" />
-        <span className="size-2.5 rounded-full bg-superficie-3" />
-        <span className="ml-auto text-[0.6875rem] font-semibold tracking-wide text-fraca uppercase">{inicio.soltar.janela}</span>
+    <div aria-hidden="true" className="mt-12 max-w-xl overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)]">
+      <div className="flex w-max animate-[rolar_38s_linear_infinite] font-mono text-xs tracking-[0.12em] text-fraca">
+        {[...FORMATOS, ...FORMATOS].map((f, i) => (
+          <span key={i} className="flex items-center gap-7 pr-7">
+            .{f.toLowerCase()}
+            <span className="size-1 rounded-full bg-borda-forte" />
+          </span>
+        ))}
       </div>
-      <label
-        onDragOver={(e) => {
-          e.preventDefault()
-          setSobre(true)
-        }}
-        onDragLeave={() => setSobre(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setSobre(false)
-          enviar(e.dataTransfer.files)
-        }}
-        className={`m-3 flex flex-1 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 text-center transition-colors sm:m-4 ${sobre ? 'border-tinta bg-superficie-2' : 'border-borda-forte hover:border-fraca'}`}
-      >
-        <input type="file" multiple className="sr-only" aria-label={inicio.soltar.rotulo} onChange={(e) => enviar(e.target.files)} />
-        <Bloco3D cor="conversor" glifo="nuvem" tamanho="clamp(3rem, 6.5vw, 4.5rem)" rot={[10, 0, 0]} amp={6} sombra={false} className="mb-2" />
-        <span className="font-display text-[clamp(0.9375rem,1.5vw,1.1875rem)] leading-tight font-bold text-tinta">{inicio.soltar.titulo}</span>
-        <span className="text-sm text-suave">
-          {inicio.soltar.ou} <span className="font-semibold text-tinta underline decoration-borda-forte underline-offset-4">{inicio.soltar.escolher}</span>
-        </span>
-        <span className="hidden text-xs text-fraca sm:block">{inicio.soltar.dica}</span>
-      </label>
     </div>
   )
 }
 
-function CenaAbertura({ className = '' }) {
-  const ref = useInclinacao()
-  const t = 'clamp(3.25rem, 7.5vw, 5.5rem)'
-  return (
-    <div ref={ref} className={`relative aspect-[1.12] w-full ${className}`} style={{ perspective: '1400px' }}>
-      <Halo className="inset-x-[8%] inset-y-[10%]" />
-      <Anel className="inset-x-[2%] top-[36%] h-[40%]" style={{ rotate: '-8deg' }} />
-      <Faisca className="top-[3%] left-[40%]" atraso={0.4} />
-      <Faisca className="bottom-[3%] left-[28%]" atraso={1.6} tamanho={11} />
-      <Faisca className="top-[22%] right-[0%]" atraso={2.2} tamanho={12} />
-      <SoltarArquivo />
-      <Bloco3D cor="video" tamanho={t} rot={[10, 24, -8]} atraso={0} className="!absolute top-[4%] left-[4%]" />
-      <Bloco3D cor="audio" tamanho={t} rot={[8, 28, 7]} atraso={2.1} className="!absolute top-[38%] left-[-1%]" />
-      <Bloco3D cor="imagem" tamanho={t} rot={[14, 20, -5]} atraso={4} className="!absolute top-[68%] left-[8%]" />
-      <Bloco3D cor="pdf" tamanho={t} rot={[10, -24, 9]} atraso={1.2} className="!absolute top-[2%] right-[4%]" />
-      <Bloco3D cor="documentos" tamanho={t} rot={[8, -28, -6]} atraso={3.2} className="!absolute top-[37%] right-[-1%]" />
-      <Bloco3D cor="compactados" tamanho={t} rot={[14, -22, 11]} atraso={5} className="!absolute top-[67%] right-[7%]" />
-    </div>
-  )
-}
-
-/** Abertura: título, texto e o único botão à esquerda; a cena 3D à direita. */
+/** Abertura: título, texto e o único botão à esquerda; o palco 3D à direita. */
 function Abertura() {
   return (
     <section className="relative isolate">
-      <div className={`${LARGURA} grid min-h-[calc(100svh-3.75rem)] items-center gap-x-10 gap-y-14 py-16 lg:grid-cols-[1.05fr_1fr] lg:py-20`}>
-        <div className="animate-surgir">
-          <h1 className="text-[clamp(2.4rem,5.6vw,4.4rem)] leading-[1.02] font-extrabold tracking-[-0.04em]">
+      <div className={`${LARGURA} grid min-h-[calc(100svh-3.75rem)] items-center gap-x-10 gap-y-14 py-16 lg:grid-cols-[1fr_1.05fr] lg:py-20`}>
+        <div className="min-w-0 animate-surgir">
+          <h1 className="text-[clamp(2.4rem,5.4vw,4.3rem)] leading-[1.02] font-extrabold tracking-[-0.04em]">
             {inicio.titulo[0]} <span className="text-fraca">{inicio.titulo[1]}</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-relaxed text-suave sm:text-lg">{inicio.subtitulo}</p>
@@ -114,8 +66,9 @@ function Abertura() {
             {inicio.explorar(ferramentas.length)}
             <Icone nome="seta" tamanho={17} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
+          <FaixaFormatos />
         </div>
-        <CenaAbertura className="mx-auto max-w-[40rem]" />
+        <PalcoAbertura className="mx-auto max-w-[42rem]" />
       </div>
     </section>
   )
