@@ -53,7 +53,8 @@ function FaixaFormatos() {
 function Abertura() {
   return (
     <section className="relative isolate">
-      <div className={`${LARGURA} grid min-h-[calc(100svh-3.75rem)] items-center gap-x-10 gap-y-14 py-16 lg:grid-cols-[1fr_1.05fr] lg:py-20`}>
+      <div className={`${LARGURA} flex min-h-[calc(100svh-3.75rem)] flex-col justify-center gap-8 py-10 lg:py-12`}>
+        <div className="grid items-center gap-x-10 gap-y-14 lg:grid-cols-[1fr_1.05fr]">
         <div className="min-w-0 animate-surgir">
           <h1 className="text-[clamp(2.4rem,5.4vw,4.3rem)] leading-[1.02] font-extrabold tracking-[-0.04em]">
             {inicio.titulo[0]} <span className="text-fraca">{inicio.titulo[1]}</span>
@@ -68,7 +69,10 @@ function Abertura() {
           </Link>
           <FaixaFormatos />
         </div>
-        <PalcoAbertura className="mx-auto max-w-[42rem]" />
+        <PalcoAbertura className="mx-auto max-w-[36rem]" />
+        </div>
+        {/* O que a pessoa usou por último: embaixo, ainda na abertura, centralizado. */}
+        <Recentes />
       </div>
     </section>
   )
@@ -142,16 +146,16 @@ function Recentes() {
   const lista = slugs.map(ferramentaPorSlug).filter(Boolean)
   if (!lista.length) return null
   return (
-    <section aria-labelledby="titulo-recentes" className="mt-20 flex flex-col items-center">
-      <div className="mb-4 flex items-baseline gap-4">
-        <h3 id="titulo-recentes" className="text-sm font-semibold text-suave">
-          {textos.recentes}
-        </h3>
-        <button type="button" onClick={limpar} className="text-xs font-semibold text-fraca hover:text-tinta">
-          {textos.limparRecentes}
-        </button>
+    <section aria-labelledby="titulo-recentes" className="flex animate-surgir flex-wrap items-center justify-center gap-x-3 gap-y-2.5 text-center">
+      <h2 id="titulo-recentes" className="text-sm font-semibold text-suave">
+        {textos.recentes}
+      </h2>
+      <div className="[&>ul]:justify-center">
+        <Pilulas lista={lista.slice(0, 5)} />
       </div>
-      <Pilulas lista={lista.slice(0, 6)} />
+      <button type="button" onClick={limpar} className="text-xs font-semibold text-fraca hover:text-tinta">
+        {textos.limparRecentes}
+      </button>
     </section>
   )
 }
@@ -188,7 +192,6 @@ function Categorias() {
             })}
           </ul>
         </div>
-        <Recentes />
       </div>
     </section>
   )
