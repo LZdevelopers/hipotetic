@@ -94,24 +94,73 @@ async function bytesDoModelo(chave, progresso, sinal) {
   return final
 }
 
-const sessoes = {}
+/*
+ * Placa de vídeo (WebGPU) é bem mais rápida, mas em algumas (principalmente
+ * as integradas de notebook) o modelo estoura a memória de vídeo ou o driver
+ * falha no meio. Aí roda de novo pelo processador (wasm) e o navegador lembra:
+ * nas próximas vezes já vai direto pelo processador neste aparelho.
+ */
+const SEM_GPU = 'hipotetic:ia-sem-gpu'
+const semGpu = () => {
+  try {
+    return localStorage.getItem(SEM_GPU) === '1'
+  } catch {
+    return false
+  }
+}
+const marcarSemGpu = () => {
+  try {
+    localStorage.setItem(SEM_GPU, '1')
+  } catch {
+    /* sem armazenamento: tenta a placa de novo da próxima vez */
+  }
+}
+
+const sessoes = {} // chave → { s, ep }
 async function sessao(chave, progresso, sinal) {
   if (sessoes[chave]) return sessoes[chave]
   const ort = await obterOrt()
   const bytes = await bytesDoModelo(chave, (v) => progresso?.(v * 0.9, `Baixando o ${MODELOS[chave].nome} (só na primeira vez)`), sinal)
   progresso?.(0.92, 'Preparando a IA')
   const opcoes = chave === 'apagar' ? { extra: { session: { disable_quant_qdq: '1' } } } : {}
-  const tentar = (ep) => ort.InferenceSession.create(bytes, { executionProviders: ep, graphOptimizationLevel: 'all', ...opcoes })
+  const criar = async (ep) => ({ s: await ort.InferenceSession.create(bytes, { executionProviders: [ep], graphOptimizationLevel: 'all', ...opcoes }), ep })
   try {
-    sessoes[chave] = navigator.gpu ? await tentar(['webgpu']).catch(() => tentar(['wasm'])) : await tentar(['wasm'])
+    if (navigator.gpu && !semGpu()) {
+      try {
+        sessoes[chave] = await criar('webgpu')
+      } catch (e) {
+        console.warn('IA: a placa de vídeo não abriu o modelo; usando o processador.', e)
+        marcarSemGpu()
+        sessoes[chave] = await criar('wasm')
+      }
+    } else sessoes[chave] = await criar('wasm')
   } catch (e) {
     console.error(e)
     throw new ErroAmigavel('Este navegador não conseguiu rodar a IA. Tente no Chrome ou no Edge atualizados.')
   }
   return sessoes[chave]
 }
-async function prepararSessao(chave, progresso, sinal) {
-  return { ort: await obterOrt(), s: await sessao(chave, progresso, sinal) }
+
+/** Roda o modelo; se a placa de vídeo falhar, tenta de novo pelo processador. */
+async function rodar(chave, entradas, progresso, sinal) {
+  let atual = await sessao(chave, progresso, sinal)
+  try {
+    return await atual.s.run(entradas)
+  } catch (e) {
+    console.error(`IA (${chave}) falhou em ${atual.ep}:`, e)
+    if (atual.ep !== 'webgpu') throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+    marcarSemGpu()
+    atual.s.release?.().catch?.(() => {})
+    delete sessoes[chave]
+    progresso?.(0.95, 'A placa de vídeo não deu conta; continuando pelo processador (mais lento)')
+    atual = await sessao(chave, null, sinal)
+    try {
+      return await atual.s.run(entradas)
+    } catch (e2) {
+      console.error(`IA (${chave}) falhou também no processador:`, e2)
+      throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+    }
+  }
 }
 
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
@@ -123,7 +172,8 @@ const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.ma
  * imagem em 1024², a máscara (0–1) volta ao tamanho original e vira o alfa.
  */
 export async function removerFundo(fonte, { progresso, sinal } = {}) {
-  const { ort, s } = await prepararSessao('fundo', progresso, sinal)
+  const ort = await obterOrt()
+  await sessao('fundo', progresso, sinal)
   progresso?.(0.94, 'Separando o fundo')
   const L = 1024
   const c = canvas(L, L)
@@ -136,8 +186,8 @@ export async function removerFundo(fonte, { progresso, sinal } = {}) {
   for (let i = 0; i < L * L; i += 1) {
     for (let k = 0; k < 3; k += 1) entrada[k * L * L + i] = (px[i * 4 + k] / 255 - media[k]) / desvio[k]
   }
-  const saida = await s.run({ [s.inputNames[0]]: new ort.Tensor('float32', entrada, [1, 3, L, L]) })
-  const logits = saida[s.outputNames[0]].data
+  const saida = await rodar('fundo', { input_image: new ort.Tensor('float32', entrada, [1, 3, L, L]) }, progresso, sinal)
+  const logits = (saida.output_image ?? Object.values(saida)[0]).data
   // Máscara 1024² → canvas (alfa), depois ampliada para o tamanho da imagem.
   const m = canvas(L, L)
   const mctx = m.getContext('2d')
@@ -185,7 +235,8 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
     }
   }
   if (x1 < 0) throw new ErroAmigavel('Pinte por cima do que você quer apagar.')
-  const { ort, s } = await prepararSessao('apagar', progresso, sinal)
+  const ort = await obterOrt()
+  await sessao('apagar', progresso, sinal)
   progresso?.(0.94, 'Apagando')
 
   // Quadrado com bastante contexto em volta (o LaMa precisa ver o entorno).
@@ -214,10 +265,7 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
     furo[i] = buraco
     for (let k = 0; k < 3; k += 1) imagem[k * T * T + i] = buraco ? 0 : ipx[i * 4 + k] / 255
   }
-  const saida = await s.run({
-    image: new ort.Tensor('float32', imagem, [1, 3, T, T]),
-    mask: new ort.Tensor('float32', furo, [1, 1, T, T]),
-  })
+  const saida = await rodar('apagar', { image: new ort.Tensor('float32', imagem, [1, 3, T, T]), mask: new ort.Tensor('float32', furo, [1, 1, T, T]) }, progresso, sinal)
   const out = saida.output.data
   const preenchido = canvas(T, T)
   const pctx = preenchido.getContext('2d')
