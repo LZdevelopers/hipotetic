@@ -102,7 +102,8 @@ function vercelFunctions() {
  * Arquivos de apoio de bibliotecas que rodam no navegador, servidos pelo
  * próprio site (sem CDN e sem abrir a CSP para scripts de terceiros):
  *   /pdfjs/      cmaps, fontes padrão e decodificadores wasm do pdf.js;
- *   /tesseract/  worker e núcleo (wasm) do OCR.
+ *   /tesseract/  worker e núcleo (wasm) do OCR;
+ *   /ort/        runtime (wasm) do ONNX, que roda os modelos de IA do editor de imagem.
  * No dev, direto do node_modules; no build, copiados para dist/.
  */
 const ESTATICOS = {
@@ -116,6 +117,16 @@ const ESTATICOS = {
     ['tesseract-core-lstm.wasm.js', 'tesseract.js-core/tesseract-core-lstm.wasm.js'],
     ['tesseract-core-simd-lstm.wasm.js', 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js'],
     ['tesseract-core-relaxedsimd-lstm.wasm.js', 'tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js'],
+  ],
+  ort: [
+    ['ort-wasm-simd-threaded.mjs', 'onnxruntime-web/dist/ort-wasm-simd-threaded.mjs'],
+    ['ort-wasm-simd-threaded.wasm', 'onnxruntime-web/dist/ort-wasm-simd-threaded.wasm'],
+    ['ort-wasm-simd-threaded.jsep.mjs', 'onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs'],
+    ['ort-wasm-simd-threaded.jsep.wasm', 'onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm'],
+    ['ort-wasm-simd-threaded.jspi.mjs', 'onnxruntime-web/dist/ort-wasm-simd-threaded.jspi.mjs'],
+    ['ort-wasm-simd-threaded.jspi.wasm', 'onnxruntime-web/dist/ort-wasm-simd-threaded.jspi.wasm'],
+    ['ort-wasm-simd-threaded.asyncify.mjs', 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs'],
+    ['ort-wasm-simd-threaded.asyncify.wasm', 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm'],
   ],
 }
 
@@ -137,7 +148,7 @@ function arquivosEstaticos() {
           const arquivo = modulos + entrada[1] + caminho.slice(entrada[0].length)
           if (!existsSync(arquivo)) return next()
           if (arquivo.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm')
-          if (arquivo.endsWith('.js')) res.setHeader('Content-Type', 'text/javascript')
+          if (arquivo.endsWith('.js') || arquivo.endsWith('.mjs')) res.setHeader('Content-Type', 'text/javascript')
           res.end(readFileSync(arquivo))
         })
       }

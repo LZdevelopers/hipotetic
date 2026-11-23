@@ -243,12 +243,40 @@ const SECOES = [
     grupo: 'Editores',
     id: 'editor-imagem',
     titulo: 'Editor de imagem',
-    palavras: 'recortar girar redimensionar filtros cores lote',
+    palavras: 'recortar girar redimensionar esticar filtros cores remover fundo apagar objeto pincel texto ia',
     conteudo: (
-      <p>
-        Recortar (livre ou em proporções), girar e espelhar, mudar o tamanho (inclusive para redes sociais) e ajustar cores e filtros — numa imagem ou em várias de uma vez.
-        Formato e qualidade se escolhem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
-      </p>
+      <>
+        <p>
+          Uma imagem por vez, em tela cheia. Recortar, Tamanho e Girar têm “Aplicar”: a edição continua sobre o resultado, e tudo tem desfazer. Formato, qualidade e o
+          tamanho estimado do arquivo aparecem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
+        </p>
+        <ul>
+          <li>
+            <strong>Ajustes</strong>: exposição, brilho, contraste, saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque, vinheta e filtros prontos. Não estragam a
+            imagem: dá para mudar a qualquer hora.
+          </li>
+          <li>
+            <strong>Tamanho</strong>: largura e altura com ou sem manter a proporção — desmarque e arraste as alças para esticar ou achatar. Tamanhos de rede social cortam as
+            sobras, sem esticar.
+          </li>
+          <li>
+            <strong>Remover fundo</strong> e <strong>Apagar objeto</strong>: IA que roda no seu aparelho. Na primeira vez, o navegador baixa o modelo (cerca de 190 MB para o
+            fundo e 35 MB para apagar) e guarda para as próximas. A imagem nunca é enviada.
+          </li>
+          <li>
+            <strong>Pincel</strong> (com borracha que deixa transparente) e <strong>Texto</strong> (fonte, cor, contorno; arraste para mover).
+          </li>
+        </ul>
+        <Tabela
+          cabecalho={['Tecla', 'O que faz']}
+          linhas={[
+            [<><Tecla>Ctrl</Tecla> + <Tecla>Z</Tecla></>, 'Desfazer (com Shift, refazer)'],
+            [<Tecla key="a">Enter</Tecla>, 'Aplicar o recorte'],
+            [<Tecla key="a">Delete</Tecla>, 'Apagar o texto selecionado'],
+            [<Tecla key="a">Esc</Tecla>, 'Tirar a seleção'],
+          ]}
+        />
+      </>
     ),
   },
   {

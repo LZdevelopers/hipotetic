@@ -197,7 +197,7 @@ function desfocar(dados, largura, altura, raio) {
   }
 }
 
-function aplicarAjustes(fonte, ajustes) {
+export function aplicarAjustes(fonte, ajustes) {
   const matriz = matrizDeAjustes(ajustes)
   // sigma (px) do blur() do CSS; 3 caixas de raio r ≈ gaussiano: r = (√(4σ²+1) − 1) / 2
   const sigma = ajustes.desfoque ? (ajustes.desfoque * Math.max(fonte.width, fonte.height)) / 1000 : 0

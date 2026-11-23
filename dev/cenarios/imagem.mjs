@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict'
 import { SVG, ajustes, enviar, formato, jpg, png } from './comum.mjs'
 
+/** Editor de imagem: abre uma imagem e prepara a captura do que for baixado. */
+const abrirNoEditor = async (t, w, h) => {
+  await t.js("window.__baixados = []; const __orig = URL.createObjectURL.bind(URL); URL.createObjectURL = (b) => { if (b instanceof Blob) window.__baixados.push(b); return __orig(b) }")
+  await t.js(`__t.enviar(${png(w, h, false)})`)
+  await t.aguardar("document.querySelector('main canvas[aria-label=Imagem]')", 20000)
+}
+const ferramenta = (t, nome) => t.js(`[...document.querySelectorAll('main nav[aria-label=Ferramentas] button')].find((b) => b.textContent.includes(${JSON.stringify(nome)})).click()`)
+/** Baixa (PNG) e devolve [largura, altura] do arquivo. */
+const baixarDimensoes = async (t) => {
+  const antes = await t.js('return window.__baixados.length')
+  await t.clicar('Baixar')
+  await t.confirmarBaixar()
+  await t.aguardar(`window.__baixados.length > ${antes}`, 30000)
+  return t.js('const bmp = await createImageBitmap(window.__baixados.at(-1)); return [bmp.width, bmp.height]')
+}
+
 /** Lê um pixel do resultado `indice` (na página). */
 const pixel = (t, x, y, indice = 0) =>
   t.js(`const a = document.querySelectorAll('section[aria-label=Resultado] a[download]')[${indice}]
@@ -106,38 +122,81 @@ export default [
     },
   },
   {
-    nome: 'imagem/editor: recorte 1:1',
+    nome: 'imagem/editor: recortar 1:1 e continuar editando sobre o recorte',
     pagina: '/imagem/editor',
     async executar(t) {
-      await enviar(t, png(640, 480, false))
-      await t.aguardar(`document.querySelector('main img[alt="Prévia"]')?.naturalWidth > 0`)
+      await abrirNoEditor(t, 640, 480)
+      await ferramenta(t, 'Recortar')
       await t.clicar('1:1')
-      await t.clicar('Baixar')
-      await t.confirmarBaixar()
-      await t.aguardarResultado()
-      const [r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.largura, r.altura], [480, 480])
-      assert.equal(r.nome, 'teste-editada.png')
+      await t.js("document.querySelector('main [data-aplicar]').click()")
+      await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('480 × 480 px')", 10000)
+      // Continua editando: gira o recorte.
+      await ferramenta(t, 'Girar')
+      await t.clicar('Horário')
+      await t.esperar(400)
+      assert.deepEqual(await baixarDimensoes(t), [480, 480])
     },
   },
   {
-    nome: 'imagem/editor: formato no modal e renomear no resultado',
+    nome: 'imagem/editor: girar 90° troca largura e altura (e desfaz)',
     pagina: '/imagem/editor',
     async executar(t) {
-      await enviar(t, png(640, 480, false))
-      await t.aguardar(`document.querySelector('main img[alt="Prévia"]')?.naturalWidth > 0`)
-      assert.equal(await t.js("return [...document.querySelectorAll('main [role=tab]')].some((b) => b.textContent.includes('Salvar como'))"), false, 'a aba Salvar como deveria ter saído')
+      await abrirNoEditor(t, 640, 480)
+      await ferramenta(t, 'Girar')
+      await t.clicar('Horário')
+      await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('480 × 640 px')", 10000)
+      assert.deepEqual(await baixarDimensoes(t), [480, 640])
+      await t.esperar(500)
+      await t.js("document.querySelector('main button[aria-label=\"Desfazer (Ctrl+Z)\"]').click()")
+      await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('640 × 480 px')", 10000)
+    },
+  },
+  {
+    nome: 'imagem/editor: esticar sem manter a proporção',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await abrirNoEditor(t, 640, 480)
+      await ferramenta(t, 'Tamanho')
+      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.trim() === 'Manter a proporção').click()")
+      await t.js("__t.digitar('Altura', '200')")
+      await t.js("document.querySelector('main [data-aplicar]').click()")
+      await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('640 × 200 px')", 10000)
+      assert.deepEqual(await baixarDimensoes(t), [640, 200])
+    },
+  },
+  {
+    nome: 'imagem/editor: tamanho de rede social corta sem esticar',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await abrirNoEditor(t, 800, 600)
+      await ferramenta(t, 'Tamanho')
+      await t.js(`const s = [...document.querySelectorAll('main aside select')].find((x) => [...x.options].some((o) => o.value === 'ig-quadrado'))
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, 'ig-quadrado'); s.dispatchEvent(new Event('change', { bubbles: true }))`)
+      await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('1080 × 1080 px')", 10000)
+      assert.deepEqual(await baixarDimensoes(t), [1080, 1080])
+    },
+  },
+  {
+    nome: 'imagem/editor: P&B, texto e tamanho estimado no baixar',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await abrirNoEditor(t, 640, 480)
+      await t.clicar('P&B')
+      await ferramenta(t, 'Texto')
+      await t.js(`const c = document.querySelector('main canvas[aria-label=Imagem]'); const r = c.getBoundingClientRect()
+        c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: r.left + r.width * 0.3, clientY: r.top + r.height * 0.5 }))`)
+      await t.aguardar("document.querySelector('main [data-texto]')", 5000)
       await t.clicar('Baixar')
-      await t.nomeNoModal('foto final')
-      await t.js("[...document.querySelectorAll('dialog[open] [role=radio], dialog[open] button')].find((b) => b.textContent.trim() === 'WebP').click()")
+      await t.aguardar("/~\\d/.test(document.querySelector('dialog[open] [data-estimativa]')?.textContent ?? '')", 30000)
+      await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('JPG')).click()")
+      await t.aguardar("/~\\d/.test(document.querySelector('dialog[open] [data-estimativa]')?.textContent ?? '')", 30000)
       await t.confirmarBaixar()
-      await t.aguardarResultado()
-      let [r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.nome, r.tipo], ['foto final.webp', 'webp'])
-      // Renomear clicando no nome do resultado.
-      await t.js("document.querySelector('section[aria-label=Resultado] [data-renomear]').click()")
-      await t.js(`const i = document.querySelector('section[aria-label=Resultado] input[aria-label="Nome do arquivo"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'capa'); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`)
-      await t.aguardar("document.querySelector('section[aria-label=Resultado] a[download]')?.getAttribute('download') === 'capa.webp'", 3000)
+      await t.aguardar('window.__baixados.length > 0', 30000)
+      const [tipo, cinza] = await t.js(`const b = window.__baixados.at(-1); const bmp = await createImageBitmap(b)
+        const c = new OffscreenCanvas(bmp.width, bmp.height); const x = c.getContext('2d'); x.drawImage(bmp, 0, 0)
+        const [r, g, bl] = x.getImageData(20, 20, 1, 1).data; return [b.type, Math.max(Math.abs(r - g), Math.abs(g - bl)) <= 6]`)
+      assert.equal(tipo, 'image/jpeg')
+      assert.ok(cinza, 'deveria estar em preto e branco')
     },
   },
   {
@@ -163,58 +222,6 @@ export default [
       await t.navegar('/imagem/comprimir')
       await t.esperar(1500)
       assert.equal(await t.js("return document.querySelector('main').innerText.includes('Recuperamos')"), false, 'depois de começar do zero não deveria recuperar nada')
-    },
-  },
-  {
-    nome: 'imagem/editor: girar 90° troca largura e altura',
-    pagina: '/imagem/editor',
-    async executar(t) {
-      await enviar(t, png(640, 480, false))
-      await aba(t, 'Girar')
-      await t.clicar('Horário')
-      await t.clicar('Baixar')
-      await t.confirmarBaixar()
-      await t.aguardarResultado()
-      const [r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.largura, r.altura], [480, 640])
-    },
-  },
-  {
-    nome: 'imagem/editor: tamanho de rede social (post quadrado)',
-    pagina: '/imagem/editor',
-    async executar(t) {
-      await enviar(t, png(800, 600, false))
-      await aba(t, 'Tamanho')
-      await escolher(t, 'rede')
-      await t.clicar('Baixar')
-      await t.confirmarBaixar()
-      await t.aguardarResultado()
-      const [r] = await t.js('return await __t.resultados()')
-      assert.deepEqual([r.largura, r.altura], [1080, 1080])
-    },
-  },
-  {
-    nome: 'imagem/editor: lote em 50% e filtro P&B',
-    pagina: '/imagem/editor',
-    async executar(t) {
-      await enviar(t, `[__t.arquivo(await __t.imagem(640, 480), 'a.png'), __t.arquivo(await __t.imagem(300, 200), 'b.png')]`)
-      await aba(t, 'Tamanho')
-      await escolher(t, 'porcentagem')
-      await aba(t, 'Cores')
-      await t.clicar('P&B')
-      await t.clicar('Baixar')
-      await t.confirmarBaixar()
-      await t.aguardarResultado()
-      const rs = await t.js('return await __t.resultados()')
-      assert.deepEqual(
-        rs.map((r) => [r.largura, r.altura]),
-        [
-          [320, 240],
-          [150, 100],
-        ],
-      )
-      const px = await pixel(t, 160, 30)
-      assert.ok(Math.abs(px[0] - px[1]) <= 2 && Math.abs(px[1] - px[2]) <= 2, `pixel não é cinza: ${px}`)
     },
   },
   {
