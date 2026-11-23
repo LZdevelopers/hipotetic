@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BotaoAcao, useHistorico } from '../../componentes/editor/Comum'
 import { DialogoBaixar, NomeEditavel, OpcoesCartoes } from '../../componentes/ferramenta/Baixar'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, SeloCategoria, Seletor } from '../../componentes/ui'
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, LIMITE_IMAGEM, ehSvg, rasterizarSvg } from '../../motores/imagem'
 import { FILTROS, NEUTRO, ehNeutro, renderizarAjustes } from '../../motores/imagem/ajustes'
-import { MODELOS, apagarObjeto, modeloNoCache, removerFundo } from '../../motores/imagem/ia'
+import { PADRAO_FUNDO, comporFundo, refinarMascara } from '../../motores/imagem/fundo'
+import { MODELOS, apagarObjeto, mascaraDoFundo, modeloNoCache, prepararModelo, tempoEstimado } from '../../motores/imagem/ia'
 import { codificar } from '../../motores/imagem/nucleo'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
 import { useEmEdicao } from '../../nucleo/edicao'
@@ -441,12 +442,14 @@ function BotaoIa({ chave, rotulo, aoClicar, tarefa, desativado }) {
     modeloNoCache(chave).then(setNoCache)
   }, [chave, tarefa.fase])
   if (tarefa.fase === 'processando') return <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
+  const segundos = tempoEstimado(chave)
   return (
     <div className="flex flex-col gap-2">
       <Botao tamanho="g" icone="filtro" onClick={aoClicar} disabled={desativado} data-ia={chave}>
         {rotulo}
       </Botao>
       <p className="text-xs text-fraca">
+        {segundos <= 3 ? 'Leva poucos segundos. ' : `Neste navegador leva uns ${segundos} s. `}
         {noCache
           ? 'Roda no seu aparelho: nada é enviado.'
           : `Na primeira vez, baixa a IA (${formatarBytes(MODELOS[chave].tamanho)}) — depois fica guardada no navegador. Nada da sua imagem é enviado.`}
@@ -479,6 +482,8 @@ export default function EditorImagem() {
   const [erro, setErro] = useState(null)
   const [aplicando, setAplicando] = useState(false)
   const tarefaIa = useTarefa()
+  const [modoFundo, setModoFundo] = useSalvo('modoFundo', 'pessoas') // 'pessoas' (rápido) | 'fundo' (preciso)
+  const ultimaMascara = useRef(null) // { base, mascara }: trocar de ferramenta não perde a IA já rodada
   const entrada = useRef(null)
 
   const mudar = useCallback((d) => setP((x) => (x ? { ...x, ...(typeof d === 'function' ? d(x) : d) } : x)), [setP])
@@ -496,6 +501,7 @@ export default function EditorImagem() {
     }
   }, [p?.base])
   const reduzida = useRef(null)
+  const [versaoReduzida, setVersaoReduzida] = useState(0)
   useEffect(() => {
     if (!bitmap) return
     const k = Math.min(1, PREVIA_MAX / Math.max(bitmap.width, bitmap.height))
@@ -504,14 +510,24 @@ export default function EditorImagem() {
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(bitmap, 0, 0, c.width, c.height)
     reduzida.current = c
-    setPrevia(renderizarAjustes(c, p?.ajustes ?? NEUTRO))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setVersaoReduzida((v) => v + 1)
   }, [bitmap])
+  // Remover fundo: a máscara da IA, com contorno/limpeza (só recalcula quando eles mudam).
+  const mascaraFundo = ferramenta === 'fundo' ? rascunho?.mascara : null
+  const mascaraRefinada = useMemo(
+    () => (mascaraFundo ? refinarMascara(mascaraFundo, { contorno: rascunho.contorno, limpar: rascunho.limpar }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mascaraFundo, rascunho?.contorno, rascunho?.limpar],
+  )
   useEffect(() => {
     if (!reduzida.current) return undefined
-    const q = requestAnimationFrame(() => setPrevia(renderizarAjustes(reduzida.current, p?.ajustes ?? NEUTRO)))
+    const q = requestAnimationFrame(() => {
+      const fonte = mascaraRefinada ? comporFundo(reduzida.current, mascaraRefinada, rascunho) : reduzida.current
+      setPrevia(renderizarAjustes(fonte, p?.ajustes ?? NEUTRO))
+    })
     return () => cancelAnimationFrame(q)
-  }, [p?.ajustes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versaoReduzida, p?.ajustes, mascaraRefinada, rascunho?.borda, rascunho?.fundo, rascunho?.cor, rascunho?.desfoque])
 
   /* abrir */
   const abrir = async (lista) => {
@@ -538,11 +554,11 @@ export default function EditorImagem() {
   }
 
   /** Troca a imagem-base por um canvas novo (com os textos acompanhando, se preciso). */
-  const comprometer = async (novo, transformarTexto) => {
+  const comprometer = async (novo, transformarTexto, extra) => {
     setAplicando(true)
     try {
       const base = await novo.convertToBlob({ type: 'image/png' })
-      mudar((x) => ({ base, w: novo.width, h: novo.height, textos: transformarTexto ? x.textos.map(transformarTexto) : x.textos }))
+      mudar((x) => ({ base, w: novo.width, h: novo.height, textos: transformarTexto ? x.textos.map(transformarTexto) : x.textos, ...extra?.(x) }))
     } finally {
       setAplicando(false)
     }
@@ -560,6 +576,7 @@ export default function EditorImagem() {
     if (id === 'recortar') setRascunho({ x: p.w * 0.1, y: p.h * 0.1, w: p.w * 0.8, h: p.h * 0.8, proporcao: null, prop: 'livre' })
     else if (id === 'tamanho') setRascunho({ w: p.w, h: p.h, trava: true })
     else if (id === 'girar') setRascunho({ angulo: 0 })
+    else if (id === 'fundo' && ultimaMascara.current?.base === p.base && !p.fundoRemovido) setRascunho({ ...PADRAO_FUNDO, mascara: ultimaMascara.current.mascara })
     else setRascunho(null)
     setPintura(id === 'apagar' || id === 'pincel' ? novaPintura(p.w, p.h) : null)
   }
@@ -633,18 +650,49 @@ export default function EditorImagem() {
   const executarIa = (tipo) =>
     tarefaIa.executar(
       async ({ progresso, sinal }) => {
-        const r = tipo === 'fundo' ? await removerFundo(bitmap, { progresso, sinal }) : await apagarObjeto(bitmap, pintura.canvas, { progresso, sinal })
-        await comprometer(r)
-        if (tipo === 'apagar') {
-          pintura.ctx.clearRect(0, 0, pintura.canvas.width, pintura.canvas.height)
-          pintura.sujo = false
-          pintura.ouvir?.()
+        if (tipo === 'fundo') {
+          const base = p.base
+          const mascara = await mascaraDoFundo(bitmap, { modo: modoFundo, progresso, sinal })
+          ultimaMascara.current = { base, mascara }
+          setRascunho({ ...PADRAO_FUNDO, mascara })
+          return true
         }
-        if (tipo === 'fundo') setP((x) => ({ ...x, tipo: x.tipo === 'jpg' ? 'png' : x.tipo }))
+        const r = await apagarObjeto(bitmap, pintura.canvas, { progresso, sinal })
+        await comprometer(r)
+        pintura.ctx.clearRect(0, 0, pintura.canvas.width, pintura.canvas.height)
+        pintura.sujo = false
+        pintura.ouvir?.()
         return true
       },
       tipo === 'fundo' ? 'Removendo o fundo' : 'Apagando',
     )
+  /** Grava o fundo removido (com as opções escolhidas) na imagem: depois disso, só desfazendo. */
+  const aplicarFundo = () => {
+    const r = rascunho
+    const final = comporFundo(bitmap, refinarMascara(r.mascara, r), r)
+    setRascunho(null)
+    comprometer(final, null, (x) => ({ fundoRemovido: true, tipo: r.fundo === 'transparente' && x.tipo === 'jpg' ? 'png' : x.tipo }))
+  }
+  const descartarFundo = () => {
+    ultimaMascara.current = null
+    setRascunho(null)
+  }
+  // A máscara vale só para a imagem em que a IA rodou (desfazer o "Aplicar" traz ela de volta).
+  useEffect(() => {
+    if (ferramenta !== 'fundo' || !p) return
+    const salva = ultimaMascara.current
+    const vale = salva && salva.base === p.base && !p.fundoRemovido
+    if (vale && !rascunho?.mascara) setRascunho({ ...PADRAO_FUNDO, mascara: salva.mascara })
+    else if (!vale && rascunho?.mascara) setRascunho(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ferramenta, p?.base, p?.fundoRemovido])
+  // Deixa a IA pronta em segundo plano ao abrir a ferramenta (se o modelo já foi baixado).
+  useEffect(() => {
+    if (!p || tarefaIa.fase === 'processando') return
+    if (ferramenta === 'fundo' && !p.fundoRemovido && !rascunho?.mascara) prepararModelo(modoFundo)
+    else if (ferramenta === 'apagar') prepararModelo('apagar')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ferramenta, modoFundo, Boolean(p)])
   const preencherFundo = (cor) => {
     const c = canvas(bitmap.width, bitmap.height)
     const ctx = c.getContext('2d')
@@ -972,17 +1020,35 @@ export default function EditorImagem() {
                 <Acoes rotulo="Aplicar" aplicar={aplicarEndireitar} cancelar={() => setRascunho({ angulo: 0 })} desativado={!rascunho.angulo} />
               </Grupo>
             </>
-          ) : ferramenta === 'fundo' ? (
+          ) : ferramenta === 'fundo' && rascunho?.mascara ? (
+            <PainelFundo r={rascunho} mudar={(d) => setRascunho((x) => ({ ...x, ...d }))} aplicar={aplicarFundo} descartar={descartarFundo} desativado={ocupado} />
+          ) : ferramenta === 'fundo' && p.fundoRemovido ? (
             <>
               <Grupo titulo="Remover fundo">
-                <p className="text-sm text-suave">A IA separa a pessoa ou o objeto principal e deixa o fundo transparente.</p>
-                <BotaoIa chave="fundo" rotulo="Remover fundo" aoClicar={() => executarIa('fundo')} tarefa={tarefaIa} desativado={ocupado} />
+                <p className="rounded-lg border border-borda bg-superficie-2 p-3 text-sm text-suave" data-fundo-removido="">
+                  O fundo desta imagem já foi removido. Para refazer com outras opções, use Desfazer (Ctrl+Z).
+                </p>
               </Grupo>
               <Grupo titulo="Pôr uma cor no fundo">
-                <p className="text-xs text-fraca">Depois de remover, preencha o transparente com uma cor (ou baixe em PNG/WebP para manter transparente).</p>
+                <p className="text-xs text-fraca">Preenche o que ficou transparente (ou baixe em PNG/WebP para manter transparente).</p>
                 <CorFundo aoAplicar={preencherFundo} desativado={ocupado} />
               </Grupo>
             </>
+          ) : ferramenta === 'fundo' ? (
+            <Grupo titulo="Remover fundo">
+              <OpcoesCartoes
+                rotulo="O que tem na foto?"
+                valor={modoFundo}
+                aoMudar={setModoFundo}
+                colunas="grid-cols-1"
+                opcoes={[
+                  { valor: 'pessoas', rotulo: 'Pessoas · rápido', dica: 'Retratos, selfies e fotos de corpo.', desativado: ocupado },
+                  { valor: 'fundo', rotulo: 'Qualquer coisa · preciso', dica: 'Produtos, animais, objetos, cabelo e detalhes finos.', desativado: ocupado },
+                ]}
+              />
+              <BotaoIa chave={modoFundo} rotulo="Remover fundo" aoClicar={() => executarIa('fundo')} tarefa={tarefaIa} desativado={ocupado} />
+              <p className="text-xs text-fraca">Depois você ajusta a borda e escolhe o novo fundo (transparente, cor ou desfocado) antes de aplicar.</p>
+            </Grupo>
           ) : ferramenta === 'apagar' ? (
             <Grupo titulo="Apagar objeto">
               <p className="text-sm text-suave">Pinte por cima do que quer apagar (pessoa, texto, sujeira…) e clique em Apagar. A IA preenche o lugar com o que estaria atrás.</p>
@@ -1075,6 +1141,56 @@ export default function EditorImagem() {
         ) : null}
       </DialogoBaixar>
     </div>
+  )
+}
+
+/** Opções do fundo removido: tudo ao vivo, sem rodar a IA de novo. */
+function PainelFundo({ r, mudar, aplicar, descartar, desativado }) {
+  const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
+  return (
+    <>
+      <Grupo titulo="Borda">
+        <Deslizante rotulo="Encolher ou expandir" valor={r.contorno} aoMudar={(v) => mudar({ contorno: v })} min={-10} max={10} formatar={sinal} />
+        <Deslizante rotulo="Suavizar" valor={r.borda} aoMudar={(v) => mudar({ borda: v })} min={0} max={10} />
+        <Deslizante rotulo="Limpar sobras do fundo" valor={r.limpar} aoMudar={(v) => mudar({ limpar: v })} formatar={(v) => `${v}%`} />
+        <p className="text-xs text-fraca">Sobrou fundo em volta? Encolha. Cortou um pedaço? Expanda. Ficou um véu claro? Limpe as sobras.</p>
+      </Grupo>
+      <Grupo titulo="Novo fundo">
+        <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Novo fundo">
+          {[
+            ['transparente', 'Transparente'],
+            ['cor', 'Cor'],
+            ['desfocado', 'Desfocado'],
+          ].map(([v, rot]) => (
+            <button key={v} type="button" role="radio" aria-checked={r.fundo === v} onClick={() => mudar({ fundo: v })} className={`h-9 rounded-lg border text-xs font-semibold transition-colors ${r.fundo === v ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}>
+              {rot}
+            </button>
+          ))}
+        </div>
+        {r.fundo === 'cor' ? (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {['#ffffff', '#000000', '#f1f5f9', '#fde68a', '#bfdbfe', '#fecdd3', '#bbf7d0'].map((c) => (
+                <button key={c} type="button" aria-label={`Cor ${c}`} aria-pressed={r.cor === c} onClick={() => mudar({ cor: c })} className={`size-7 rounded-full border ${r.cor === c ? 'ring-2 ring-acento ring-offset-2 ring-offset-superficie' : 'border-borda-forte'}`} style={{ background: c }} />
+              ))}
+            </div>
+            <CorDeFundo valor={r.cor} aoMudar={(v) => mudar({ cor: v })} rotulo="Outra cor" />
+          </>
+        ) : r.fundo === 'desfocado' ? (
+          <Deslizante rotulo="Desfoque" valor={r.desfoque} aoMudar={(v) => mudar({ desfoque: v })} min={2} max={60} />
+        ) : (
+          <p className="text-xs text-fraca">Para manter transparente, baixe em PNG ou WebP.</p>
+        )}
+      </Grupo>
+      <div className="flex gap-2">
+        <Botao variante="secundario" onClick={descartar} disabled={desativado}>
+          Descartar
+        </Botao>
+        <Botao className="flex-1" icone="check" onClick={aplicar} disabled={desativado} data-aplicar="">
+          Aplicar
+        </Botao>
+      </div>
+    </>
   )
 }
 

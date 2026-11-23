@@ -1,10 +1,15 @@
 /**
  * IA do editor de imagem, rodando no navegador (ONNX Runtime Web, WebGPU
- * quando há; senão wasm). Nada sai do aparelho: só os modelos são baixados,
- * uma vez, e ficam no cache do navegador.
+ * quando há; senão wasm com várias threads). Nada sai do aparelho: só os
+ * modelos são baixados, uma vez, e ficam no cache do navegador.
  *
- *   - Remover fundo: BiRefNet lite (MIT), export estático 1024² para navegador.
+ *   - Remover fundo, "preciso": BiRefNet lite (MIT), 1024², qualquer objeto.
+ *   - Remover fundo, "rápido":  MODNet (Apache-2.0), 512, pessoas e retratos.
  *   - Apagar objeto: LaMa big-lama (Apache-2.0), pesos int4/int8, 512².
+ *
+ * O modelo roda num worker (ia.worker.js): a página não trava e cancelar
+ * encerra o worker na hora. Um vigia troca a placa de vídeo pelo processador
+ * quando ela falha ou passa do tempo (alguns drivers simplesmente travam).
  */
 import { ErroAmigavel } from '../../nucleo/tarefa'
 
@@ -15,24 +20,22 @@ export const MODELOS = {
     nome: 'removedor de fundo',
     url: 'https://huggingface.co/CoderViking/birefnet-lite-onnx/resolve/main/birefnet-lite-1024.onnx',
     tamanho: 199_681_624,
+    // Segundos para rodar: placa de vídeo dedicada; processador com 4 threads (de 2017).
+    tempo: { webgpu: 2, wasm: 22 },
+  },
+  pessoas: {
+    nome: 'removedor de fundo rápido',
+    url: 'https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx',
+    tamanho: 25_888_640,
+    tempo: { webgpu: 1, wasm: 2 },
   },
   apagar: {
     nome: 'apagador de objetos',
     url: 'https://huggingface.co/othytenk/lama-int4-int8/resolve/main/lama_int4_int8_r4.onnx',
     tamanho: 36_931_151,
+    opcoes: { extra: { session: { disable_quant_qdq: '1' } } },
+    tempo: { webgpu: 2, wasm: 13 },
   },
-}
-
-let ortPromessa = null
-async function obterOrt() {
-  ortPromessa ??= import('onnxruntime-web/webgpu').then((ort) => {
-    ort.env.wasm.wasmPaths = '/ort/'
-    ort.env.logLevel = 'error'
-    // Sem isolamento entre origens não há threads; com, usa até 4.
-    ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1
-    return ort
-  })
-  return ortPromessa
 }
 
 /** Já baixado? (para o botão dizer se vai baixar.) */
@@ -44,61 +47,14 @@ export async function modeloNoCache(chave) {
   }
 }
 
-/** Baixa o modelo (com progresso 0–1) ou pega do cache. */
-async function bytesDoModelo(chave, progresso, sinal) {
-  const { url, tamanho } = MODELOS[chave]
-  let cache = null
-  try {
-    cache = await caches.open(CACHE)
-    const salvo = await cache.match(url)
-    if (salvo) return new Uint8Array(await salvo.arrayBuffer())
-  } catch {
-    /* sem Cache Storage (janela anônima em alguns navegadores): baixa sempre */
-  }
-  let resposta
-  try {
-    resposta = await fetch(url, { signal: sinal })
-  } catch (e) {
-    if (e?.name === 'AbortError') throw e
-    throw new ErroAmigavel('Não foi possível baixar o modelo de IA. Confira a conexão e tente de novo.')
-  }
-  if (!resposta.ok || !resposta.body) throw new ErroAmigavel('Não foi possível baixar o modelo de IA agora. Tente de novo em instantes.')
-  const total = Number(resposta.headers.get('content-length')) || tamanho
-  const leitor = resposta.body.getReader()
-  const dados = new Uint8Array(total)
-  let lidos = 0
-  let extra = []
-  for (;;) {
-    const { done, value } = await leitor.read()
-    if (done) break
-    if (lidos + value.length <= dados.length) dados.set(value, lidos)
-    else extra.push(value)
-    lidos += value.length
-    progresso?.(Math.min(1, lidos / total))
-  }
-  const final = extra.length ? (() => {
-    const t = new Uint8Array(lidos)
-    t.set(dados.subarray(0, Math.min(lidos, dados.length)))
-    let pos = dados.length
-    for (const parte of extra) {
-      t.set(parte, pos)
-      pos += parte.length
-    }
-    return t
-  })() : dados.subarray(0, lidos)
-  try {
-    await cache?.put(url, new Response(final, { headers: { 'content-type': 'application/octet-stream' } }))
-  } catch {
-    /* armazenamento cheio: funciona agora, baixa de novo da próxima vez */
-  }
-  return final
-}
+/* ─── Placa de vídeo ou processador ────────────────────────────────────── */
 
 /*
- * Placa de vídeo (WebGPU) é bem mais rápida, mas em algumas (principalmente
- * as integradas de notebook) o modelo estoura a memória de vídeo ou o driver
- * falha no meio. Aí roda de novo pelo processador (wasm) e o navegador lembra:
- * nas próximas vezes já vai direto pelo processador neste aparelho.
+ * WebGPU é bem mais rápida, mas em algumas placas (principalmente as
+ * integradas de notebook) o modelo estoura a memória de vídeo, o driver falha
+ * ou trava sem dar erro. Aí roda pelo processador e o navegador lembra: nas
+ * próximas vezes já vai direto pelo processador neste aparelho. No Firefox a
+ * WebGPU ainda trava com esses modelos: vai direto pelo processador.
  */
 const SEM_GPU = 'hipotetic:ia-sem-gpu'
 const semGpu = () => {
@@ -115,101 +71,270 @@ const marcarSemGpu = () => {
     /* sem armazenamento: tenta a placa de novo da próxima vez */
   }
 }
+const ehFirefox = () => /Firefox\//.test(navigator.userAgent)
 
-const sessoes = {} // chave → { s, ep }
-async function sessao(chave, progresso, sinal) {
-  if (sessoes[chave]) return sessoes[chave]
-  const ort = await obterOrt()
-  const bytes = await bytesDoModelo(chave, (v) => progresso?.(v * 0.9, `Baixando o ${MODELOS[chave].nome} (só na primeira vez)`), sinal)
-  progresso?.(0.92, 'Preparando a IA')
-  const opcoes = chave === 'apagar' ? { extra: { session: { disable_quant_qdq: '1' } } } : {}
-  const criar = async (ep) => ({ s: await ort.InferenceSession.create(bytes, { executionProviders: [ep], graphOptimizationLevel: 'all', ...opcoes }), ep })
-  try {
-    if (navigator.gpu && !semGpu()) {
-      try {
-        sessoes[chave] = await criar('webgpu')
-      } catch (e) {
-        console.warn('IA: a placa de vídeo não abriu o modelo; usando o processador.', e)
-        marcarSemGpu()
-        sessoes[chave] = await criar('wasm')
-      }
-    } else sessoes[chave] = await criar('wasm')
-  } catch (e) {
-    console.error(e)
-    throw new ErroAmigavel('Este navegador não conseguiu rodar a IA. Tente no Chrome ou no Edge atualizados.')
-  }
-  return sessoes[chave]
+/*
+ * Placa integrada (Intel, a maioria dos notebooks e PCs de escritório) é a
+ * mesma que desenha a tela: com um modelo destes ela fica ocupada e o
+ * navegador inteiro congela por dezenas de segundos (medido numa Intel HD 630:
+ * 30 s de tela parada para ganhar 8 s). Só vale a pena em placa dedicada ou
+ * forte; nas outras, o processador com várias threads e a tela livre.
+ */
+const FORTES = ['nvidia', 'amd', 'apple']
+let epDecidido = null
+let epPromessa = null
+function escolherEp() {
+  if (typeof navigator === 'undefined' || !navigator.gpu || semGpu() || ehFirefox()) return Promise.resolve((epDecidido = 'wasm'))
+  epPromessa ??= navigator.gpu
+    .requestAdapter({ powerPreference: 'high-performance' })
+    .then((a) => {
+      const info = a?.info ?? {}
+      const forte = a && !a.isFallbackAdapter && !info.isFallbackAdapter && FORTES.includes(String(info.vendor ?? '').toLowerCase())
+      return (epDecidido = forte ? 'webgpu' : 'wasm')
+    })
+    .catch(() => (epDecidido = 'wasm'))
+  return epPromessa
 }
 
-/** Roda o modelo; se a placa de vídeo falhar, tenta de novo pelo processador. */
-async function rodar(chave, entradas, progresso, sinal) {
-  let atual = await sessao(chave, progresso, sinal)
+/** Threads do processador que o worker usa (igual ao ia.worker.js). */
+const threads = () => (globalThis.crossOriginIsolated ? Math.max(1, Math.min(8, navigator.hardwareConcurrency || 2)) : 1)
+
+/** Quanto tempo (s) deve levar neste aparelho — para avisar antes (estimativa grosseira). */
+export function tempoEstimado(chave, ep = epDecidido) {
+  const t = MODELOS[chave].tempo
+  if (typeof navigator === 'undefined') return t.wasm
+  if (!epDecidido) escolherEp()
+  if (ep === 'webgpu') return t.webgpu
+  // Medido com 4 threads num processador de 2017; escala com os núcleos.
+  return Math.max(t.webgpu, Math.round((t.wasm * 4) / threads()))
+}
+
+/** Limites do vigia na placa de vídeo (ms). No processador não há: ele é lento, mas termina. */
+const LIMITES_GPU = { preparando: 60_000, rodando: 120_000 }
+
+/* ─── Worker ───────────────────────────────────────────────────────────── */
+
+class Reiniciado extends Error {}
+
+let trabalhador = null
+const pendentes = new Map()
+let ultimoId = 0
+
+function obterWorker() {
+  if (trabalhador) return trabalhador
+  trabalhador = new Worker(new URL('./ia.worker.js', import.meta.url), { type: 'module' })
+  trabalhador.onmessage = ({ data }) => pendentes.get(data.id)?.mensagem(data)
+  trabalhador.onerror = (e) => {
+    console.error('IA: o worker caiu.', e)
+    encerrar(new Reiniciado('worker caiu'))
+  }
+  return trabalhador
+}
+
+/** Encerra o worker (cancela tudo que estava rodando; a memória volta na hora). */
+function encerrar(motivo) {
+  trabalhador?.terminate()
+  trabalhador = null
+  const lista = [...pendentes.values()]
+  pendentes.clear()
+  for (const p of lista) p.falhar(motivo)
+}
+
+function pedir(msg, { sinal, aoProgresso, limites } = {}) {
+  return new Promise((resolve, reject) => {
+    if (sinal?.aborted) {
+      reject(new DOMException('Cancelado', 'AbortError'))
+      return
+    }
+    const id = (ultimoId += 1)
+    let relogio = 0
+    const armar = (ms, fase) => {
+      clearTimeout(relogio)
+      if (ms) relogio = setTimeout(() => encerrar(new Reiniciado(`passou do tempo (${fase})`)), ms)
+    }
+    const abortar = () => encerrar(new DOMException('Cancelado', 'AbortError'))
+    const fim = () => {
+      clearTimeout(relogio)
+      pendentes.delete(id)
+      sinal?.removeEventListener('abort', abortar)
+    }
+    pendentes.set(id, {
+      mensagem(m) {
+        if (m.tipo === 'progresso') {
+          if (m.fase !== 'baixando') armar(limites?.[m.fase], m.fase)
+          aoProgresso?.(m)
+          return
+        }
+        fim()
+        if (m.tipo === 'pronto') resolve(m)
+        else reject(Object.assign(new Error(m.mensagem), { fase: m.fase }))
+      },
+      falhar(e) {
+        fim()
+        reject(e)
+      },
+    })
+    sinal?.addEventListener('abort', abortar, { once: true })
+    obterWorker().postMessage({ id, ...msg })
+  })
+}
+
+const descritor = (chave) => ({ chave, url: MODELOS[chave].url, tamanho: MODELOS[chave].tamanho, opcoes: MODELOS[chave].opcoes ?? {} })
+
+/** Deixa o modelo pronto em segundo plano (só se já estiver baixado). */
+export async function prepararModelo(chave) {
+  if (!(await modeloNoCache(chave))) return
+  const ep = await escolherEp()
   try {
-    return await atual.s.run(entradas)
+    await pedir({ tipo: 'preparar', modelo: descritor(chave), ep }, { limites: ep === 'webgpu' ? LIMITES_GPU : null })
   } catch (e) {
-    console.error(`IA (${chave}) falhou em ${atual.ep}:`, e)
-    if (atual.ep !== 'webgpu') throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+    if (ep === 'webgpu' && e?.name !== 'AbortError' && !(e instanceof Reiniciado && e.message === 'worker caiu')) {
+      console.warn('IA: a placa de vídeo não abriu o modelo; da próxima vez vai pelo processador.', e)
+      marcarSemGpu()
+    }
+  }
+}
+
+/**
+ * Roda o modelo no worker. Progresso: 0–85% baixando (só na 1ª vez), depois
+ * prepara e roda — enquanto roda, a barra anda sozinha pelo tempo esperado.
+ */
+async function rodar(chave, entradas, { progresso, sinal, rotulo }) {
+  const modelo = descritor(chave)
+  let animacao = 0
+  const parar = () => clearInterval(animacao)
+  const tentar = (ep) =>
+    pedir(
+      { tipo: 'rodar', modelo, ep, entradas },
+      {
+        sinal,
+        limites: ep === 'webgpu' ? LIMITES_GPU : null,
+        aoProgresso: (m) => {
+          if (m.fase === 'baixando') progresso?.(m.valor * 0.85, `Baixando o ${MODELOS[chave].nome} (só na primeira vez)`)
+          else if (m.fase === 'preparando') progresso?.(0.86, 'Preparando a IA')
+          else if (m.fase === 'rodando') {
+            parar()
+            const esperado = tempoEstimado(chave, ep)
+            const inicio = Date.now()
+            const tick = () => progresso?.(0.88 + 0.11 * (1 - Math.exp(-(Date.now() - inicio) / 1000 / esperado)), rotulo)
+            tick()
+            animacao = setInterval(tick, 200)
+          }
+        },
+      },
+    )
+  const ep = await escolherEp()
+  try {
+    return await tentar(ep)
+  } catch (e) {
+    parar()
+    if (e?.name === 'AbortError') throw e
+    if (e?.fase === 'baixando') throw new ErroAmigavel('Não foi possível baixar o modelo de IA. Confira a conexão e tente de novo.')
+    if (ep !== 'webgpu') {
+      console.error(`IA (${chave}) falhou no processador:`, e)
+      throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+    }
+    console.warn(`IA (${chave}) falhou na placa de vídeo; indo pelo processador.`, e)
     marcarSemGpu()
-    atual.s.release?.().catch?.(() => {})
-    delete sessoes[chave]
-    progresso?.(0.95, 'A placa de vídeo não deu conta; continuando pelo processador (mais lento)')
-    atual = await sessao(chave, null, sinal)
+    encerrar(new Reiniciado('troca para o processador')) // libera a placa de vídeo
+    progresso?.(0.86, 'A placa de vídeo não deu conta; continuando pelo processador')
     try {
-      return await atual.s.run(entradas)
+      return await tentar('wasm')
     } catch (e2) {
+      if (e2?.name === 'AbortError') throw e2
       console.error(`IA (${chave}) falhou também no processador:`, e2)
       throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
     }
+  } finally {
+    parar()
   }
 }
 
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
 
+/** Pixels de `fonte` redimensionada para w×h, em CHW float32, com `normalizar(valor0a1, canal)`. */
+function tensorDaImagem(fonte, w, h, normalizar, recorte) {
+  const c = canvas(w, h)
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingQuality = 'high'
+  if (recorte) ctx.drawImage(fonte, recorte.x, recorte.y, recorte.w, recorte.h, 0, 0, w, h)
+  else ctx.drawImage(fonte, 0, 0, w, h)
+  const px = ctx.getImageData(0, 0, w, h).data
+  const n = w * h
+  const dados = new Float32Array(3 * n)
+  for (let i = 0; i < n; i += 1) {
+    dados[i] = normalizar(px[i * 4] / 255, 0)
+    dados[n + i] = normalizar(px[i * 4 + 1] / 255, 1)
+    dados[2 * n + i] = normalizar(px[i * 4 + 2] / 255, 2)
+  }
+  return dados
+}
+
+/** Valores 0–1 (w×h) → canvas cujo alfa é a máscara. */
+function canvasDaMascara(valores, w, h, transformar = (v) => v) {
+  const c = canvas(w, h)
+  const ctx = c.getContext('2d')
+  const img = ctx.createImageData(w, h)
+  for (let i = 0; i < w * h; i += 1) img.data[i * 4 + 3] = Math.round(Math.min(1, Math.max(0, transformar(valores[i]))) * 255)
+  ctx.putImageData(img, 0, 0)
+  return c
+}
+
 /* ─── Remover fundo ────────────────────────────────────────────────────── */
 
 /**
- * Devolve um canvas do mesmo tamanho com o fundo transparente: o modelo vê a
- * imagem em 1024², a máscara (0–1) volta ao tamanho original e vira o alfa.
+ * Máscara do que fica (o alfa de um canvas na resolução do modelo; quem usa
+ * amplia para o tamanho da imagem). `modo`: 'fundo' (preciso) ou 'pessoas' (rápido).
  */
-export async function removerFundo(fonte, { progresso, sinal } = {}) {
-  const ort = await obterOrt()
-  await sessao('fundo', progresso, sinal)
-  progresso?.(0.94, 'Separando o fundo')
+export async function mascaraDoFundo(fonte, { modo = 'fundo', progresso, sinal } = {}) {
+  if (modo === 'pessoas') {
+    // MODNet: lado menor 512, lados múltiplos de 32 (e o maior até 1024).
+    const k = Math.min(512 / Math.min(fonte.width, fonte.height), 1024 / Math.max(fonte.width, fonte.height))
+    const w = Math.max(32, Math.round((fonte.width * k) / 32) * 32)
+    const h = Math.max(32, Math.round((fonte.height * k) / 32) * 32)
+    const dados = tensorDaImagem(fonte, w, h, (v) => (v - 0.5) / 0.5)
+    const r = await rodar('pessoas', { '*': { dados, dims: [1, 3, h, w] } }, { progresso, sinal, rotulo: 'Separando a pessoa do fundo' })
+    progresso?.(1)
+    return canvasDaMascara(r.saidas[r.primeira].dados, w, h)
+  }
   const L = 1024
-  const c = canvas(L, L)
-  const ctx = c.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(fonte, 0, 0, L, L)
-  const px = ctx.getImageData(0, 0, L, L).data
   const media = [0.485, 0.456, 0.406]
   const desvio = [0.229, 0.224, 0.225]
-  const entrada = new Float32Array(3 * L * L)
-  for (let i = 0; i < L * L; i += 1) {
-    for (let k = 0; k < 3; k += 1) entrada[k * L * L + i] = (px[i * 4 + k] / 255 - media[k]) / desvio[k]
-  }
-  const saida = await rodar('fundo', { input_image: new ort.Tensor('float32', entrada, [1, 3, L, L]) }, progresso, sinal)
-  const logits = (saida.output_image ?? Object.values(saida)[0]).data
-  // Máscara 1024² → canvas (alfa), depois ampliada para o tamanho da imagem.
-  const m = canvas(L, L)
-  const mctx = m.getContext('2d')
-  const masc = mctx.createImageData(L, L)
-  for (let i = 0; i < L * L; i += 1) {
-    const a = 1 / (1 + Math.exp(-logits[i]))
-    masc.data[i * 4 + 3] = Math.round(a * 255)
-  }
-  mctx.putImageData(masc, 0, 0)
-  const W = fonte.width
-  const H = fonte.height
-  const r = canvas(W, H)
-  const rctx = r.getContext('2d')
-  rctx.drawImage(fonte, 0, 0)
-  rctx.globalCompositeOperation = 'destination-in'
-  rctx.imageSmoothingQuality = 'high'
-  rctx.drawImage(m, 0, 0, W, H)
+  const dados = tensorDaImagem(fonte, L, L, (v, k) => (v - media[k]) / desvio[k])
+  const r = await rodar('fundo', { input_image: { dados, dims: [1, 3, L, L] } }, { progresso, sinal, rotulo: 'Separando o fundo' })
   progresso?.(1)
-  return r
+  return canvasDaMascara(r.saidas.output_image?.dados ?? r.saidas[r.primeira].dados, L, L, (x) => 1 / (1 + Math.exp(-x)))
 }
 
 /* ─── Apagar objeto ────────────────────────────────────────────────────── */
+
+/** Caixa do que foi pintado (alfa > 0), lida numa cópia reduzida da máscara. */
+function caixaPintada(mascara, W, H) {
+  const k = Math.min(1, 1024 / Math.max(W, H))
+  const w = Math.max(1, Math.round(W * k))
+  const h = Math.max(1, Math.round(H * k))
+  const c = canvas(w, h)
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(mascara, 0, 0, w, h)
+  const d = ctx.getImageData(0, 0, w, h).data
+  let x0 = w
+  let y0 = h
+  let x1 = -1
+  let y1 = -1
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (d[(y * w + x) * 4 + 3] > 0) {
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+      }
+    }
+  }
+  if (x1 < 0) return null
+  // Volta à escala real com 1 px (reduzido) de folga.
+  return { x0: Math.max(0, (x0 - 1) / k), y0: Math.max(0, (y0 - 1) / k), x1: Math.min(W - 1, (x1 + 2) / k), y1: Math.min(H - 1, (y1 + 2) / k) }
+}
 
 /**
  * `mascara`: canvas do tamanho da imagem, pintado onde é para apagar (alfa > 0).
@@ -219,25 +344,9 @@ export async function removerFundo(fonte, { progresso, sinal } = {}) {
 export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
   const W = fonte.width
   const H = fonte.height
-  const mdados = mascara.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data
-  let x0 = W
-  let y0 = H
-  let x1 = -1
-  let y1 = -1
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W; x += 1) {
-      if (mdados[(y * W + x) * 4 + 3] > 0) {
-        if (x < x0) x0 = x
-        if (x > x1) x1 = x
-        if (y < y0) y0 = y
-        if (y > y1) y1 = y
-      }
-    }
-  }
-  if (x1 < 0) throw new ErroAmigavel('Pinte por cima do que você quer apagar.')
-  const ort = await obterOrt()
-  await sessao('apagar', progresso, sinal)
-  progresso?.(0.94, 'Apagando')
+  const caixa = caixaPintada(mascara, W, H)
+  if (!caixa) throw new ErroAmigavel('Pinte por cima do que você quer apagar.')
+  const { x0, y0, x1, y1 } = caixa
 
   // Quadrado com bastante contexto em volta (o LaMa precisa ver o entorno).
   const lado = Math.min(Math.max(W, H), Math.max(256, Math.round(Math.max(x1 - x0, y1 - y0) * 2.2)))
@@ -247,31 +356,34 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
   const qy = Math.round(Math.min(Math.max(0, cy - lado / 2), Math.max(0, H - lado)))
   const qw = Math.min(lado, W)
   const qh = Math.min(lado, H)
+  const q = { x: qx, y: qy, w: qw, h: qh }
 
   const T = 512
-  const img = canvas(T, T)
-  const ictx = img.getContext('2d', { willReadFrequently: true })
-  ictx.drawImage(fonte, qx, qy, qw, qh, 0, 0, T, T)
-  const ipx = ictx.getImageData(0, 0, T, T).data
+  const imagem = tensorDaImagem(fonte, T, T, (v) => v, q)
   const mk = canvas(T, T)
   const mctx = mk.getContext('2d', { willReadFrequently: true })
   mctx.drawImage(mascara, qx, qy, qw, qh, 0, 0, T, T)
   const mpx = mctx.getImageData(0, 0, T, T).data
-
-  const imagem = new Float32Array(3 * T * T)
-  const furo = new Float32Array(T * T)
-  for (let i = 0; i < T * T; i += 1) {
-    const buraco = mpx[i * 4 + 3] > 0 ? 1 : 0 // borda suave do pincel também conta como furo
-    furo[i] = buraco
-    for (let k = 0; k < 3; k += 1) imagem[k * T * T + i] = buraco ? 0 : ipx[i * 4 + k] / 255
+  const n = T * T
+  const furo = new Float32Array(n)
+  for (let i = 0; i < n; i += 1) {
+    if (mpx[i * 4 + 3] > 0) {
+      // Borda suave do pincel também conta como furo.
+      furo[i] = 1
+      imagem[i] = 0
+      imagem[n + i] = 0
+      imagem[2 * n + i] = 0
+    }
   }
-  const saida = await rodar('apagar', { image: new ort.Tensor('float32', imagem, [1, 3, T, T]), mask: new ort.Tensor('float32', furo, [1, 1, T, T]) }, progresso, sinal)
-  const out = saida.output.data
+  const r = await rodar('apagar', { image: { dados: imagem, dims: [1, 3, T, T] }, mask: { dados: furo, dims: [1, 1, T, T] } }, { progresso, sinal, rotulo: 'Apagando' })
+  const out = (r.saidas.output ?? r.saidas[r.primeira]).dados
   const preenchido = canvas(T, T)
   const pctx = preenchido.getContext('2d')
   const pdados = pctx.createImageData(T, T)
-  for (let i = 0; i < T * T; i += 1) {
-    for (let k = 0; k < 3; k += 1) pdados.data[i * 4 + k] = Math.max(0, Math.min(255, out[k * T * T + i]))
+  for (let i = 0; i < n; i += 1) {
+    pdados.data[i * 4] = out[i]
+    pdados.data[i * 4 + 1] = out[n + i]
+    pdados.data[i * 4 + 2] = out[2 * n + i]
     pdados.data[i * 4 + 3] = 255
   }
   pctx.putImageData(pdados, 0, 0)
@@ -285,10 +397,10 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
   rctx.filter = `blur(${Math.max(1, Math.round(qw / 400))}px)`
   rctx.drawImage(mascara, qx, qy, qw, qh, 0, 0, qw, qh)
 
-  const r = canvas(W, H)
-  const ctx = r.getContext('2d')
+  const res = canvas(W, H)
+  const ctx = res.getContext('2d')
   ctx.drawImage(fonte, 0, 0)
   ctx.drawImage(remendo, qx, qy)
   progresso?.(1)
-  return r
+  return res
 }

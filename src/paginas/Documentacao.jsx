@@ -260,8 +260,14 @@ const SECOES = [
             sobras, sem esticar.
           </li>
           <li>
-            <strong>Remover fundo</strong> e <strong>Apagar objeto</strong>: IA que roda no seu aparelho. Na primeira vez, o navegador baixa o modelo (cerca de 190 MB para o
-            fundo e 35 MB para apagar) e guarda para as próximas. A imagem nunca é enviada.
+            <strong>Remover fundo</strong> e <strong>Apagar objeto</strong>: IA que roda no seu aparelho, sem travar a página (dá para cancelar a qualquer momento). Na
+            primeira vez, o navegador baixa o modelo e guarda para as próximas: 25 MB no modo <em>Pessoas · rápido</em>, 190 MB no <em>Qualquer coisa · preciso</em> e 35 MB
+            para apagar. A imagem nunca é enviada.
+          </li>
+          <li>
+            Depois de remover o fundo, ajuste antes de aplicar: <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o
+            novo fundo (<strong>transparente</strong>, <strong>cor</strong> ou a própria foto <strong>desfocada</strong>). O fundo sai uma vez só; para refazer com outras
+            opções, use Desfazer — as opções voltam sem rodar a IA de novo.
           </li>
           <li>
             <strong>Pincel</strong> (com borracha que deixa transparente) e <strong>Texto</strong> (fonte, cor, contorno; arraste para mover).

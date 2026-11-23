@@ -43,11 +43,22 @@ const rotaDaApi = (url) => {
  *   vercel.json (CSP incluída) e as URLs limpas (/pdf/unir → pdf/unir.html)
  *   — o ensaio mais próximo da produção.
  */
+// Mesma lista de ISOLADAS (src/nucleo/roteador.jsx) e do vercel.json.
+const ISOLADAS_DEV = new Set(['/imagem/editor'])
+
 function vercelFunctions() {
   return {
     name: 'vercel-functions',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        // Isolamento das páginas da IA (como no vercel.json). No dev os módulos
+        // e workers vêm de /src e /node_modules: todos levam o COEP.
+        const caminhoReq = (req.url ?? '/').split('?')[0].replace(/\/+$/, '')
+        if (req.headers['sec-fetch-dest'] !== 'document') res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
+        else if (ISOLADAS_DEV.has(caminhoReq)) {
+          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
+        }
         if (repassarDocumentos(req, res)) return
         const file = rotaDaApi(req.url)
         if (!file) return next()
@@ -62,11 +73,15 @@ function vercelFunctions() {
     configurePreviewServer(server) {
       const { headers = [] } = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'))
       // Só as regras sem condição (`has`) — as de host não valem em localhost.
-      const globais = headers.filter((h) => h.source === '/(.*)' && !h.has).flatMap((h) => h.headers)
+      const regras = headers.filter((h) => !h.has).map((h) => ({ padrao: new RegExp(`^${h.source}$`), headers: h.headers }))
       server.middlewares.use(async (req, res, next) => {
-        for (const { key, value } of globais) {
-          // upgrade-insecure-requests quebraria o http://localhost.
-          res.setHeader(key, value.replace('; upgrade-insecure-requests', ''))
+        const caminhoReq = (req.url ?? '/').split('?')[0].replace(/\.html$/, '')
+        for (const r of regras) {
+          if (!r.padrao.test(caminhoReq)) continue
+          for (const { key, value } of r.headers) {
+            // upgrade-insecure-requests quebraria o http://localhost.
+            res.setHeader(key, value.replace('; upgrade-insecure-requests', ''))
+          }
         }
         if (repassarDocumentos(req, res)) return
         const file = rotaDaApi(req.url)

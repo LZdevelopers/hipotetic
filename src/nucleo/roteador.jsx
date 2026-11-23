@@ -10,6 +10,14 @@ import { createContext, startTransition, useCallback, useContext, useEffect, use
  * ferramenta carrega, a página atual continua na tela (sem "piscar" vazio).
  */
 
+/**
+ * Páginas servidas com isolamento entre origens (COOP/COEP, ver vercel.json):
+ * libera várias threads para a IA no processador. O isolamento vale para o
+ * documento inteiro, então entrar ou sair delas recarrega a página (senão os
+ * vídeos incorporados de outras páginas, como os do YouTube, quebrariam).
+ */
+export const ISOLADAS = new Set(['/imagem/editor'])
+
 const ContextoRota = createContext({ caminho: '/', navegar: () => {} })
 
 /** "/pdf/unir/" → "/pdf/unir"; "" → "/". */
@@ -34,6 +42,12 @@ export function Roteador({ caminhoInicial, children }) {
       return
     }
     const novo = normalizarCaminho(url.pathname)
+    const atual = normalizarCaminho(location.pathname)
+    if (novo !== atual && (ISOLADAS.has(novo) || ISOLADAS.has(atual))) {
+      // Entra/sai de uma página isolada: precisa carregar o documento de novo.
+      location.href = novo + url.search + url.hash
+      return
+    }
     history[substituir ? 'replaceState' : 'pushState'](null, '', novo + url.search + url.hash)
     startTransition(() => setCaminho(novo))
     if (url.hash) {
