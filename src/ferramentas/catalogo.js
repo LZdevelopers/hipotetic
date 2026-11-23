@@ -221,8 +221,7 @@ const TODAS = [
   // ─── Imagens ──────────────────────────────────────────────────────────────
   {
     slug: 'imagem/comprimir',
-    modulo: 'imagem/editor',
-    predef: { modo: 'comprimir' },
+    modulo: 'imagem/comprimir',
     nome: 'Comprimir imagens',
     titulo: 'Comprimir imagens JPG, PNG e WebP',
     resumo: 'Reduza o tamanho sem perder qualidade visível.',
@@ -285,32 +284,6 @@ const TODAS = [
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
   {
-    slug: 'pdf/unir',
-    modulo: 'pdf/editor',
-    predef: { modo: 'unir' },
-    telaCheia: true,
-    nome: 'Unir PDF',
-    titulo: 'Unir PDF: juntar vários arquivos em um',
-    resumo: 'Junte vários PDFs em um só, na ordem que quiser.',
-    descricao: 'Junte vários PDFs em um único arquivo, escolhendo a ordem, com sumário opcional. Grátis e sem enviar nada para servidores.',
-    termos: ['unir', 'juntar', 'mesclar', 'combinar', 'merge', 'agrupar'],
-    icone: 'unir',
-    popular: true,
-  },
-  {
-    slug: 'pdf/dividir',
-    modulo: 'pdf/editor',
-    predef: { modo: 'dividir' },
-    telaCheia: true,
-    nome: 'Dividir PDF',
-    titulo: 'Dividir PDF ou extrair páginas',
-    resumo: 'Por página, a cada N, por intervalos ou só algumas.',
-    descricao: 'Separe um PDF em vários (cada página, a cada N páginas, por intervalos) ou crie um PDF só com as páginas que escolher.',
-    termos: ['dividir', 'separar', 'split', 'extrair páginas', 'partes', 'selecionar páginas'],
-    icone: 'dividir',
-    popular: true,
-  },
-  {
     slug: 'pdf/editor',
     modulo: 'pdf/editor',
     telaCheia: true,
@@ -347,18 +320,6 @@ const TODAS = [
     descricao: 'Reconheça o texto de PDFs digitalizados e fotos de documentos e gere um PDF pesquisável ou um .txt. OCR em português, no navegador.',
     termos: ['ocr', 'reconhecer texto', 'digitalizado', 'escaneado', 'pesquisável', 'foto de documento', 'imagem para texto'],
     icone: 'ocr',
-  },
-  {
-    slug: 'pdf/numerar-marca-dagua',
-    modulo: 'pdf/editor',
-    predef: { modo: 'numerar' },
-    telaCheia: true,
-    nome: 'Numerar e marca d’água',
-    titulo: 'Numerar páginas e colocar marca d’água no PDF',
-    resumo: 'Números de página e marca d’água de texto ou logo.',
-    descricao: 'Numere as páginas do PDF no canto e formato que quiser, ou coloque uma marca d’água de texto ou imagem em todas as páginas.',
-    termos: ['numerar', 'números de página', 'paginação', 'marca d’água', 'marca dagua', 'watermark', 'carimbo', 'confidencial'],
-    icone: 'carimbo',
   },
   {
     slug: 'pdf/senha',
@@ -543,6 +504,9 @@ const porSlug = new Map(ferramentas.map((f) => [f.slug, f]))
 export const APELIDOS = {
   'pdf/organizar': 'pdf/editor',
   'pdf/editar': 'pdf/editor',
+  'pdf/unir': 'pdf/editor',
+  'pdf/dividir': 'pdf/editor',
+  'pdf/numerar-marca-dagua': 'pdf/editor',
 }
 
 export const ferramentaPorSlug = (slug) => porSlug.get(slug) ?? null

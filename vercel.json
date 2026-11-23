@@ -36,6 +36,21 @@
       "permanent": true
     },
     {
+      "source": "/pdf/unir",
+      "destination": "/pdf/editor",
+      "permanent": true
+    },
+    {
+      "source": "/pdf/dividir",
+      "destination": "/pdf/editor",
+      "permanent": true
+    },
+    {
+      "source": "/pdf/numerar-marca-dagua",
+      "destination": "/pdf/editor",
+      "permanent": true
+    },
+    {
       "source": "/video/converter",
       "destination": "/converter",
       "permanent": true

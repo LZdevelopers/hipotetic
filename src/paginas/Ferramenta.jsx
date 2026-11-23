@@ -10,6 +10,7 @@ import { ContextoSalvo } from '../nucleo/salvo'
 import { registrarUso } from '../nucleo/preferencias'
 import { Link } from '../nucleo/roteador'
 import { textos } from '../textos'
+import { ancoraDaFerramenta } from './Documentacao'
 
 /** Erro inesperado dentro de uma ferramenta: não derruba a página inteira. */
 class LimiteErro extends Component {
@@ -161,24 +162,16 @@ export function Ferramenta({ ferramenta }) {
         </ContextoEdicao.Provider>
       </LimiteErro>
 
-      {/* Antes de começar (ou fora dos editores): perguntas e ferramentas relacionadas. Editando: só a ferramenta. */}
-      {!emEdicao && ferramenta.perguntas?.length ? (
-        <section aria-labelledby="titulo-perguntas" className={`mt-20 max-w-3xl ${cheia ? 'container-pagina' : ''}`}>
-          <h2 id="titulo-perguntas" className="text-xl">
-            {textos.perguntas}
-          </h2>
-          <div className="mt-5 divide-y divide-borda border-y border-borda">
-            {ferramenta.perguntas.map((q) => (
-              <details key={q.p} className="group py-1">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm font-semibold text-tinta [&::-webkit-details-marker]:hidden">
-                  {q.p}
-                  <Icone nome="setaBaixo" tamanho={16} className="text-fraca transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="pb-4 text-sm text-suave">{q.r}</p>
-              </details>
-            ))}
-          </div>
-        </section>
+      {/* Antes de começar (ou fora dos editores): link para a documentação e ferramentas relacionadas. Editando: só a ferramenta. */}
+      {!emEdicao ? (
+        <p className={`mt-16 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-suave ${cheia ? 'container-pagina' : ''}`}>
+          <Icone nome="ajuda" tamanho={16} className="text-fraca" />
+          {textos.duvidas}
+          <Link para={`/documentacao#${ancoraDaFerramenta(ferramenta)}`} className="inline-flex items-center gap-1 font-semibold text-tinta underline decoration-borda-forte underline-offset-4 hover:decoration-tinta">
+            Veja na documentação
+            <Icone nome="seta" tamanho={14} />
+          </Link>
+        </p>
       ) : null}
 
       {!emEdicao && relacionadas.length ? (

@@ -29,7 +29,7 @@ export const textos = {
   menu: 'Menu',
   fechar: 'Fechar',
   inicio: 'Início',
-  perguntas: 'Perguntas frequentes',
+  duvidas: 'Ficou com alguma dúvida?',
   relacionadas: 'Ferramentas relacionadas',
   noNavegador: 'Processado no seu navegador',
   noNavegadorDetalhe: 'Seus arquivos não saem do seu aparelho.',
@@ -93,6 +93,7 @@ export const inicio = {
 export const rodape = {
   frase: 'Ferramentas de arquivo gratuitas, privadas e honestas sobre o que fazem.',
   links: [
+    { rotulo: 'Documentação', para: '/documentacao' },
     { rotulo: 'Privacidade', para: '/privacidade' },
     { rotulo: 'Termos de uso', para: '/termos' },
   ],

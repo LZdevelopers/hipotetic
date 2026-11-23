@@ -16,6 +16,7 @@ export function resolverRota(caminhoBruto) {
   if (partes.length === 1) {
     if (paginas[partes[0]]) return { tipo: 'texto', caminho, pagina: partes[0] }
     if (partes[0] === 'ferramentas') return { tipo: 'ferramentas', caminho }
+    if (partes[0] === 'documentacao') return { tipo: 'documentacao', caminho }
     const geral = ferramentaPorSlug(partes[0])
     if (geral) return { tipo: 'ferramenta', caminho, ferramenta: geral }
   }
@@ -36,6 +37,7 @@ export function todasAsRotas() {
   return [
     '/',
     '/ferramentas',
+    '/documentacao',
     ...ferramentas.map(caminhoDa),
     ...Object.keys(APELIDOS).map((s) => `/${s}`),
     ...Object.keys(paginas).map((p) => `/${p}`),
@@ -101,15 +103,15 @@ export function metadadosDa(rota) {
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
       inLanguage: 'pt-BR',
     }
-    const extras = [migalhas, app]
-    if (f.perguntas?.length) {
-      extras.push({
-        '@context': 'https://schema.org',
-        '@type': 'FAQPage',
-        mainEntity: f.perguntas.map((q) => ({ '@type': 'Question', name: q.p, acceptedAnswer: { '@type': 'Answer', text: q.r } })),
-      })
+    return { ...base, titulo: `${f.titulo}${sufixo}`, descricao: f.descricao, jsonld: [migalhas, app] }
+  }
+
+  if (rota.tipo === 'documentacao') {
+    return {
+      ...base,
+      titulo: `Documentação${sufixo}`,
+      descricao: 'Como o site funciona, onde os arquivos são processados, o que cada ferramenta faz, atalhos de teclado, limites e dúvidas comuns.',
     }
-    return { ...base, titulo: `${f.titulo}${sufixo}`, descricao: f.descricao, jsonld: extras }
   }
 
   if (rota.tipo === 'texto') {

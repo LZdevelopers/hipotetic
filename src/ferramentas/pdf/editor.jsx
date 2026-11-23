@@ -4,7 +4,6 @@ import { DialogoBaixar, NomeEditavel, OpcoesCartoes } from '../../componentes/fe
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Entrada, Grupo, Progresso, SeloCategoria } from '../../componentes/ui'
-import { AtalhosDoEditor } from '../../componentes/ferramenta/Atalhos'
 import { LIMITE_PDF, abrirEdicao, abrirLeitura, lerIntervalos, obterPdfLib, salvarPdf } from '../../motores/pdf'
 import { cor as corPdf, fontePadrao, pontoNaPagina, tamanhoVisual, textoSeguro } from '../../motores/pdf/escrita'
 import { DICAS_COMPRESSAO, otimizarPdf, protegerPdf } from '../../motores/pdf/otimizar'
@@ -24,10 +23,6 @@ import { DialogoAssinatura } from './_assinatura'
  *   - baixar (modal): nome, todas ou só as selecionadas, um PDF ou um por
  *     página, reduzir o tamanho e senha para abrir.
  * O projeto inteiro fica salvo no navegador (nucleo/salvo.js).
- *
- * Modo foco: as ferramentas rápidas (Unir, Dividir, Numerar…) abrem este
- * editor já configurado e simplificado (prop `modo`); "Editor completo"
- * libera o resto. Sem modo e sem arquivo, mostra os atalhos da categoria.
  */
 
 const A4 = [595.28, 841.89]
@@ -55,29 +50,6 @@ const ABAS = [
   { id: 'paginas', rotulo: 'Números e marca', icone: 'carimbo' },
   { id: 'documento', rotulo: 'Documento', icone: 'info' },
 ]
-/** Ferramentas rápidas que abrem o editor em modo foco (catálogo: predef.modo). */
-const MODOS = {
-  unir: {
-    dica: 'Escolha dois ou mais PDFs. Arraste as miniaturas para pôr as páginas na ordem.',
-    vazio: 'Escolha ou arraste os PDFs que quer unir',
-    acao: 'Unir e baixar',
-    baixar: { separar: 'um' },
-  },
-  dividir: {
-    dica: 'No “Dividir e baixar”: uma página por arquivo, a cada N páginas ou só as que você escolher (selecione na lista ou digite).',
-    vazio: 'Escolha ou arraste o PDF que quer dividir',
-    acao: 'Dividir e baixar',
-    baixar: { separar: 'paginas' },
-  },
-  numerar: {
-    dica: 'Ligue os números e a marca d’água ao lado e confira na prévia antes de baixar.',
-    vazio: 'Escolha ou arraste o PDF',
-    acao: 'Baixar',
-    painel: 'paginas',
-    projeto: { numeros: { ativo: true, posicao: 'base-centro', formato: '{n} / {total}', inicio: 1, tamanho: 11 } },
-  },
-}
-
 const POSICOES = ['topo-esquerda', 'topo-centro', 'topo-direita', 'base-esquerda', 'base-centro', 'base-direita']
 /** Onde o tracinho aparece no botão de cada posição (classes fixas para o Tailwind achar). */
 const ALINHAR = {
@@ -556,12 +528,8 @@ async function gerarPdfs({ p, selecao, arquivoDa, opcoes, nome }, { progresso, s
 
 /* ─── Editor ────────────────────────────────────────────────────────────── */
 
-export default function EditorPdf({ modo }) {
-  const m = MODOS[modo] ?? null
-  // Modo foco: só o essencial da tarefa; "Editor completo" libera o resto (fica salvo).
-  const [completo, setCompleto] = useSalvo('completo', false)
-  const foco = Boolean(m) && !completo
-  const [p, setP] = useSalvo('projeto', m?.projeto ? { ...VAZIO, ...m.projeto } : VAZIO)
+export default function EditorPdf() {
+  const [p, setP] = useSalvo('projeto', VAZIO)
   const mudar = (d) => setP((x) => ({ ...x, ...(typeof d === 'function' ? d(x) : d) }))
   const vazio = p.fontes.length === 0 && p.paginas.length === 0
   useEmEdicao(!vazio)
@@ -721,7 +689,6 @@ export default function EditorPdf({ modo }) {
     setFerramenta('selecionar')
   }
   const aoClicar = (pagina, x, y) => {
-    if (foco) return setSelecionado(null)
     if (ferramenta === 'selecionar') return setSelecionado(null)
     if (ferramenta === 'assinatura') {
       if (assinatura) return inserirImagem(pagina, x, y, assinatura.url, assinatura.w, assinatura.h, 160)
@@ -803,11 +770,6 @@ export default function EditorPdf({ modo }) {
           {vazio ? <p className="text-sm font-semibold text-tinta">Nenhum PDF aberto</p> : <NomeEditavel key={nomeAtual} nome={nomeAtual} extensao="pdf" aoMudar={(n) => mudar({ nome: n })} desativado={processando} rotulo="Renomear o PDF final" />}
           <p className="text-xs text-fraca tabular-nums">{vazio ? 'Escolha um ou mais PDFs para começar' : `${total} ${total === 1 ? 'página' : 'páginas'}${p.fontes.length > 1 ? ` de ${p.fontes.length} PDFs` : ''}`}</p>
         </div>
-        {foco ? (
-          <Botao variante="fantasma" tamanho="p" icone="ampliar" onClick={() => setCompleto(true)} title="Mostrar todas as ferramentas do editor de PDF">
-            Editor completo
-          </Botao>
-        ) : null}
         <input
           ref={entradaPdf}
           type="file"
@@ -822,13 +784,11 @@ export default function EditorPdf({ modo }) {
           }}
         />
         <Botao variante="secundario" tamanho="p" icone="arquivoMais" onClick={() => entradaPdf.current?.click()} disabled={processando}>
-          {vazio ? 'Escolher PDF' : modo === 'unir' ? 'Adicionar PDF' : 'Juntar outro PDF'}
+          {vazio ? 'Escolher PDF' : 'Juntar outro PDF'}
         </Botao>
-        {foco ? null : (
-          <Botao variante="secundario" tamanho="p" icone="mais" onClick={paginaEmBranco} disabled={processando}>
-            Página em branco
-          </Botao>
-        )}
+        <Botao variante="secundario" tamanho="p" icone="mais" onClick={paginaEmBranco} disabled={processando}>
+          Página em branco
+        </Botao>
         <div className="flex items-center gap-0.5">
           <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || processando} />
           <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer || processando} />
@@ -841,13 +801,11 @@ export default function EditorPdf({ modo }) {
             <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
           </div>
         ) : (
-          <Botao icone="baixar" onClick={() => setBaixando({ paginas: 'todas', intervalo: '', separar: 'um', cada: 2, compressao: 'nao', senha: '', ...m?.baixar })} disabled={!total}>
-            {foco ? m.acao : 'Baixar'}
+          <Botao icone="baixar" onClick={() => setBaixando({ paginas: 'todas', intervalo: '', separar: 'um', cada: 2, compressao: 'nao', senha: '' })} disabled={!total}>
+            Baixar
           </Botao>
         )}
       </section>
-
-      {foco ? <p className="-mt-1 px-1 text-sm text-suave">{m.dica}</p> : null}
 
       {erro ? (
         <Aviso tom="erro" aoFechar={() => setErro(null)}>
@@ -856,7 +814,7 @@ export default function EditorPdf({ modo }) {
       ) : null}
       {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
 
-      <div className={`grid min-h-0 flex-1 gap-3 ${foco && !m.painel ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem]'} ${processando ? 'pointer-events-none opacity-60' : ''}`}>
+      <div className={`grid min-h-0 flex-1 gap-3 lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem] ${processando ? 'pointer-events-none opacity-60' : ''}`}>
         {/* Páginas */}
         <section aria-label="Páginas" className="cartao flex min-h-0 flex-col overflow-hidden max-lg:max-h-[22rem]">
           <div className="flex min-h-11 flex-wrap items-center gap-1 border-b border-borda px-2.5 py-1.5">
@@ -946,10 +904,9 @@ export default function EditorPdf({ modo }) {
             <div className="m-auto flex w-full flex-col items-center gap-8 py-6">
               <button type="button" onClick={() => entradaPdf.current?.click()} className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-borda-forte px-10 py-12 text-center hover:border-fraca">
                 <SeloCategoria categoria="pdf" icone="pdf" tamanho="gg" />
-                <span className="font-display text-lg font-bold text-tinta">{foco ? m.vazio : 'Escolha ou arraste PDFs aqui'}</span>
-                <span className="max-w-xs text-sm text-suave">{foco ? 'Nada sai do seu aparelho.' : 'Organize, junte, anote, assine, numere e baixe — tudo nesta tela. Nada sai do seu aparelho.'}</span>
+                <span className="font-display text-lg font-bold text-tinta">Escolha ou arraste PDFs aqui</span>
+                <span className="max-w-xs text-sm text-suave">Organize, junte, divida, anote, assine, numere e baixe — tudo nesta tela. Nada sai do seu aparelho.</span>
               </button>
-              {m ? null : <AtalhosDoEditor categoria="pdf" />}
             </div>
           ) : null}
           {p.paginas.map((pg, i) => {
@@ -978,12 +935,7 @@ export default function EditorPdf({ modo }) {
           })}
         </section>
 
-        {/* Painel (no foco: só o do modo, ou nenhum) */}
-        {foco && m.painel === 'paginas' ? (
-          <aside className="cartao rolagem-fina min-h-0 overflow-y-auto p-4">
-            <PainelPaginas numeros={p.numeros} marca={p.marca} mudar={mudar} />
-          </aside>
-        ) : foco ? null : (
+        {/* Painel */}
         <aside className="cartao flex min-h-0 flex-col overflow-hidden">
           <div role="tablist" aria-label="Painel" className="grid grid-cols-3 border-b border-borda">
             {ABAS.map((a) => (
@@ -1010,7 +962,6 @@ export default function EditorPdf({ modo }) {
             )}
           </div>
         </aside>
-        )}
       </div>
 
       <input
