@@ -37,7 +37,25 @@ export const FILTROS = [
   { id: 'quente', nome: 'Quente', ajustes: { ...NEUTRO, temperatura: 40, saturacao: 110 } },
   { id: 'dramatico', nome: 'Dramático', ajustes: { ...NEUTRO, contraste: 140, saturacao: 85, brilho: 95, vinheta: 45 } },
   { id: 'nitido', nome: 'Nítido', ajustes: { ...NEUTRO, nitidez: 60, contraste: 106 } },
+  { id: 'noir', nome: 'Noir', ajustes: { ...NEUTRO, cinza: 100, contraste: 145, brilho: 96, vinheta: 40 } },
+  { id: 'cinema', nome: 'Cinema', ajustes: { ...NEUTRO, temperatura: -18, contraste: 118, saturacao: 88, vinheta: 28 } },
+  { id: 'dourado', nome: 'Dourado', ajustes: { ...NEUTRO, temperatura: 55, brilho: 104, saturacao: 115, vinheta: 15 } },
+  { id: 'desbotado', nome: 'Desbotado', ajustes: { ...NEUTRO, contraste: 80, brilho: 108, saturacao: 70 } },
+  { id: 'pastel', nome: 'Pastel', ajustes: { ...NEUTRO, saturacao: 62, brilho: 112, contraste: 86 } },
+  { id: 'lomo', nome: 'Lomo', ajustes: { ...NEUTRO, saturacao: 130, contraste: 125, vinheta: 60 } },
+  { id: 'negativo', nome: 'Negativo', ajustes: { ...NEUTRO, inverter: true } },
 ]
+
+/** Filtro com intensidade 0–1 (mistura entre o neutro e o filtro). */
+export function misturarFiltro(ajustes, k) {
+  const r = {}
+  for (const chave of Object.keys(NEUTRO)) {
+    const a = NEUTRO[chave]
+    const b = ajustes[chave] ?? a
+    r[chave] = typeof a === 'boolean' ? (k >= 0.5 ? b : a) : Math.round((a + (b - a) * k) * 10) / 10
+  }
+  return r
+}
 
 export const ehNeutro = (a) => Object.keys(NEUTRO).every((k) => (a?.[k] ?? NEUTRO[k]) === NEUTRO[k])
 

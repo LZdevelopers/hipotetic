@@ -181,11 +181,12 @@ export default [
     pagina: '/imagem/editor',
     async executar(t) {
       await abrirNoEditor(t, 640, 480)
-      await t.clicar('P&B')
+      await ferramenta(t, 'Filtros')
+      await t.js("document.querySelector('main [data-filtro=pb]').click()")
       await ferramenta(t, 'Texto')
       await t.js(`const c = document.querySelector('main canvas[aria-label=Imagem]'); const r = c.getBoundingClientRect()
         c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: r.left + r.width * 0.3, clientY: r.top + r.height * 0.5 }))`)
-      await t.aguardar("document.querySelector('main [data-texto]')", 5000)
+      await t.aguardar("document.querySelector('main [aria-label=\"Camada: texto\"]')", 5000)
       await t.clicar('Baixar')
       await t.aguardar("/~\\d/.test(document.querySelector('dialog[open] [data-estimativa]')?.textContent ?? '')", 30000)
       await t.js("[...document.querySelectorAll('dialog[open] [role=radio]')].find((b) => b.textContent.startsWith('JPG')).click()")

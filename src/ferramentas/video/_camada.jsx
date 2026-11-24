@@ -79,7 +79,11 @@ function useSemFundo(fonte, modo, tolerancia) {
  * Uma camada no palco: conteúdo (texto, imagem, vídeo, desfoque) com recorte,
  * espelho, cores e giro; quando selecionada, alças nos 8 lados e de girar.
  */
-export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVideo, aoSelecionar, aoMudar, aoMenu, aoGuias }) {
+/**
+ * `sempreVisivel` (editor de imagem): a camada aparece sem depender do tempo, com
+ * opacidade e modo de mesclagem (`mistura`) aplicados aqui mesmo.
+ */
+export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVideo, aoSelecionar, aoMudar, aoMenu, aoGuias, sempreVisivel = false }) {
   const c = { ...PADRAO_CAMADA, ...cam }
   const caixa = useRef(null)
   const [alturaTexto, setAlturaTexto] = useState(0)
@@ -211,7 +215,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
     )
   } else if (c.tipo === 'imagem') {
     conteudo = (
-      <div className="relative size-full overflow-hidden" style={{ transform: espelho, filter: filtro }}>
+      <div className="relative size-full overflow-hidden" style={{ transform: espelho, filter: filtro, borderRadius: c.raio ? (c.raio * Math.min(largura, altura)) / 2 : undefined }}>
         <img src={semFundoUrl ?? fonte?.url} alt="" draggable={false} style={midia} />
       </div>
     )
@@ -271,7 +275,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
           aoMenu?.(e)
         }}
         className={`absolute cursor-move ${sel ? '' : 'hover:outline-1 hover:outline-white/60'}`}
-        style={{ ...geometria, visibility: 'hidden', mixBlendMode: mistura }}
+        style={{ ...geometria, visibility: sempreVisivel ? 'visible' : 'hidden', mixBlendMode: c.mistura && c.mistura !== 'normal' ? c.mistura : mistura, opacity: sempreVisivel ? c.opacidade : undefined }}
         aria-label={`Camada: ${c.tipo}`}
       >
         {conteudo}

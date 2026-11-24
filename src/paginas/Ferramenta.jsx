@@ -1,11 +1,12 @@
 import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { AvisoRecuperado } from '../componentes/editor/AvisoRecuperado'
 import { Pilulas } from '../componentes/ListaFerramentas'
 import { Icone } from '../componentes/Icone'
 import { Aviso, Botao, SeloCategoria } from '../componentes/ui'
 import { categoriaDa, corDa, ferramentasDaCategoria, populares } from '../ferramentas/catalogo'
 import { ComponenteFerramenta } from '../ferramentas/carregador'
 import { ContextoEdicao } from '../nucleo/edicao'
-import { apagarTudo, haQuanto } from '../nucleo/rascunho'
+import { apagarTudo } from '../nucleo/rascunho'
 import { ContextoSalvo } from '../nucleo/salvo'
 import { registrarUso } from '../nucleo/preferencias'
 import { Link } from '../nucleo/roteador'
@@ -137,20 +138,7 @@ export function Ferramenta({ ferramenta }) {
         </div>
       </header>
 
-      {recuperadoEm ? (
-        <Aviso
-          tom="info"
-          className="mb-4"
-          aoFechar={() => setRecuperadoEm(null)}
-          acao={
-            <Botao variante="secundario" tamanho="p" onClick={comecarDoZero}>
-              Começar do zero
-            </Botao>
-          }
-        >
-          Recuperamos o que você estava fazendo ({haQuanto(recuperadoEm)}). Fica salvo só neste navegador.
-        </Aviso>
-      ) : null}
+      {recuperadoEm ? <AvisoRecuperado quando={recuperadoEm} aoFechar={() => setRecuperadoEm(null)} aoRecomecar={comecarDoZero} /> : null}
 
       <LimiteErro key={ferramenta.slug}>
         <ContextoEdicao.Provider value={setEmEdicao}>

@@ -17,20 +17,20 @@ const CACHE = 'hipotetic-modelos-v1'
 
 export const MODELOS = {
   fundo: {
-    nome: 'removedor de fundo',
+    nome: 'modelo de segmentação',
     url: 'https://huggingface.co/CoderViking/birefnet-lite-onnx/resolve/main/birefnet-lite-1024.onnx',
     tamanho: 199_681_624,
     // Segundos para rodar: placa de vídeo dedicada; processador com 4 threads (de 2017).
     tempo: { webgpu: 2, wasm: 22 },
   },
   pessoas: {
-    nome: 'removedor de fundo rápido',
+    nome: 'modelo de segmentação de pessoas',
     url: 'https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx',
     tamanho: 25_888_640,
     tempo: { webgpu: 1, wasm: 2 },
   },
   apagar: {
-    nome: 'apagador de objetos',
+    nome: 'modelo de preenchimento',
     url: 'https://huggingface.co/othytenk/lama-int4-int8/resolve/main/lama_int4_int8_r4.onnx',
     tamanho: 36_931_151,
     opcoes: { extra: { session: { disable_quant_qdq: '1' } } },
@@ -211,7 +211,7 @@ async function rodar(chave, entradas, { progresso, sinal, rotulo }) {
         limites: ep === 'webgpu' ? LIMITES_GPU : null,
         aoProgresso: (m) => {
           if (m.fase === 'baixando') progresso?.(m.valor * 0.85, `Baixando o ${MODELOS[chave].nome} (só na primeira vez)`)
-          else if (m.fase === 'preparando') progresso?.(0.86, 'Preparando a IA')
+          else if (m.fase === 'preparando') progresso?.(0.86, 'Preparando o modelo')
           else if (m.fase === 'rodando') {
             parar()
             const esperado = tempoEstimado(chave, ep)
@@ -229,10 +229,10 @@ async function rodar(chave, entradas, { progresso, sinal, rotulo }) {
   } catch (e) {
     parar()
     if (e?.name === 'AbortError') throw e
-    if (e?.fase === 'baixando') throw new ErroAmigavel('Não foi possível baixar o modelo de IA. Confira a conexão e tente de novo.')
+    if (e?.fase === 'baixando') throw new ErroAmigavel('Não foi possível baixar o modelo. Confira a conexão e tente de novo.')
     if (ep !== 'webgpu') {
       console.error(`IA (${chave}) falhou no processador:`, e)
-      throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+      throw new ErroAmigavel('Não foi possível processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
     }
     console.warn(`IA (${chave}) falhou na placa de vídeo; indo pelo processador.`, e)
     marcarSemGpu()
@@ -243,7 +243,7 @@ async function rodar(chave, entradas, { progresso, sinal, rotulo }) {
     } catch (e2) {
       if (e2?.name === 'AbortError') throw e2
       console.error(`IA (${chave}) falhou também no processador:`, e2)
-      throw new ErroAmigavel('A IA não conseguiu processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
+      throw new ErroAmigavel('Não foi possível processar esta imagem neste aparelho. Feche outras abas e tente de novo.')
     }
   } finally {
     parar()
@@ -293,7 +293,7 @@ export async function mascaraDoFundo(fonte, { modo = 'fundo', progresso, sinal }
     const w = Math.max(32, Math.round((fonte.width * k) / 32) * 32)
     const h = Math.max(32, Math.round((fonte.height * k) / 32) * 32)
     const dados = tensorDaImagem(fonte, w, h, (v) => (v - 0.5) / 0.5)
-    const r = await rodar('pessoas', { '*': { dados, dims: [1, 3, h, w] } }, { progresso, sinal, rotulo: 'Separando a pessoa do fundo' })
+    const r = await rodar('pessoas', { '*': { dados, dims: [1, 3, h, w] } }, { progresso, sinal, rotulo: 'Segmentando' })
     progresso?.(1)
     return canvasDaMascara(r.saidas[r.primeira].dados, w, h)
   }
@@ -301,7 +301,7 @@ export async function mascaraDoFundo(fonte, { modo = 'fundo', progresso, sinal }
   const media = [0.485, 0.456, 0.406]
   const desvio = [0.229, 0.224, 0.225]
   const dados = tensorDaImagem(fonte, L, L, (v, k) => (v - media[k]) / desvio[k])
-  const r = await rodar('fundo', { input_image: { dados, dims: [1, 3, L, L] } }, { progresso, sinal, rotulo: 'Separando o fundo' })
+  const r = await rodar('fundo', { input_image: { dados, dims: [1, 3, L, L] } }, { progresso, sinal, rotulo: 'Segmentando o assunto' })
   progresso?.(1)
   return canvasDaMascara(r.saidas.output_image?.dados ?? r.saidas[r.primeira].dados, L, L, (x) => 1 / (1 + Math.exp(-x)))
 }
@@ -375,7 +375,7 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
       imagem[2 * n + i] = 0
     }
   }
-  const r = await rodar('apagar', { image: { dados: imagem, dims: [1, 3, T, T] }, mask: { dados: furo, dims: [1, 1, T, T] } }, { progresso, sinal, rotulo: 'Apagando' })
+  const r = await rodar('apagar', { image: { dados: imagem, dims: [1, 3, T, T] }, mask: { dados: furo, dims: [1, 1, T, T] } }, { progresso, sinal, rotulo: 'Preenchendo' })
   const out = (r.saidas.output ?? r.saidas[r.primeira]).dados
   const preenchido = canvas(T, T)
   const pctx = preenchido.getContext('2d')

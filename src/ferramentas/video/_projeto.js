@@ -315,17 +315,30 @@ export const estiloTexto = (bruto, alturaQuadro) => {
   }
 }
 
-/** Desenha a camada de texto num PNG do tamanho que ela ocupa no quadro final. */
-export async function textoParaPng(c, quadro) {
+/** Medidas da camada de texto no quadro (sem esperar fontes): linhas quebradas, largura e altura em px. */
+export function medirTexto(c, quadro) {
   const e = estiloTexto(c, quadro.h)
   const fonte = `${e.estilo} ${e.peso} ${e.tamanho}px ${e.familia}`
-  await document.fonts?.load(fonte).catch(() => {})
   const largura = Math.max(8, Math.round(c.w * quadro.w))
   const medidor = new OffscreenCanvas(1, 1).getContext('2d')
   medidor.font = fonte
   if ('letterSpacing' in medidor) medidor.letterSpacing = `${e.espacamento}px`
   const linhas = quebrar(medidor, e.texto || ' ', largura - e.padding * 2)
   const altura = Math.max(8, Math.round(linhas.length * e.linha + e.padding * 2))
+  return { e, fonte, largura, altura, linhas }
+}
+
+/** Desenha a camada de texto num PNG do tamanho que ela ocupa no quadro final. */
+export async function textoParaPng(c, quadro) {
+  const { cv, largura, altura } = await textoParaCanvas(c, quadro)
+  return { blob: await cv.convertToBlob({ type: 'image/png' }), largura, altura }
+}
+
+/** Desenha a camada de texto num canvas do tamanho que ela ocupa no quadro final. */
+export async function textoParaCanvas(c, quadro) {
+  const e0 = estiloTexto(c, quadro.h)
+  await document.fonts?.load(`${e0.estilo} ${e0.peso} ${e0.tamanho}px ${e0.familia}`).catch(() => {})
+  const { e, fonte, largura, altura, linhas } = medirTexto(c, quadro)
   const cv = new OffscreenCanvas(largura, altura)
   const ctx = cv.getContext('2d')
   if (c.fundo) {
@@ -356,7 +369,7 @@ export async function textoParaPng(c, quadro) {
     ctx.shadowColor = 'transparent'
   }
   linhas.forEach((l, i) => ctx.fillText(l, xTexto, e.padding + e.linha * (i + 0.5)))
-  return { blob: await cv.convertToBlob({ type: 'image/png' }), largura, altura }
+  return { cv, largura, altura }
 }
 
 /** Máscara (branco = desfoca) para o blur em elipse. */

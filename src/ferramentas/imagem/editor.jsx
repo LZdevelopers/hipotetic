@@ -1,41 +1,61 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BotaoAcao, useHistorico } from '../../componentes/editor/Comum'
 import { DialogoBaixar, NomeEditavel, OpcoesCartoes } from '../../componentes/ferramenta/Baixar'
 import { Icone } from '../../componentes/Icone'
-import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, SeloCategoria, Seletor } from '../../componentes/ui'
+import { Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, SeloCategoria, Seletor } from '../../componentes/ui'
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, LIMITE_IMAGEM, ehSvg, rasterizarSvg } from '../../motores/imagem'
-import { FILTROS, NEUTRO, ehNeutro, renderizarAjustes } from '../../motores/imagem/ajustes'
+import { NEUTRO, renderizarAjustes } from '../../motores/imagem/ajustes'
 import { PADRAO_FUNDO, comporFundo, desenharTraco, mascaraCheia, mascaraRetocada, mostrarRemovido, refinarMascara } from '../../motores/imagem/fundo'
-import { MODELOS, apagarObjeto, mascaraDoFundo, modeloNoCache, prepararModelo, tempoEstimado } from '../../motores/imagem/ia'
+import { apagarObjeto, mascaraDoFundo, prepararModelo } from '../../motores/imagem/ia'
 import { codificar } from '../../motores/imagem/nucleo'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { useSalvo } from '../../nucleo/salvo'
 import { useTarefa } from '../../nucleo/tarefa'
 import { CorDeFundo } from './_comum'
+import {
+  GEOMETRIA,
+  alturaCamada,
+  bitmapDe,
+  caixaGirada,
+  canvasDesenho,
+  maiorDentroGirado,
+  migrar,
+  novaCamadaDesenho,
+  novaCamadaImagem,
+  novaCamadaTexto,
+  novaId,
+  renderizarDocumento,
+  transformarBase,
+  transformarCamada,
+  transformarDesenho,
+} from './_editor/documento'
+import { Acoes, BotaoSegmentar, Escolhas, Grupo, ListaCamadas, PainelAjustes, PainelCamada, PainelFiltros, PainelFundo, PainelPincel, ajustesDoFiltro } from './_editor/paineis'
+import { PADRAO_PINCEL, iniciarTraco } from './_editor/pinceis'
+import { Tela, ZOOM_MINIMO, zoomMaximo } from './_editor/Tela'
 
 /*
  * Editor de imagem (tela cheia, no jeito do Photopea, uma imagem por vez):
- *   - Ajustes e filtros (não destrutivos, mexem a qualquer hora);
- *   - Recortar, Tamanho (esticar/achatar arrastando), Girar/endireitar —
- *     cada um com "Aplicar", e a edição continua sobre o resultado;
- *   - Remover fundo e Apagar objeto (IA no navegador, ver motores/imagem/ia.js);
- *   - Pincel/borracha e Texto.
- * O projeto (imagem atual, ajustes, textos) fica salvo no navegador e tem
+ *   - Ajustes e Filtros (com prévia de cada filtro na própria foto);
+ *   - Recortar, Tamanho (prévia em escala), Girar/endireitar (linha + grade);
+ *   - Remover fundo (máscara: seleção de assunto, varinha, pincéis) e Apagar objeto;
+ *   - Pincéis (camada de desenho própria), Texto e Camadas de imagem — as
+ *     mesmas camadas do editor de vídeo.
+ * Zoom até 3200% e mão (arrastar). O projeto fica salvo no navegador e tem
  * desfazer/refazer. Baixar mostra o tamanho estimado do arquivo.
  */
 
-/* ─── Dados ──────────────────────────────────────────────────────────────── */
-
 const FERRAMENTAS = [
   { id: 'ajustes', rotulo: 'Ajustes', icone: 'ajustar' },
+  { id: 'filtros', rotulo: 'Filtros', icone: 'paleta' },
   { id: 'recortar', rotulo: 'Recortar', icone: 'recortar' },
   { id: 'tamanho', rotulo: 'Tamanho', icone: 'regua' },
   { id: 'girar', rotulo: 'Girar', icone: 'girar' },
   { id: 'fundo', rotulo: 'Remover fundo', icone: 'borracha' },
-  { id: 'apagar', rotulo: 'Apagar objeto', icone: 'filtro' },
+  { id: 'apagar', rotulo: 'Apagar objeto', icone: 'magica' },
   { id: 'pincel', rotulo: 'Pincel', icone: 'caneta' },
   { id: 'texto', rotulo: 'Texto', icone: 'tipo' },
+  { id: 'camadas', rotulo: 'Camadas', icone: 'camadas' },
 ]
 const PROPORCOES = [
   { id: 'livre', rotulo: 'Livre', valor: null },
@@ -57,528 +77,61 @@ export const REDES = [
   { id: 'perfil', nome: 'Foto de perfil', w: 800, h: 800 },
   { id: 'fullhd', nome: 'Full HD', w: 1920, h: 1080 },
 ]
-const FONTES = [
-  { id: 'Inter Variable, system-ui, sans-serif', rotulo: 'Inter' },
-  { id: "'Plus Jakarta Sans Variable', system-ui, sans-serif", rotulo: 'Jakarta' },
-  { id: 'Georgia, serif', rotulo: 'Georgia' },
-  { id: 'ui-monospace, Consolas, monospace', rotulo: 'Mono' },
-  { id: 'Impact, Haettenschweiler, sans-serif', rotulo: 'Impact' },
-]
+const ZOOMS = [0.25, 0.5, 1, 2, 4, 8, 16, 32]
 const PREVIA_MAX = 1800 // lado maior da prévia (px)
+const ALTA_MAX = 8192 // lado maior da prévia de alta resolução (zoom alto)
+/** Ferramentas em que as camadas podem ser selecionadas e arrastadas. */
+const COM_CAMADAS = ['texto', 'camadas']
 
-let seq = 0
-const novaId = () => `t${Date.now().toString(36)}${(seq += 1)}`
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
 const limitar = (v, a, b) => Math.min(b, Math.max(a, v))
 /** Canvas/bitmap → PNG (para guardar no projeto). */
 async function paraBlob(fonte) {
   if (fonte.convertToBlob) return fonte.convertToBlob({ type: 'image/png' })
+  if (fonte.toBlob) return new Promise((ok) => fonte.toBlob(ok, 'image/png'))
   const c = canvas(fonte.width, fonte.height)
   c.getContext('2d').drawImage(fonte, 0, 0)
   return c.convertToBlob({ type: 'image/png' })
 }
 
-/** Desenha os textos (mesma métrica da prévia: entrelinha 1,2, topo da linha). */
-function desenharTextos(ctx, textos) {
-  for (const t of textos) {
-    ctx.save()
-    ctx.font = `${t.negrito ? 700 : 400} ${t.tamanho}px ${t.fonte}`
-    ctx.textBaseline = 'top'
-    ctx.fillStyle = t.cor
-    ctx.lineJoin = 'round'
-    String(t.texto || ' ')
-      .split('\n')
-      .forEach((linha, n) => {
-        const y = t.y + t.tamanho * 0.1 + n * t.tamanho * 1.2
-        if (t.contorno) {
-          ctx.strokeStyle = t.corContorno
-          ctx.lineWidth = Math.max(1, t.tamanho * 0.12)
-          ctx.strokeText(linha, t.x, y)
-        }
-        ctx.fillText(linha, t.x, y)
-      })
-    ctx.restore()
-  }
-}
-
-/** Imagem final (tamanho real): base + ajustes + textos. */
-function renderizarFinal(base, ajustes, textos) {
-  const c = renderizarAjustes(base, ajustes)
-  if (textos.length) desenharTextos(c.getContext('2d'), textos)
-  return c
-}
-
-/** Maior retângulo (largura × altura) que cabe dentro da imagem girada em `ang` graus. */
-function maiorDentroGirado(w, h, ang) {
-  const a = Math.abs((ang * Math.PI) / 180)
-  const sen = Math.sin(a)
-  const cos = Math.cos(a)
-  const ladoLongo = Math.max(w, h)
-  const ladoCurto = Math.min(w, h)
-  if (ladoCurto <= 2 * sen * cos * ladoLongo || Math.abs(sen - cos) < 1e-10) {
-    const x = 0.5 * ladoCurto
-    return w >= h ? { w: x / sen, h: x / cos } : { w: x / cos, h: x / sen }
-  }
-  const cos2 = cos * cos - sen * sen
-  return { w: (w * cos - h * sen) / cos2, h: (h * cos - w * sen) / cos2 }
-}
-
-/* ─── Tela (a imagem, com as camadas de cada ferramenta) ─────────────────── */
-
-function Tela({ previa, w, h, zoom, aoZoom, ferramenta, rascunho, setRascunho, textos, selecionado, aoSelecionar, aoMoverTexto, aoClicarTexto, pintura, aoPintar, aoSoltarPintura, pincel, aoEscala }) {
-  const area = useRef(null)
-  const visor = useRef(null)
-  const [tamArea, setTamArea] = useState({ w: 800, h: 600 })
-  // Pincel na imagem: Pincel, Apagar objeto e o retoque do Remover fundo (quando ligado).
-  const pinta = ['apagar', 'pincel', 'fundo'].includes(ferramenta) && Boolean(pincel)
-
-  useEffect(() => {
-    if (!area.current) return undefined
-    const obs = new ResizeObserver(([e]) => setTamArea({ w: e.contentRect.width, h: e.contentRect.height }))
-    obs.observe(area.current)
-    return () => obs.disconnect()
-  }, [])
-
-  // Na ferramenta Tamanho, a prévia mostra o novo formato (esticada/achatada).
-  const wv = ferramenta === 'tamanho' && rascunho ? rascunho.w : w
-  const hv = ferramenta === 'tamanho' && rascunho ? rascunho.h : h
-  const ajuste = Math.min((tamArea.w - 48) / wv, (tamArea.h - 48) / hv)
-  const escala = zoom === 'ajustar' ? Math.max(0.02, ajuste) : zoom
-  useEffect(() => aoEscala?.(escala), [escala, aoEscala])
-
-  // Zoom com a roda do mouse (ou pinça do trackpad), no ponto sob o cursor.
-  const escalaRef = useRef(escala)
-  escalaRef.current = escala
-  const aoZoomRef = useRef(aoZoom)
-  aoZoomRef.current = aoZoom
-  const ancora = useRef(null)
-  useEffect(() => {
-    const el = area.current
-    if (!el) return undefined
-    const roda = (e) => {
-      const folha = el.querySelector('[data-folha]')
-      if (!folha || !aoZoomRef.current) return
-      e.preventDefault()
-      const r = folha.getBoundingClientRect()
-      ancora.current = { fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, cx: e.clientX, cy: e.clientY }
-      const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
-      const fator = Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.0015))
-      // Acumula na hora: várias voltas rápidas (trackpad) antes de redesenhar contam todas.
-      escalaRef.current = Math.min(8, Math.max(0.05, escalaRef.current * fator))
-      aoZoomRef.current(escalaRef.current)
-    }
-    el.addEventListener('wheel', roda, { passive: false })
-    return () => el.removeEventListener('wheel', roda)
-  }, [])
-  useLayoutEffect(() => {
-    const a = ancora.current
-    const el = area.current
-    if (!a || !el) return
-    ancora.current = null
-    const r = el.querySelector('[data-folha]').getBoundingClientRect()
-    el.scrollLeft += r.left + a.fx * r.width - a.cx
-    el.scrollTop += r.top + a.fy * r.height - a.cy
-  }, [escala])
-
-  // Mover a imagem: segure Espaço e arraste, ou arraste com o botão do meio.
-  const [espaco, setEspaco] = useState(false)
-  useEffect(() => {
-    const ehCampo = (e) => e.target.closest?.('input, textarea, select, button, [contenteditable], [role=slider]')
-    const baixo = (e) => {
-      if (e.code === 'Space' && !e.repeat && !ehCampo(e)) {
-        e.preventDefault()
-        setEspaco(true)
-      }
-    }
-    const cima = (e) => e.code === 'Space' && setEspaco(false)
-    addEventListener('keydown', baixo)
-    addEventListener('keyup', cima)
-    addEventListener('blur', cima)
-    return () => {
-      removeEventListener('keydown', baixo)
-      removeEventListener('keyup', cima)
-      removeEventListener('blur', cima)
-    }
-  }, [])
-  const [movendo, setMovendo] = useState(false)
-  const talvezMover = (e) => {
-    if (!(e.button === 1 || (e.button === 0 && espaco))) return
-    e.preventDefault()
-    e.stopPropagation()
-    const el = area.current
-    const inicio = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop }
-    setMovendo(true)
-    const mover = (ev) => {
-      el.scrollLeft = inicio.l - (ev.clientX - inicio.x)
-      el.scrollTop = inicio.t - (ev.clientY - inicio.y)
-    }
-    const soltar = () => {
-      removeEventListener('pointermove', mover)
-      removeEventListener('pointerup', soltar)
-      setMovendo(false)
-    }
-    addEventListener('pointermove', mover)
-    addEventListener('pointerup', soltar)
-  }
-
-  // Desenha a prévia (já com ajustes) no canvas visível.
-  useEffect(() => {
-    const c = visor.current
-    if (!c || !previa) return
-    c.width = previa.width
-    c.height = previa.height
-    c.getContext('2d').drawImage(previa, 0, 0)
-  }, [previa])
-
-  // Ponto da imagem (px reais) sob o ponteiro.
-  const ponto = (e) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    return { x: ((e.clientX - r.left) / r.width) * wv, y: ((e.clientY - r.top) / r.height) * hv }
-  }
-  const arrastar = (aoMover, aoSoltar) => (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const folha = e.currentTarget.closest('[data-folha]')
-    const r = folha.getBoundingClientRect()
-    const inicio = { x: e.clientX, y: e.clientY }
-    const mover = (ev) => aoMover(((ev.clientX - inicio.x) / r.width) * wv, ((ev.clientY - inicio.y) / r.height) * hv, ev)
-    const soltar = () => {
-      removeEventListener('pointermove', mover)
-      removeEventListener('pointerup', soltar)
-      aoSoltar?.()
-    }
-    addEventListener('pointermove', mover)
-    addEventListener('pointerup', soltar)
-  }
-
-  return (
-    <div
-      ref={area}
-      onPointerDownCapture={talvezMover}
-      onAuxClick={(e) => e.button === 1 && e.preventDefault()}
-      className={`rolagem-fina relative flex min-h-[22rem] flex-1 overflow-auto rounded-[var(--radius-cartao)] bg-superficie-2 ${movendo ? 'cursor-grabbing [&_*]:!cursor-grabbing' : espaco ? 'cursor-grab [&_*]:!cursor-grab' : ''}`}
-      title="Roda do mouse: zoom · Espaço + arrastar: mover"
-    >
-      <div className="m-auto p-6">
-        <div
-          data-folha=""
-          className={`xadrez relative shadow-[var(--shadow-cartao)] ${pinta ? 'cursor-crosshair' : ferramenta === 'texto' ? 'cursor-text' : ''}`}
-          style={{ width: wv * escala, height: hv * escala, touchAction: 'none' }}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            if (ferramenta === 'texto' && e.target === e.currentTarget.querySelector('canvas')) aoClicarTexto(ponto(e))
-            else if (pinta && (pintura || ferramenta === 'fundo')) {
-              const folha = e.currentTarget
-              const r = folha.getBoundingClientRect()
-              const p = (ev) => ({ x: ((ev.clientX - r.left) / r.width) * w, y: ((ev.clientY - r.top) / r.height) * h })
-              aoPintar(p(e), true)
-              const mover = (ev) => aoPintar(p(ev), false)
-              const soltar = () => {
-                removeEventListener('pointermove', mover)
-                removeEventListener('pointerup', soltar)
-                aoSoltarPintura()
-              }
-              addEventListener('pointermove', mover)
-              addEventListener('pointerup', soltar)
-            } else if (ferramenta !== 'texto') aoSelecionar(null)
-          }}
-        >
-          <canvas ref={visor} className="absolute inset-0 size-full" aria-label="Imagem" />
-
-          {/* Pintura (máscara do apagar, traço do pincel) */}
-          {pintura ? <CanvasEspelho fonte={pintura} className={`pointer-events-none absolute inset-0 size-full ${ferramenta === 'apagar' ? 'opacity-55' : ''}`} /> : null}
-          {pinta && pincel.tamanho > 0 && !espaco ? <CursorPincel tamanho={pincel.tamanho * escala} /> : null}
-
-          {/* Textos */}
-          {textos.map((t) => (
-            <div
-              key={t.id}
-              onPointerDown={arrastar((dx, dy) => aoMoverTexto(t.id, { x: t.x0 + dx, y: t.y0 + dy }), null)}
-              onPointerDownCapture={() => {
-                aoSelecionar(t.id)
-                t.x0 = t.x
-                t.y0 = t.y
-              }}
-              data-texto=""
-              className={`absolute cursor-move whitespace-pre select-none ${t.id === selecionado ? 'outline-2 outline-offset-4 outline-acento' : 'hover:outline-1 hover:outline-dashed hover:outline-acento/60'}`}
-              style={{
-                left: t.x * escala,
-                top: t.y * escala,
-                fontFamily: t.fonte,
-                fontSize: t.tamanho * escala,
-                fontWeight: t.negrito ? 700 : 400,
-                lineHeight: 1.2,
-                color: t.cor,
-                WebkitTextStroke: t.contorno ? `${Math.max(1, t.tamanho * 0.12 * escala) / 2}px ${t.corContorno}` : undefined,
-                paintOrder: 'stroke fill',
-              }}
-            >
-              {t.texto || ' '}
-            </div>
-          ))}
-
-          {/* Recorte */}
-          {ferramenta === 'recortar' && rascunho ? <CaixaRecorte r={rascunho} w={w} h={h} escala={escala} mudar={setRascunho} arrastar={arrastar} /> : null}
-
-          {/* Tamanho: alças para esticar/achatar */}
-          {ferramenta === 'tamanho' && rascunho ? (
-            <>
-              {[
-                ['direita', 'top-1/2 -right-2 h-10 w-3 -translate-y-1/2 cursor-ew-resize'],
-                ['base', '-bottom-2 left-1/2 h-3 w-10 -translate-x-1/2 cursor-ns-resize'],
-                ['canto', '-right-2 -bottom-2 size-4 cursor-nwse-resize'],
-              ].map(([lado, classe]) => (
-                <span
-                  key={lado}
-                  aria-label={`Arrastar ${lado}`}
-                  onPointerDown={(() => {
-                    const r0 = { ...rascunho }
-                    return arrastar((dx, dy) => {
-                      let nw = lado === 'base' ? r0.w : Math.max(1, Math.round(r0.w + dx))
-                      let nh = lado === 'direita' ? r0.h : Math.max(1, Math.round(r0.h + dy))
-                      if (r0.trava) {
-                        if (lado === 'base') nw = Math.round((nh * r0.w) / r0.h)
-                        else nh = Math.round((nw * r0.h) / r0.w)
-                      }
-                      setRascunho({ ...r0, w: nw, h: nh })
-                    })
-                  })()}
-                  className={`absolute rounded-sm border-2 border-white bg-acento shadow ${classe}`}
-                />
-              ))}
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Mostra um OffscreenCanvas (de pintura) num canvas da página, redesenhando a cada mudança. */
-function CanvasEspelho({ fonte, className }) {
-  const c = useRef(null)
-  useEffect(() => {
-    let quadro = 0
-    const desenhar = () => {
-      const el = c.current
-      if (!el) return
-      if (el.width !== fonte.canvas.width || el.height !== fonte.canvas.height) {
-        el.width = fonte.canvas.width
-        el.height = fonte.canvas.height
-      }
-      const ctx = el.getContext('2d')
-      ctx.clearRect(0, 0, el.width, el.height)
-      ctx.drawImage(fonte.canvas, 0, 0)
-    }
-    desenhar()
-    fonte.ouvir = () => {
-      cancelAnimationFrame(quadro)
-      quadro = requestAnimationFrame(desenhar)
-    }
-    return () => {
-      cancelAnimationFrame(quadro)
-      fonte.ouvir = null
-    }
-  }, [fonte])
-  return <canvas ref={c} className={className} />
-}
-
-/** Círculo do tamanho do pincel seguindo o mouse. */
-function CursorPincel({ tamanho }) {
-  const [p, setP] = useState(null)
-  useEffect(() => {
-    const mover = (e) => {
-      const folha = document.querySelector('[data-folha]')
-      if (!folha) return
-      const r = folha.getBoundingClientRect()
-      const dentro = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
-      setP(dentro ? { x: e.clientX - r.left, y: e.clientY - r.top } : null)
-    }
-    addEventListener('pointermove', mover)
-    return () => removeEventListener('pointermove', mover)
-  }, [])
-  if (!p) return null
-  return <span className="pointer-events-none absolute rounded-full border-2 border-white mix-blend-difference" style={{ left: p.x - tamanho / 2, top: p.y - tamanho / 2, width: tamanho, height: tamanho }} />
-}
-
-function CaixaRecorte({ r, w, h, escala, mudar, arrastar }) {
-  const alcas = [
-    ['nw', -1, -1, 'cursor-nwse-resize'],
-    ['ne', 1, -1, 'cursor-nesw-resize'],
-    ['sw', -1, 1, 'cursor-nesw-resize'],
-    ['se', 1, 1, 'cursor-nwse-resize'],
-  ]
-  const ajustar = (n) => {
-    let { x, y, w: rw, h: rh } = n
-    rw = limitar(rw, 8, w)
-    rh = limitar(rh, 8, h)
-    x = limitar(x, 0, w - rw)
-    y = limitar(y, 0, h - rh)
-    return { ...n, x, y, w: rw, h: rh }
-  }
-  return (
-    <>
-      {/* escurece fora do recorte */}
-      <div className="pointer-events-none absolute inset-0 bg-black/50" style={{ clipPath: `polygon(0 0,100% 0,100% 100%,0 100%,0 0,${(r.x / w) * 100}% ${(r.y / h) * 100}%,${(r.x / w) * 100}% ${((r.y + r.h) / h) * 100}%,${((r.x + r.w) / w) * 100}% ${((r.y + r.h) / h) * 100}%,${((r.x + r.w) / w) * 100}% ${(r.y / h) * 100}%,${(r.x / w) * 100}% ${(r.y / h) * 100}%)` }} />
-      <div
-        data-recorte=""
-        className="absolute cursor-move border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]"
-        style={{ left: r.x * escala, top: r.y * escala, width: r.w * escala, height: r.h * escala }}
-        onPointerDown={(() => {
-          const r0 = { ...r }
-          return arrastar((dx, dy) => mudar(ajustar({ ...r0, x: r0.x + dx, y: r0.y + dy })))
-        })()}
-      >
-        <span className="pointer-events-none absolute inset-0 [background:linear-gradient(to_right,transparent_33.2%,rgb(255_255_255/0.5)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.5)_66.6%,transparent_66.8%),linear-gradient(to_bottom,transparent_33.2%,rgb(255_255_255/0.5)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.5)_66.6%,transparent_66.8%)]" />
-        {alcas.map(([id, sx, sy, cursor]) => (
-          <span
-            key={id}
-            className={`absolute size-4 rounded-sm border-2 border-acento bg-white ${cursor}`}
-            style={{ left: sx < 0 ? -8 : undefined, right: sx > 0 ? -8 : undefined, top: sy < 0 ? -8 : undefined, bottom: sy > 0 ? -8 : undefined }}
-            onPointerDown={(() => {
-              const r0 = { ...r }
-              return arrastar((dx, dy) => {
-                let nw = r0.w + sx * dx
-                let nh = r0.h + sy * dy
-                if (r0.proporcao) nh = nw / r0.proporcao
-                nw = limitar(nw, 8, w)
-                nh = limitar(nh, 8, h)
-                const nx = sx < 0 ? r0.x + r0.w - nw : r0.x
-                const ny = sy < 0 ? r0.y + r0.h - nh : r0.y
-                mudar(ajustar({ ...r0, x: nx, y: ny, w: nw, h: nh }))
-              })
-            })()}
-          />
-        ))}
-      </div>
-    </>
-  )
-}
-
-/* ─── Painéis (direita) ──────────────────────────────────────────────────── */
-
-function Grupo({ titulo, children }) {
-  return (
-    <div className="flex flex-col gap-3">
-      {titulo ? <h3 className="text-xs font-semibold tracking-wide text-fraca uppercase">{titulo}</h3> : null}
-      {children}
-    </div>
-  )
-}
-
-function PainelAjustes({ a, mudar }) {
-  const m = (k) => (v) => mudar({ ...a, [k]: v })
-  const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
-  const cem = (v) => sinal(v - 100)
-  return (
-    <div className="flex flex-col gap-5">
-      <Grupo titulo="Filtros">
-        <div className="grid grid-cols-3 gap-1.5">
-          {FILTROS.map((f) => {
-            const ativo = JSON.stringify({ ...NEUTRO, ...f.ajustes }) === JSON.stringify({ ...NEUTRO, ...a })
-            return (
-              <button key={f.id} type="button" aria-pressed={ativo} onClick={() => mudar({ ...NEUTRO, ...f.ajustes })} className={`rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${ativo ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:border-borda-forte hover:text-tinta'}`}>
-                {f.nome}
-              </button>
-            )
-          })}
-        </div>
-      </Grupo>
-      <Grupo titulo="Luz">
-        <Deslizante rotulo="Exposição" valor={a.exposicao} aoMudar={m('exposicao')} min={-100} max={100} formatar={sinal} />
-        <Deslizante rotulo="Brilho" valor={a.brilho} aoMudar={m('brilho')} min={0} max={200} formatar={cem} />
-        <Deslizante rotulo="Contraste" valor={a.contraste} aoMudar={m('contraste')} min={0} max={200} formatar={cem} />
-      </Grupo>
-      <Grupo titulo="Cor">
-        <Deslizante rotulo="Saturação" valor={a.saturacao} aoMudar={m('saturacao')} min={0} max={200} formatar={cem} />
-        <Deslizante rotulo="Temperatura" valor={a.temperatura} aoMudar={m('temperatura')} min={-100} max={100} formatar={sinal} />
-        <Deslizante rotulo="Matiz" valor={a.matiz} aoMudar={m('matiz')} min={-180} max={180} formatar={(v) => `${v}°`} />
-        <Deslizante rotulo="Preto e branco" valor={a.cinza} aoMudar={m('cinza')} formatar={(v) => `${v}%`} />
-        <Deslizante rotulo="Sépia" valor={a.sepia} aoMudar={m('sepia')} formatar={(v) => `${v}%`} />
-        <Caixa rotulo="Inverter cores (negativo)" marcado={a.inverter} aoMudar={m('inverter')} />
-      </Grupo>
-      <Grupo titulo="Detalhe">
-        <Deslizante rotulo="Nitidez" valor={a.nitidez} aoMudar={m('nitidez')} formatar={(v) => `${v}%`} />
-        <Deslizante rotulo="Desfoque" valor={a.desfoque} aoMudar={m('desfoque')} min={0} max={20} passo={0.5} formatar={(v) => (v ? v.toLocaleString('pt-BR') : '0')} />
-        <Deslizante rotulo="Vinheta" valor={a.vinheta} aoMudar={m('vinheta')} formatar={(v) => `${v}%`} />
-      </Grupo>
-      {!ehNeutro(a) ? (
-        <Botao variante="secundario" tamanho="p" icone="redefinir" className="self-start" onClick={() => mudar(NEUTRO)}>
-          Zerar ajustes
-        </Botao>
-      ) : null}
-    </div>
-  )
-}
-
-/** Botões Aplicar / Cancelar das ferramentas com rascunho. */
-function Acoes({ aplicar, cancelar, rotulo = 'Aplicar', desativado }) {
-  return (
-    <div className="flex gap-2">
-      <Botao variante="secundario" onClick={cancelar}>
-        Cancelar
-      </Botao>
-      <Botao className="flex-1" icone="check" onClick={aplicar} disabled={desativado} data-aplicar="">
-        {rotulo}
-      </Botao>
-    </div>
-  )
-}
-
-/** Botão de IA: avisa do download (só na primeira vez) e mostra o progresso. */
-function BotaoIa({ chave, rotulo, aoClicar, tarefa, desativado }) {
-  const [noCache, setNoCache] = useState(true)
-  useEffect(() => {
-    modeloNoCache(chave).then(setNoCache)
-  }, [chave, tarefa.fase])
-  if (tarefa.fase === 'processando') return <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
-  const segundos = tempoEstimado(chave)
-  return (
-    <div className="flex flex-col gap-2">
-      <Botao tamanho="g" icone="filtro" onClick={aoClicar} disabled={desativado} data-ia={chave}>
-        {rotulo}
-      </Botao>
-      <p className="text-xs text-fraca">
-        {segundos <= 3 ? 'Leva poucos segundos. ' : `Neste navegador leva uns ${segundos} s. `}
-        {noCache
-          ? 'Roda no seu aparelho: nada é enviado.'
-          : `Na primeira vez, baixa a IA (${formatarBytes(MODELOS[chave].tamanho)}) — depois fica guardada no navegador. Nada da sua imagem é enviado.`}
-      </p>
-      {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
-    </div>
-  )
-}
-
-/* ─── Editor ─────────────────────────────────────────────────────────────── */
-
 const corBaseDe = (formato) => (formato === 'jpg' ? 'jpg' : formato)
 
 export default function EditorImagem() {
-  const [p, setP] = useSalvo('projeto', null) // { nome, base: Blob, w, h, ajustes, textos, tipo }
+  const [p, setP] = useSalvo('projeto', null) // { nome, base: Blob, w, h, ajustes, filtro, camadas, tipo, fundoRemovido, fundoEdicao }
   useEmEdicao(Boolean(p))
   const historico = useHistorico(p, setP, Boolean(p))
   const [bitmap, setBitmap] = useState(null)
   const [previa, setPrevia] = useState(null)
+  const [previaAlta, setPreviaAlta] = useState(null) // { canvas, versao }
+  const [versaoPrevia, setVersaoPrevia] = useState(0)
   const [ferramenta, setFerramenta] = useState('ajustes')
   const [rascunho, setRascunho] = useState(null)
-  const [selecionado, setSelecionado] = useState(null)
+  const [selecionada, setSelecionada] = useState(null)
+  const [focarTexto, setFocarTexto] = useState(null)
   const [zoom, setZoom] = useState('ajustar')
   const [escalaAtual, setEscalaAtual] = useState(1)
-  const [pincel, setPincel] = useState({ tamanho: 40, cor: '#e11d48', opacidade: 100, borracha: false })
-  const [pintura, setPintura] = useState(null) // { canvas, ctx, sujo, ouvir }
-  const [estiloTexto, setEstiloTexto] = useState({ tamanho: 64, cor: '#ffffff', fonte: FONTES[0].id, negrito: true, contorno: true, corContorno: '#000000' })
+  const [mao, setMao] = useState(false)
+  const [pincel, setPincel] = useState(PADRAO_PINCEL)
+  const [tamanhoApagar, setTamanhoApagar] = useState(40)
+  const [pintura, setPintura] = useState(null) // máscara do "apagar objeto": { canvas, ctx, sujo, ouvir }
   const [baixando, setBaixando] = useState(null)
-  const [estimativa, setEstimativa] = useState(null) // { chave, blob } | { chave, calculando }
+  const [estimativa, setEstimativa] = useState(null)
   const [erro, setErro] = useState(null)
   const [aplicando, setAplicando] = useState(false)
   const tarefaIa = useTarefa()
-  const [modoFundo, setModoFundo] = useSalvo('modoFundo', 'pessoas') // 'pessoas' (rápido) | 'fundo' (preciso)
-  const ultimaMascara = useRef(null) // { base, mascara }: trocar de ferramenta não perde a IA já rodada
+  const ultimaMascara = useRef(null) // { base, mascara, opcoes }: trocar de ferramenta não perde a máscara
   const entrada = useRef(null)
+  const entradaCamada = useRef(null)
 
   const mudar = useCallback((d) => setP((x) => (x ? { ...x, ...(typeof d === 'function' ? d(x) : d) } : x)), [setP])
+  const camadas = useMemo(() => p?.camadas ?? [], [p?.camadas])
 
-  // Base (Blob) → bitmap; prévia reduzida com os ajustes.
+  // Projeto salvo pela versão antiga (textos soltos) → camadas.
+  useEffect(() => {
+    if (p && !p.camadas) setP(migrar(p))
+  }, [p, setP])
+
+  /* ─── Base → bitmap → prévia ───────────────────────────────────────── */
   useEffect(() => {
     if (!p?.base) {
       setBitmap(null)
@@ -602,16 +155,15 @@ export default function EditorImagem() {
     reduzida.current = c
     setVersaoReduzida((v) => v + 1)
   }, [bitmap])
-  // Remover fundo: a máscara da IA, com contorno/limpeza (só recalcula quando eles mudam).
+
+  /* ─── Remover fundo: máscara (automática e/ou à mão) ───────────────── */
   const mascaraFundo = ferramenta === 'fundo' ? rascunho?.mascara : null
   const mascaraRefinada = useMemo(
     () => (mascaraFundo ? refinarMascara(mascaraFundo, { contorno: rascunho.contorno, limpar: rascunho.limpar }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mascaraFundo, rascunho?.contorno, rascunho?.limpar],
   )
-  // …e com os traços do pincel de retoque por cima (refeita só quando a máscara ou os traços mudam;
-  // durante o traço, ele é desenhado direto nela).
-  const retoque = useRef(null) // { refinada, tracos, canvas }
+  const retoque = useRef(null) // { refinada, tracos, fonte, canvas }
   const tracoAtual = useRef(null)
   const [versaoRetoque, setVersaoRetoque] = useState(0)
   const mascaraFinal = () => {
@@ -623,7 +175,6 @@ export default function EditorImagem() {
     }
     return retoque.current.canvas
   }
-  // Imagem escolhida para o novo fundo (Blob → bitmap).
   const [imagemFundo, setImagemFundo] = useState(null)
   const blobFundo = ferramenta === 'fundo' ? rascunho?.imagem : null
   useEffect(() => {
@@ -637,22 +188,191 @@ export default function EditorImagem() {
       vivo = false
     }
   }, [blobFundo])
+
+  /** O que a tela mostra da base (com máscara/fundo e ajustes) a partir de `fonte`. */
+  const comporPrevia = (fonte) => {
+    const m = mascaraFinal()
+    let f = fonte
+    if (m) {
+      f = comporFundo(fonte, m, rascunho, imagemFundo)
+      if (rascunho.pincel) mostrarRemovido(f, fonte, m)
+    }
+    return renderizarAjustes(f, p?.ajustes ?? NEUTRO)
+  }
+  const depsPrevia = [versaoReduzida, p?.ajustes, mascaraRefinada, rascunho?.borda, rascunho?.fundo, rascunho?.cor, rascunho?.desfoque, rascunho?.tracos, rascunho?.pincel, versaoRetoque, imagemFundo, rascunho?.desfoqueImagem]
   useEffect(() => {
     if (!reduzida.current) return undefined
     const q = requestAnimationFrame(() => {
-      const m = mascaraFinal()
-      let fonte = reduzida.current
-      if (m) {
-        fonte = comporFundo(reduzida.current, m, rascunho, imagemFundo)
-        if (rascunho.pincel) mostrarRemovido(fonte, reduzida.current, m)
-      }
-      setPrevia(renderizarAjustes(fonte, p?.ajustes ?? NEUTRO))
+      setPrevia(comporPrevia(reduzida.current))
+      setVersaoPrevia((v) => v + 1)
     })
     return () => cancelAnimationFrame(q)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versaoReduzida, p?.ajustes, mascaraRefinada, rascunho?.borda, rascunho?.fundo, rascunho?.cor, rascunho?.desfoque, rascunho?.tracos, rascunho?.pincel, versaoRetoque, imagemFundo, rascunho?.desfoqueImagem])
+  }, depsPrevia)
 
-  /* abrir */
+  // Zoom alto: a prévia reduzida não basta — calcula a de alta resolução (com atraso).
+  const precisaAlta = Boolean(p && previa && escalaAtual * p.w > previa.width * 1.05)
+  useEffect(() => {
+    if (!precisaAlta || !bitmap) {
+      setPreviaAlta(null)
+      return undefined
+    }
+    if (previaAlta?.versao === versaoPrevia) return undefined
+    const t = setTimeout(() => {
+      const k = Math.min(1, ALTA_MAX / Math.max(bitmap.width, bitmap.height))
+      let fonte = bitmap
+      if (k < 1) {
+        fonte = canvas(bitmap.width * k, bitmap.height * k)
+        const ctx = fonte.getContext('2d')
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(bitmap, 0, 0, fonte.width, fonte.height)
+      }
+      setPreviaAlta({ canvas: comporPrevia(fonte), versao: versaoPrevia })
+    }, 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [precisaAlta, versaoPrevia, bitmap])
+  const alta = previaAlta?.versao === versaoPrevia ? previaAlta.canvas : null
+
+  /* ─── Camadas: imagens (URLs) e desenhos (canvas) ───────────────────── */
+  const urls = useRef(new Map()) // Blob → URL
+  const fontes = useMemo(() => {
+    const mapa = new Map()
+    for (const c of camadas) {
+      if (c.tipo !== 'imagem' || !c.arquivo) continue
+      if (!urls.current.has(c.arquivo)) urls.current.set(c.arquivo, URL.createObjectURL(c.arquivo))
+      mapa.set(c.id, { url: urls.current.get(c.arquivo), arquivo: c.arquivo })
+    }
+    return mapa
+  }, [camadas])
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), [])
+
+  const desenhos = useRef(new Map()) // id → { canvas, arquivo }
+  const [versaoDesenhos, setVersaoDesenhos] = useState(0)
+  useEffect(() => {
+    if (!p) return
+    let vivo = true
+    const ids = new Set()
+    for (const c of camadas) {
+      if (c.tipo !== 'desenho') continue
+      ids.add(c.id)
+      const atual = desenhos.current.get(c.id)
+      const tamanhoCerto = atual && Math.abs(atual.canvas.width / atual.canvas.height - p.w / p.h) < 0.01
+      if (atual && atual.arquivo === c.arquivo && tamanhoCerto) continue
+      const cv = atual && tamanhoCerto ? atual.canvas : canvasDesenho(p.w, p.h)
+      desenhos.current.set(c.id, { canvas: cv, arquivo: c.arquivo })
+      const ctx = cv.getContext('2d')
+      if (!c.arquivo) {
+        ctx.clearRect(0, 0, cv.width, cv.height)
+        setVersaoDesenhos((v) => v + 1)
+      } else {
+        bitmapDe(c.arquivo).then((b) => {
+          if (!vivo || desenhos.current.get(c.id)?.arquivo !== c.arquivo) return
+          ctx.clearRect(0, 0, cv.width, cv.height)
+          ctx.drawImage(b, 0, 0, cv.width, cv.height)
+          setVersaoDesenhos((v) => v + 1)
+        })
+      }
+    }
+    for (const id of [...desenhos.current.keys()]) if (!ids.has(id)) desenhos.current.delete(id)
+    return () => {
+      vivo = false
+    }
+  }, [camadas, p?.w, p?.h, Boolean(p)]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mudarCamada = useCallback((id, d) => mudar((x) => ({ camadas: (x.camadas ?? []).map((c) => (c.id === id ? { ...c, ...d } : c)) })), [mudar])
+  const adicionarCamada = (c) => {
+    mudar((x) => ({ camadas: [...(x.camadas ?? []), c] }))
+    setSelecionada(c.id)
+  }
+  const adicionarTexto = (x, y) => {
+    const c = novaCamadaTexto(x ?? 0.25, y ?? 0.45)
+    adicionarCamada(c)
+    setFocarTexto(c.id)
+  }
+  const adicionarDesenho = () => {
+    const c = novaCamadaDesenho(camadas.filter((x) => x.tipo === 'desenho').length + 1)
+    desenhos.current.set(c.id, { canvas: canvasDesenho(p.w, p.h), arquivo: null })
+    adicionarCamada(c)
+    return c
+  }
+  const adicionarImagens = async (lista) => {
+    for (const a of [...(lista ?? [])]) {
+      try {
+        const b = await bitmapDe(a)
+        adicionarCamada(novaCamadaImagem(a, b.width, b.height, p.w, p.h, semExtensao(a.name) || 'Imagem'))
+      } catch {
+        setErro('Não foi possível abrir essa imagem.')
+      }
+    }
+    if (ferramenta !== 'camadas') setFerramenta('camadas')
+  }
+  const acoesCamada = {
+    ordem: (id, dir) =>
+      mudar((x) => {
+        const l = [...x.camadas]
+        const i = l.findIndex((c) => c.id === id)
+        const j = limitar(i + dir, 0, l.length - 1)
+        ;[l[i], l[j]] = [l[j], l[i]]
+        return { camadas: l }
+      }),
+    duplicar: (id) => {
+      const c = camadas.find((x) => x.id === id)
+      if (!c) return
+      const copia = { ...c, id: novaId(), nome: `${c.nome} (cópia)`, ...(c.tipo === 'desenho' ? {} : { x: c.x + 0.02, y: c.y + 0.02 }) }
+      if (c.tipo === 'desenho') {
+        const cv = canvasDesenho(p.w, p.h)
+        const orig = desenhos.current.get(c.id)?.canvas
+        if (orig) cv.getContext('2d').drawImage(orig, 0, 0, cv.width, cv.height)
+        desenhos.current.set(copia.id, { canvas: cv, arquivo: c.arquivo })
+      }
+      mudar((x) => {
+        const l = [...x.camadas]
+        l.splice(l.findIndex((k) => k.id === id) + 1, 0, copia)
+        return { camadas: l }
+      })
+      setSelecionada(copia.id)
+    },
+    excluir: (id) => {
+      mudar((x) => ({ camadas: x.camadas.filter((c) => c.id !== id) }))
+      setSelecionada(null)
+    },
+    limparDesenho: (id) => {
+      const e = desenhos.current.get(id)
+      e?.canvas.getContext('2d').clearRect(0, 0, e.canvas.width, e.canvas.height)
+      if (e) e.arquivo = null
+      mudarCamada(id, { arquivo: null })
+    },
+    centroVertical: () => {
+      const c = camadas.find((x) => x.id === selecionada)
+      if (c) mudarCamada(c.id, { y: 0.5 - alturaCamada(c, p.w, p.h) / p.h / 2 })
+    },
+    // Imagem: caber, cobrir ou tamanho original (mantendo a proporção da imagem recortada).
+    ...Object.fromEntries(
+      [
+        ['ajustarTela', 'caber'],
+        ['cobrirTela', 'cobrir'],
+        ['tamanhoOriginal', 'original'],
+      ].map(([nome, modo]) => [
+        nome,
+        async () => {
+          const c = camadas.find((x) => x.id === selecionada)
+          if (!c?.arquivo) return
+          const b = await bitmapDe(c.arquivo)
+          const r = c.recorte ?? { w: 1, h: 1 }
+          const iw = b.width * r.w
+          const ih = b.height * r.h
+          const k = modo === 'original' ? 1 : modo === 'caber' ? Math.min(p.w / iw, p.h / ih) : Math.max(p.w / iw, p.h / ih)
+          const w = (iw * k) / p.w
+          const h = (ih * k) / p.h
+          mudarCamada(c.id, { w, h, x: (1 - w) / 2, y: (1 - h) / 2, girar: 0 })
+        },
+      ]),
+    ),
+  }
+  const camadaSel = camadas.find((c) => c.id === selecionada) ?? null
+
+  /* ─── Abrir ────────────────────────────────────────────────────────── */
   const abrir = async (lista) => {
     const a = [...(lista ?? [])][0]
     if (!a) return
@@ -667,43 +387,76 @@ export default function EditorImagem() {
       setFerramenta('ajustes')
       setRascunho(null)
       setPintura(null)
+      setSelecionada(null)
       setZoom('ajustar')
+      ultimaMascara.current = null
+      desenhos.current.clear()
       const ext = extensaoDe(a.name)
-      setP({ nome: `${semExtensao(a.name)}-editada`, base, w: c.width, h: c.height, ajustes: NEUTRO, textos: [], tipo: ['jpg', 'jpeg'].includes(ext) ? 'jpg' : ['png', 'webp', 'avif'].includes(ext) ? ext : 'png' })
+      setP({ nome: `${semExtensao(a.name)}-editada`, base, w: c.width, h: c.height, ajustes: NEUTRO, filtro: null, camadas: [], tipo: ['jpg', 'jpeg'].includes(ext) ? 'jpg' : ['png', 'webp', 'avif'].includes(ext) ? ext : 'png' })
     } catch (e) {
       console.error(e)
       setErro('Não foi possível abrir essa imagem.')
     }
   }
 
-  /** Troca a imagem-base por um canvas novo (com os textos acompanhando, se preciso). */
-  const comprometer = async (novo, transformarTexto, extra) => {
+  /** Troca só a imagem-base (mesmo tamanho), como no remover fundo e no apagar objeto. */
+  const comprometer = async (novo, extra) => {
     setAplicando(true)
     try {
       const base = await novo.convertToBlob({ type: 'image/png' })
-      mudar((x) => ({ base, w: novo.width, h: novo.height, textos: transformarTexto ? x.textos.map(transformarTexto) : x.textos, fundoEdicao: undefined, ...extra?.(x) }))
+      mudar((x) => ({ base, w: novo.width, h: novo.height, fundoEdicao: undefined, ...extra?.(x) }))
     } finally {
       setAplicando(false)
     }
   }
 
-  /* ferramentas */
+  /** Geometria (recortar, tamanho, girar…): base, camadas e desenhos juntos, num passo só. */
+  const aplicarGeometria = async (g, extra) => {
+    if (!bitmap) return
+    setAplicando(true)
+    try {
+      const novas = []
+      for (const c of camadas) {
+        if (c.tipo === 'desenho') {
+          const e = desenhos.current.get(c.id)
+          if (!e) {
+            novas.push(c)
+            continue
+          }
+          const cv = transformarDesenho(e.canvas, g, p.w, p.h)
+          const arquivo = c.arquivo ? await paraBlob(cv) : null
+          desenhos.current.set(c.id, { canvas: cv, arquivo })
+          novas.push({ ...c, arquivo })
+        } else novas.push(transformarCamada(c, g, p.w, p.h))
+      }
+      const base = await transformarBase(bitmap, g).convertToBlob({ type: 'image/png' })
+      mudar((x) => ({ base, w: g.W2, h: g.H2, camadas: novas, fundoEdicao: undefined, ...extra?.(x) }))
+      setVersaoDesenhos((v) => v + 1)
+    } finally {
+      setAplicando(false)
+    }
+  }
+
+  /* ─── Ferramentas ──────────────────────────────────────────────────── */
   const novaPintura = (w, h) => {
     const c = canvas(w, h)
     return { canvas: c, ctx: c.getContext('2d'), sujo: false, ouvir: null }
   }
+  const rascunhoInicial = (id) => {
+    if (id === 'recortar') return { x: 0, y: 0, w: p.w, h: p.h, proporcao: null, prop: 'livre' }
+    if (id === 'tamanho') return { w: p.w, h: p.h, trava: true }
+    if (id === 'girar') return { angulo: 0, bordas: 'recortar' }
+    return null
+  }
   const escolher = (id) => {
     setFerramenta(id)
-    setSelecionado(null)
+    setMao(false)
+    if (!COM_CAMADAS.includes(id)) setSelecionada(null)
     if (!p) return
-    if (id === 'recortar') setRascunho({ x: p.w * 0.1, y: p.h * 0.1, w: p.w * 0.8, h: p.h * 0.8, proporcao: null, prop: 'livre' })
-    else if (id === 'tamanho') setRascunho({ w: p.w, h: p.h, trava: true })
-    else if (id === 'girar') setRascunho({ angulo: 0 })
-    else if (id === 'fundo' && ultimaMascara.current?.base === p.base && !p.fundoRemovido) setRascunho({ ...PADRAO_FUNDO, ...ultimaMascara.current.opcoes, mascara: ultimaMascara.current.mascara, pincel: ultimaMascara.current.opcoes?.manual ? 'varinha' : null })
-    else setRascunho(null)
-    setPintura(id === 'apagar' || id === 'pincel' ? novaPintura(p.w, p.h) : null)
+    setRascunho(rascunhoInicial(id))
+    setPintura(id === 'apagar' ? novaPintura(p.w, p.h) : null)
   }
-  // Mudou o tamanho da imagem (aplicou, desfez…): a pintura acompanha.
+  // Mudou o tamanho da imagem (aplicou, desfez…): a máscara do apagar acompanha.
   useEffect(() => {
     if (p && pintura && (pintura.canvas.width !== p.w || pintura.canvas.height !== p.h)) setPintura(novaPintura(p.w, p.h))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -711,73 +464,32 @@ export default function EditorImagem() {
 
   const aplicarRecorte = () => {
     const r = rascunho
-    const c = canvas(r.w, r.h)
-    c.getContext('2d').drawImage(bitmap, r.x, r.y, r.w, r.h, 0, 0, Math.round(r.w), Math.round(r.h))
-    comprometer(c, (t) => ({ ...t, x: t.x - r.x, y: t.y - r.y }))
+    aplicarGeometria(GEOMETRIA.recorte(r))
     setRascunho(null)
     setFerramenta('ajustes')
   }
   const aplicarTamanho = (nw = rascunho.w, nh = rascunho.h, cobrir = false) => {
-    const c = canvas(nw, nh)
-    const ctx = c.getContext('2d')
-    ctx.imageSmoothingQuality = 'high'
-    if (cobrir) {
-      // Corta as sobras para caber na proporção, sem esticar.
-      const k = Math.max(nw / bitmap.width, nh / bitmap.height)
-      const sw = nw / k
-      const sh = nh / k
-      ctx.drawImage(bitmap, (bitmap.width - sw) / 2, (bitmap.height - sh) / 2, sw, sh, 0, 0, nw, nh)
-    } else ctx.drawImage(bitmap, 0, 0, nw, nh)
-    const kx = nw / p.w
-    const ky = nh / p.h
     const trava = rascunho?.trava ?? true
-    comprometer(c, (t) => ({ ...t, x: t.x * kx, y: t.y * ky, tamanho: t.tamanho * Math.min(kx, ky) })).then(() => setRascunho({ w: Math.round(nw), h: Math.round(nh), trava }))
+    aplicarGeometria(cobrir ? GEOMETRIA.cobrir(p.w, p.h, nw, nh) : GEOMETRIA.esticar(p.w, p.h, nw, nh)).then(() => setRascunho({ w: Math.round(nw), h: Math.round(nh), trava }))
   }
-  const girar90 = (sentido) => {
-    const c = canvas(bitmap.height, bitmap.width)
-    const ctx = c.getContext('2d')
-    ctx.translate(c.width / 2, c.height / 2)
-    ctx.rotate((sentido * Math.PI) / 2)
-    ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2)
-    const W = p.w
-    const H = p.h
-    comprometer(c, (t) => (sentido > 0 ? { ...t, x: H - t.y - t.tamanho, y: t.x } : { ...t, x: t.y, y: W - t.x - t.tamanho }))
-  }
-  const espelhar = (horizontal) => {
-    const c = canvas(bitmap.width, bitmap.height)
-    const ctx = c.getContext('2d')
-    if (horizontal) {
-      ctx.translate(c.width, 0)
-      ctx.scale(-1, 1)
-    } else {
-      ctx.translate(0, c.height)
-      ctx.scale(1, -1)
-    }
-    ctx.drawImage(bitmap, 0, 0)
-    comprometer(c)
-  }
+  const girar90 = (sentido) => aplicarGeometria(GEOMETRIA.girar90(p.w, p.h, sentido))
+  const espelhar = (horizontal) => aplicarGeometria(GEOMETRIA.espelhar(p.w, p.h, horizontal))
   const aplicarEndireitar = () => {
     const ang = rascunho?.angulo ?? 0
     if (!ang) return
-    const { w: iw, h: ih } = maiorDentroGirado(bitmap.width, bitmap.height, ang)
-    const c = canvas(iw, ih)
-    const ctx = c.getContext('2d')
-    ctx.imageSmoothingQuality = 'high'
-    ctx.translate(c.width / 2, c.height / 2)
-    ctx.rotate((ang * Math.PI) / 180)
-    ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2)
-    const dx = (bitmap.width - iw) / 2
-    const dy = (bitmap.height - ih) / 2
-    comprometer(c, (t) => ({ ...t, x: t.x - dx, y: t.y - dy })).then(() => setRascunho({ angulo: 0 }))
+    const expandir = rascunho.bordas === 'expandir'
+    const { w: W2, h: H2 } = expandir ? caixaGirada(p.w, p.h, ang) : maiorDentroGirado(p.w, p.h, ang)
+    aplicarGeometria(GEOMETRIA.endireitar(p.w, p.h, ang, W2, H2), (x) => (expandir && x.tipo === 'jpg' ? { tipo: 'png' } : {})).then(() => setRascunho({ angulo: 0, bordas: rascunho.bordas }))
   }
+
+  /* Remover fundo */
+  const mascaraNova = () => ({ ...PADRAO_FUNDO, mascara: mascaraCheia(), manual: true })
   const executarIa = (tipo) =>
     tarefaIa.executar(
       async ({ progresso, sinal }) => {
         if (tipo === 'fundo') {
-          const base = p.base
-          const mascara = await mascaraDoFundo(bitmap, { modo: modoFundo, progresso, sinal })
-          ultimaMascara.current = { base, mascara }
-          setRascunho({ ...PADRAO_FUNDO, mascara })
+          const mascara = await mascaraDoFundo(bitmap, { modo: 'fundo', progresso, sinal })
+          setRascunho((x) => ({ ...(x ?? PADRAO_FUNDO), mascara, automatico: true, manual: false }))
           return true
         }
         const r = await apagarObjeto(bitmap, pintura.canvas, { progresso, sinal })
@@ -787,26 +499,23 @@ export default function EditorImagem() {
         pintura.ouvir?.()
         return true
       },
-      tipo === 'fundo' ? 'Removendo o fundo' : 'Apagando',
+      tipo === 'fundo' ? 'Segmentando' : 'Preenchendo',
     )
-  /** Grava o fundo removido (com as opções escolhidas) na imagem: depois disso, só desfazendo. */
+  /** Grava a máscara na imagem. Depois disso: "Editar o fundo" ou desfazer. */
   const aplicarFundo = async () => {
     const r = rascunho
     const final = comporFundo(bitmap, mascaraFinal(), r, imagemFundo)
     const { mascara, ...resto } = r
     const opcoes = { ...resto, pincel: null }
-    // Desfazer o "Aplicar" (ou "Editar o fundo") traz de volta as opções e os retoques.
-    if (ultimaMascara.current) ultimaMascara.current.opcoes = opcoes
     setRascunho(null)
     const blobMascara = await paraBlob(mascara)
     const transparente = r.fundo === 'transparente' || (r.fundo === 'imagem' && !imagemFundo)
-    comprometer(final, null, (x) => ({
+    comprometer(final, (x) => ({
       fundoRemovido: true,
       tipo: transparente && x.tipo === 'jpg' ? 'png' : x.tipo,
       fundoEdicao: { original: x.base, w: x.w, h: x.h, mascara: blobMascara, opcoes },
     }))
   }
-  /** Volta ao recorte (máscara, opções e retoques) de um fundo já aplicado — sem rodar a IA de novo. */
   const editarFundo = async () => {
     const f = p?.fundoEdicao
     if (!f) return
@@ -814,41 +523,50 @@ export default function EditorImagem() {
     ultimaMascara.current = { base: f.original, mascara, opcoes: f.opcoes }
     mudar({ base: f.original, w: f.w, h: f.h, fundoRemovido: false, fundoEdicao: undefined })
   }
-  /** Sem IA: começa com tudo e a pessoa tira o fundo com a varinha e o pincel. */
-  const removerAMao = () => {
-    const mascara = mascaraCheia()
-    ultimaMascara.current = { base: p.base, mascara, opcoes: { manual: true } }
-    setRascunho({ ...PADRAO_FUNDO, mascara, manual: true, pincel: 'varinha' })
-  }
   const descartarFundo = () => {
     ultimaMascara.current = null
-    setRascunho(null)
+    setRascunho(mascaraNova())
   }
-  // A máscara vale só para a imagem em que a IA rodou (desfazer o "Aplicar" traz ela de volta).
+  // Na ferramenta: a máscara em andamento (ou uma nova, com tudo) — e lembrada ao trocar de ferramenta.
   useEffect(() => {
-    if (ferramenta !== 'fundo' || !p) return
+    if (ferramenta !== 'fundo' || !p || p.fundoRemovido) {
+      if (ferramenta === 'fundo' && rascunho?.mascara) setRascunho(null)
+      return
+    }
+    if (rascunho?.mascara) return
     const salva = ultimaMascara.current
-    const vale = salva && salva.base === p.base && !p.fundoRemovido
-    if (vale && !rascunho?.mascara) setRascunho({ ...PADRAO_FUNDO, ...salva.opcoes, mascara: salva.mascara, pincel: salva.opcoes?.manual ? 'varinha' : null })
-    else if (!vale && rascunho?.mascara) setRascunho(null)
+    setRascunho(salva && salva.base === p.base ? { ...PADRAO_FUNDO, ...salva.opcoes, mascara: salva.mascara, pincel: null } : mascaraNova())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ferramenta, p?.base, p?.fundoRemovido])
-  // Deixa a IA pronta em segundo plano ao abrir a ferramenta (se o modelo já foi baixado).
+  }, [ferramenta, p?.base, p?.fundoRemovido, rascunho?.mascara])
+  useEffect(() => {
+    if (ferramenta !== 'fundo' || !rascunho?.mascara || !p) return
+    const { mascara, ...opcoes } = rascunho
+    ultimaMascara.current = { base: p.base, mascara, opcoes }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rascunho])
+  // Deixa o modelo pronto em segundo plano ao abrir a ferramenta (se já foi baixado).
   useEffect(() => {
     if (!p || tarefaIa.fase === 'processando') return
-    if (ferramenta === 'fundo' && !p.fundoRemovido && !rascunho?.mascara) prepararModelo(modoFundo)
+    if (ferramenta === 'fundo' && !p.fundoRemovido && !rascunho?.automatico) prepararModelo('fundo')
     else if (ferramenta === 'apagar') prepararModelo('apagar')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ferramenta, modoFundo, Boolean(p)])
+  }, [ferramenta, Boolean(p)])
 
-  /* retoque do fundo removido (pincel Recuperar / Apagar) */
+  /* Retoque da máscara (varinha, ocultar, revelar) */
   const pincelFundoPadrao = p ? Math.max(4, Math.round(Math.max(p.w, p.h) / 30)) : 40
+  const agendado = useRef(0)
+  const agendar = (f) => {
+    if (agendado.current) return
+    agendado.current = requestAnimationFrame(() => {
+      agendado.current = 0
+      f()
+    })
+  }
   const pintarRetoque = ({ x, y }, comeco) => {
     const m = mascaraFinal()
     if (!m || !rascunho?.pincel) return
     const ponto = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]
     if (rascunho.pincel === 'varinha') {
-      // Um clique = uma área; arrastar não faz nada.
       if (!comeco) return
       tracoAtual.current = { modo: 'varinha', acao: rascunho.varinhaAcao, tolerancia: rascunho.tolerancia, contiguo: rascunho.contiguo, pontos: [ponto] }
       desenharTraco(m.getContext('2d'), tracoAtual.current, m.width / p.w, 0, bitmap)
@@ -859,80 +577,98 @@ export default function EditorImagem() {
       t.pontos.push(ponto)
       desenharTraco(m.getContext('2d'), t, m.width / p.w, t.pontos.length - 2)
     }
-    // Uma prévia por quadro, no máximo.
-    if (!agendado.current) {
-      agendado.current = requestAnimationFrame(() => {
-        agendado.current = 0
-        setVersaoRetoque((v) => v + 1)
-      })
-    }
+    agendar(() => setVersaoRetoque((v) => v + 1))
   }
-  const agendado = useRef(0)
   const soltarRetoque = () => {
     const t = tracoAtual.current
     tracoAtual.current = null
     if (!t?.pontos.length) return
     const tracos = [...(rascunho?.tracos ?? []), t]
-    if (retoque.current) retoque.current.tracos = tracos // já está desenhado: não refaz
+    if (retoque.current) retoque.current.tracos = tracos
     setRascunho((x) => (x?.mascara ? { ...x, tracos } : x))
   }
   const desfazerTraco = () => setRascunho((x) => (x?.tracos?.length ? { ...x, tracos: x.tracos.slice(0, -1) } : x))
 
-  /* pintura (pincel e máscara do apagar) */
-  const aoPintar = ({ x, y }, comeco) => {
-    if (ferramenta === 'fundo') return pintarRetoque({ x, y }, comeco)
+  /* Pincéis (camada de desenho) */
+  const traco = useRef(null) // { id, t }
+  const camadaDesenhoAlvo = () => {
+    if (camadaSel?.tipo === 'desenho') return camadaSel
+    const ultima = [...camadas].reverse().find((c) => c.tipo === 'desenho' && c.visivel !== false)
+    return ultima ?? adicionarDesenho()
+  }
+  const pintarDesenho = (pt, comeco, ev) => {
+    if (comeco) {
+      const c = camadaDesenhoAlvo()
+      let e = desenhos.current.get(c.id)
+      if (!e) {
+        e = { canvas: canvasDesenho(p.w, p.h), arquivo: c.arquivo }
+        desenhos.current.set(c.id, e)
+      }
+      setSelecionada(c.id)
+      traco.current = { id: c.id, t: iniciarTraco(pincel, e.canvas, e.canvas.width / p.w) }
+    }
+    const tr = traco.current
+    if (!tr) return
+    tr.t.mover([pt.x, pt.y], ev?.shiftKey)
+    agendar(() => tr.t.compor())
+  }
+  const soltarDesenho = async () => {
+    const tr = traco.current
+    traco.current = null
+    if (!tr || tr.t.vazio()) return
+    tr.t.compor()
+    const e = desenhos.current.get(tr.id)
+    if (!e) return
+    const arquivo = await paraBlob(e.canvas)
+    e.arquivo = arquivo
+    mudarCamada(tr.id, { arquivo })
+  }
+
+  /* Pintura: roteia para a ferramenta */
+  const aoPintar = (pt, comeco, ev) => {
+    if (ferramenta === 'fundo') return pintarRetoque(pt, comeco)
+    if (ferramenta === 'pincel') return pintarDesenho(pt, comeco, ev)
+    // Apagar objeto: máscara vermelha.
     const ctx = pintura.ctx
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = pincel.tamanho
-    ctx.strokeStyle = ferramenta === 'apagar' || pincel.borracha ? '#ff2d55' : pincel.cor
-    ctx.globalAlpha = ferramenta === 'apagar' || pincel.borracha ? 1 : pincel.opacidade / 100
+    ctx.lineWidth = tamanhoApagar
+    ctx.strokeStyle = '#ff2d55'
     if (comeco) {
       ctx.beginPath()
-      ctx.moveTo(x, y)
-      ctx.lineTo(x + 0.01, y)
-    } else ctx.lineTo(x, y)
+      ctx.moveTo(pt.x, pt.y)
+      ctx.lineTo(pt.x + 0.01, pt.y)
+    } else ctx.lineTo(pt.x, pt.y)
     ctx.stroke()
     pintura.sujo = true
     pintura.ouvir?.()
   }
   const aoSoltarPintura = () => {
     if (ferramenta === 'fundo') return soltarRetoque()
-    if (ferramenta !== 'pincel' || !pintura.sujo) return
-    // Cada traço do pincel entra na imagem (e no desfazer).
-    const c = canvas(bitmap.width, bitmap.height)
-    const ctx = c.getContext('2d')
-    ctx.drawImage(bitmap, 0, 0)
-    if (pincel.borracha) ctx.globalCompositeOperation = 'destination-out'
-    ctx.drawImage(pintura.canvas, 0, 0)
-    pintura.ctx.clearRect(0, 0, pintura.canvas.width, pintura.canvas.height)
-    pintura.sujo = false
-    comprometer(c).then(() => pintura.ouvir?.())
+    if (ferramenta === 'pincel') return soltarDesenho()
   }
 
-  /* textos */
-  const textoSel = p?.textos?.find((t) => t.id === selecionado)
-  const mudarTexto = (id, d) => mudar((x) => ({ textos: x.textos.map((t) => (t.id === id ? { ...t, ...d } : t)) }))
-  const aoClicarTexto = ({ x, y }) => {
-    const tamanho = Math.round(Math.max(estiloTexto.tamanho, Math.min(p.w, p.h) / 14))
-    const t = { id: novaId(), texto: 'Seu texto', x, y: y - tamanho * 0.6, ...estiloTexto, tamanho }
-    mudar((q) => ({ textos: [...q.textos, t] }))
-    setSelecionado(t.id)
-  }
-  const removerTexto = (id) => {
-    mudar((x) => ({ textos: x.textos.filter((t) => t.id !== id) }))
-    setSelecionado(null)
+  /* Texto: clicar no vazio cria (ou, com um texto selecionado, só tira a seleção) */
+  const aoClicarVazio = ({ x, y }) => {
+    if (ferramenta !== 'texto') return
+    if (camadaSel?.tipo === 'texto') {
+      setSelecionada(null)
+      return
+    }
+    adicionarTexto(limitar(x / p.w - 0.25, 0, 0.75), limitar(y / p.h - 0.05, 0, 0.9))
   }
 
-  /* baixar: estimativa do tamanho (codifica de verdade, com atraso) */
-  const chaveEstimativa = baixando ? JSON.stringify([baixando.formato, baixando.qualidade, baixando.fundo, p?.base?.size, p?.w, p?.h, p?.ajustes, p?.textos]) : null
+  /* ─── Baixar ───────────────────────────────────────────────────────── */
+  const contadorDoc = useRef(0)
+  const versaoDoc = useMemo(() => (contadorDoc.current += 1), [p]) // muda a cada mudança no projeto
+  const chaveEstimativa = baixando ? JSON.stringify([baixando.formato, baixando.qualidade, baixando.fundo, versaoDoc]) : null
+  const final = () => renderizarDocumento({ base: bitmap, ajustes: p.ajustes, camadas, W: p.w, H: p.h, desenhos: desenhos.current })
   useEffect(() => {
     if (!baixando || !bitmap) return undefined
     let vivo = true
     const t = setTimeout(async () => {
       try {
-        const final = renderizarFinal(bitmap, p.ajustes, p.textos)
-        const blob = await codificar(final, { formato: baixando.formato, qualidade: baixando.qualidade, fundo: baixando.fundo, otimizar: baixando.formato === 'png' })
+        const blob = await codificar(await final(), { formato: baixando.formato, qualidade: baixando.qualidade, fundo: baixando.fundo, otimizar: baixando.formato === 'png' })
         if (vivo) setEstimativa({ chave: chaveEstimativa, blob })
       } catch (e) {
         console.error(e)
@@ -945,43 +681,52 @@ export default function EditorImagem() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveEstimativa])
-
   const baixarAgora = async (nome) => {
     const s = baixando
     const chave = chaveEstimativa
     setBaixando(null)
     mudar({ nome })
     const pronta = estimativa?.chave === chave ? estimativa.blob : null
-    const blob = pronta ?? (await codificar(renderizarFinal(bitmap, p.ajustes, p.textos), { formato: s.formato, qualidade: s.qualidade, fundo: s.fundo, otimizar: s.formato === 'png' }))
+    const blob = pronta ?? (await codificar(await final(), { formato: s.formato, qualidade: s.qualidade, fundo: s.fundo, otimizar: s.formato === 'png' }))
     baixarBlob(blob, `${nome}.${s.formato}`)
   }
 
-  /* atalhos */
+  /* ─── Zoom ─────────────────────────────────────────────────────────── */
+  const maximo = p ? zoomMaximo(p.w, p.h) : 8
+  const zoomEm = (fator) => setZoom(limitar((zoom === 'ajustar' ? escalaAtual : zoom) * fator, ZOOM_MINIMO, maximo))
+
+  /* ─── Atalhos ──────────────────────────────────────────────────────── */
   const teclas = useRef(null)
   teclas.current = (e) => {
     if (document.querySelector('dialog[open]')) return
+    const digitando = e.target.closest?.('input:not([type=range]):not([type=checkbox]), textarea, select, [contenteditable]')
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-      if (e.target.closest?.('input:not([type=range]):not([type=checkbox]), textarea, [contenteditable]')) return
+      if (digitando) return
       const k = e.key.toLowerCase()
       if (k === 'z' && !e.shiftKey) {
         e.preventDefault()
-        // Retocando o fundo: desfaz o último traço (não a imagem).
         if (ferramenta === 'fundo' && rascunho?.tracos?.length) desfazerTraco()
         else historico.desfazer()
       } else if ((k === 'z' && e.shiftKey) || k === 'y') {
         e.preventDefault()
         historico.refazer()
-      } else if (p && (k === '=' || k === '+' || k === '-' || k === '0')) {
-        // Ctrl + / Ctrl − / Ctrl 0: zoom da imagem (em vez do zoom da página).
+      } else if (p && (k === '=' || k === '+' || k === '-' || k === '0' || k === '1')) {
         e.preventDefault()
         if (k === '0') setZoom('ajustar')
+        else if (k === '1') setZoom(1)
         else zoomEm(k === '-' ? 1 / 1.25 : 1.25)
       }
       return
     }
-    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
-    if (selecionado && (e.key === 'Delete' || e.key === 'Backspace')) removerTexto(selecionado)
-    else if (e.key === 'Escape') setSelecionado(null)
+    if (digitando) return
+    if (e.key === 'h' || e.key === 'H') setMao((m) => !m)
+    else if (selecionada && COM_CAMADAS.includes(ferramenta) && (e.key === 'Delete' || e.key === 'Backspace')) acoesCamada.excluir(selecionada)
+    else if (selecionada && COM_CAMADAS.includes(ferramenta) && e.key.startsWith('Arrow') && camadaSel?.tipo !== 'desenho') {
+      e.preventDefault()
+      const passo = (e.shiftKey ? 10 : 1) / Math.max(p.w, p.h)
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]
+      mudarCamada(selecionada, { x: camadaSel.x + (d[0] * passo * Math.max(p.w, p.h)) / p.w, y: camadaSel.y + (d[1] * passo * Math.max(p.w, p.h)) / p.h })
+    } else if (e.key === 'Escape') setSelecionada(null)
     else if (e.key === 'Enter' && ferramenta === 'recortar' && rascunho) aplicarRecorte()
   }
   useEffect(() => {
@@ -991,10 +736,12 @@ export default function EditorImagem() {
   }, [])
 
   const ocupado = aplicando || tarefaIa.fase === 'processando'
-  const zoomEm = (fator) => setZoom(limitar((zoom === 'ajustar' ? escalaAtual : zoom) * fator, 0.05, 8))
   const estimado = estimativa && estimativa.chave === chaveEstimativa ? estimativa.blob : null
+  const pintando = ferramenta === 'apagar' || ferramenta === 'pincel' || (ferramenta === 'fundo' && Boolean(rascunho?.pincel && rascunho?.mascara))
+  const pincelTela = ferramenta === 'apagar' ? { tamanho: tamanhoApagar } : ferramenta === 'pincel' ? { tamanho: pincel.tamanho } : ferramenta === 'fundo' && rascunho?.pincel ? { tamanho: rascunho.pincel === 'varinha' ? 0 : (rascunho.tamanhoPincel ?? pincelFundoPadrao) } : null
+  const zoomPct = Math.round(escalaAtual * 100)
 
-  /* ─── tela ─── */
+  /* ─── Tela ─────────────────────────────────────────────────────────── */
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100dvh-5.5rem)] lg:min-h-[34rem]">
       {/* Barra do topo */}
@@ -1002,7 +749,7 @@ export default function EditorImagem() {
         <SeloCategoria categoria="imagem" icone="imagem" tamanho="p" />
         <div className="min-w-0 flex-1 basis-40">
           {p ? <NomeEditavel key={p.nome} nome={p.nome} extensao={corBaseDe(p.tipo)} aoMudar={(n) => mudar({ nome: n })} rotulo="Renomear a imagem final" /> : <p className="text-sm font-semibold text-tinta">Nenhuma imagem aberta</p>}
-          <p className="text-xs text-fraca tabular-nums">{p ? `${p.w} × ${p.h} px` : 'Escolha uma imagem para começar'}</p>
+          <p className="text-xs text-fraca tabular-nums">{p ? `${p.w} × ${p.h} px${camadas.length ? ` · ${camadas.length} camada${camadas.length > 1 ? 's' : ''}` : ''}` : 'Escolha uma imagem para começar'}</p>
         </div>
         <input
           ref={entrada}
@@ -1016,6 +763,20 @@ export default function EditorImagem() {
             e.target.value = ''
           }}
         />
+        <input
+          ref={entradaCamada}
+          type="file"
+          accept="image/*"
+          multiple
+          className="sr-only"
+          tabIndex={-1}
+          aria-label="Adicionar imagem como camada"
+          data-entrada-camada=""
+          onChange={(e) => {
+            adicionarImagens(e.target.files)
+            e.target.value = ''
+          }}
+        />
         <Botao variante="secundario" tamanho="p" icone="arquivoMais" onClick={() => entrada.current?.click()} disabled={ocupado}>
           {p ? 'Abrir outra' : 'Escolher imagem'}
         </Botao>
@@ -1023,12 +784,40 @@ export default function EditorImagem() {
           <BotaoAcao rotulo="Desfazer (Ctrl+Z)" icone="desfazer" onClick={historico.desfazer} disabled={!historico.podeDesfazer || ocupado} />
           <BotaoAcao rotulo="Refazer (Ctrl+Shift+Z)" icone="refazerAcao" onClick={historico.refazer} disabled={!historico.podeRefazer || ocupado} />
         </div>
-        <div className="flex items-center gap-0.5 rounded-lg border border-borda px-0.5">
-          <BotaoAcao rotulo="Diminuir o zoom" icone="zoomMenos" onClick={() => zoomEm(1 / 1.25)} disabled={!p} />
-          <button type="button" onClick={() => setZoom('ajustar')} disabled={!p} className="min-w-14 text-xs font-semibold text-suave tabular-nums hover:text-tinta" title="Ajustar à tela">
-            {Math.round(escalaAtual * 100)}%
+        <div className="flex items-center gap-0.5 rounded-lg border border-borda px-0.5" title="Roda do mouse: zoom · H ou Espaço: mão · Ctrl 0: ajustar · Ctrl 1: 100%">
+          <BotaoAcao rotulo="Diminuir o zoom (Ctrl −)" icone="zoomMenos" onClick={() => zoomEm(1 / 1.25)} disabled={!p} />
+          <label className="relative">
+            <span className="sr-only">Zoom</span>
+            <select
+              value={zoom === 'ajustar' ? 'ajustar' : String(zoom)}
+              onChange={(e) => setZoom(e.target.value === 'ajustar' ? 'ajustar' : Number(e.target.value))}
+              disabled={!p}
+              className="h-8 w-[4.5rem] cursor-pointer appearance-none rounded-md bg-transparent text-center text-xs font-semibold text-suave tabular-nums hover:text-tinta focus:outline-none"
+              aria-label="Zoom"
+              data-zoom=""
+            >
+              <option value="ajustar">{zoom === 'ajustar' ? `${zoomPct}%` : 'Ajustar'}</option>
+              {zoom !== 'ajustar' && !ZOOMS.includes(zoom) ? <option value={String(zoom)}>{zoomPct}%</option> : null}
+              {ZOOMS.filter((z) => z <= maximo).map((z) => (
+                <option key={z} value={String(z)}>
+                  {Math.round(z * 100)}%
+                </option>
+              ))}
+            </select>
+          </label>
+          <BotaoAcao rotulo="Aumentar o zoom (Ctrl +)" icone="zoomMais" onClick={() => zoomEm(1.25)} disabled={!p} />
+          <button
+            type="button"
+            aria-pressed={mao}
+            onClick={() => setMao((m) => !m)}
+            disabled={!p}
+            title="Mão: arraste para mover a imagem (H)"
+            aria-label="Mão (mover a imagem)"
+            data-mao=""
+            className={`grid size-8 place-items-center rounded-md text-base transition-colors ${mao ? 'bg-marca text-sobre-marca' : 'text-suave hover:bg-superficie-2 hover:text-tinta'}`}
+          >
+            ✋
           </button>
-          <BotaoAcao rotulo="Aumentar o zoom" icone="zoomMais" onClick={() => zoomEm(1.25)} disabled={!p} />
         </div>
         <Botao icone="baixar" onClick={() => setBaixando({ formato: p.tipo, qualidade: 90, fundo: '#ffffff' })} disabled={!p || ocupado}>
           Baixar
@@ -1041,9 +830,9 @@ export default function EditorImagem() {
         </Aviso>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[4.75rem_minmax(0,1fr)_19rem]">
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[4.75rem_minmax(0,1fr)_20rem]">
         {/* Ferramentas */}
-        <nav aria-label="Ferramentas" className="cartao flex gap-1 overflow-x-auto p-1.5 lg:flex-col lg:overflow-visible">
+        <nav aria-label="Ferramentas" className="cartao rolagem-fina flex gap-1 overflow-x-auto p-1.5 lg:flex-col lg:overflow-y-auto">
           {FERRAMENTAS.map((f) => (
             <button
               key={f.id}
@@ -1051,7 +840,7 @@ export default function EditorImagem() {
               aria-pressed={ferramenta === f.id}
               disabled={!p || ocupado}
               onClick={() => escolher(f.id)}
-              className={`flex min-w-16 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[0.625rem] leading-tight font-semibold transition-colors disabled:opacity-40 ${ferramenta === f.id ? 'bg-marca text-sobre-marca' : 'text-suave hover:bg-superficie-2 hover:text-tinta'}`}
+              className={`flex min-w-16 shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[0.625rem] leading-tight font-semibold transition-colors disabled:opacity-40 ${ferramenta === f.id ? 'bg-marca text-sobre-marca' : 'text-suave hover:bg-superficie-2 hover:text-tinta'}`}
             >
               <Icone nome={f.icone} tamanho={18} />
               {f.rotulo}
@@ -1064,23 +853,31 @@ export default function EditorImagem() {
           {p && previa ? (
             <Tela
               previa={previa}
+              previaAlta={alta}
               w={p.w}
               h={p.h}
               zoom={zoom}
               aoZoom={setZoom}
+              aoEscala={setEscalaAtual}
+              mao={mao}
               ferramenta={ferramenta}
               rascunho={rascunho}
               setRascunho={setRascunho}
-              textos={p.textos}
-              selecionado={selecionado}
-              aoSelecionar={setSelecionado}
-              aoMoverTexto={mudarTexto}
-              aoClicarTexto={aoClicarTexto}
-              pintura={pintura}
+              camadas={camadas}
+              fontes={fontes}
+              desenhos={desenhos.current}
+              versaoDesenhos={versaoDesenhos}
+              selecionada={selecionada}
+              aoSelecionar={setSelecionada}
+              aoMudarCamada={mudarCamada}
+              camadasInterativas={COM_CAMADAS.includes(ferramenta) && !mao}
+              aoClicarVazio={aoClicarVazio}
+              pintura={ferramenta === 'apagar' ? pintura : null}
               aoPintar={aoPintar}
               aoSoltarPintura={aoSoltarPintura}
-              pincel={ferramenta === 'pincel' || ferramenta === 'apagar' ? pincel : ferramenta === 'fundo' && rascunho?.pincel ? { tamanho: rascunho.pincel === 'varinha' ? 0 : (rascunho.tamanhoPincel ?? pincelFundoPadrao) } : null}
-              aoEscala={setEscalaAtual}
+              pincel={pincelTela}
+              pintando={pintando && !mao}
+              aoEndireitar={(angulo) => setRascunho((r) => ({ ...r, angulo }))}
             />
           ) : (
             <label
@@ -1094,7 +891,7 @@ export default function EditorImagem() {
               <input type="file" accept={EXTENSOES_IMAGEM.map((e) => `.${e}`).join(',')} className="sr-only" onChange={(e) => abrir(e.target.files)} />
               <SeloCategoria categoria="imagem" icone="imagem" tamanho="gg" />
               <span className="font-display text-lg font-bold text-tinta">Escolha ou arraste uma imagem</span>
-              <span className="max-w-sm text-sm text-suave">{DESCRICAO_IMAGEM} · até 60 MB. Ajuste, recorte, remova o fundo, apague objetos, escreva — tudo no seu aparelho.</span>
+              <span className="max-w-sm text-sm text-suave">{DESCRICAO_IMAGEM} · até 60 MB. Ajuste, recorte, remova o fundo, apague objetos, desenhe, escreva e monte camadas — tudo no seu aparelho.</span>
             </label>
           )}
         </div>
@@ -1104,7 +901,9 @@ export default function EditorImagem() {
           {!p ? (
             <p className="text-sm text-suave">Abra uma imagem para ver as opções.</p>
           ) : ferramenta === 'ajustes' ? (
-            <PainelAjustes a={p.ajustes} mudar={(a) => mudar({ ajustes: a })} />
+            <PainelAjustes a={p.ajustes} mudar={(a) => mudar({ ajustes: a, filtro: null })} />
+          ) : ferramenta === 'filtros' ? (
+            <PainelFiltros reduzida={reduzida.current} versao={versaoReduzida} filtro={p.filtro} aoEscolher={(id, k) => mudar({ ajustes: ajustesDoFiltro(id, k), filtro: id === 'original' ? null : { id, k } })} />
           ) : ferramenta === 'recortar' && rascunho ? (
             <>
               <Grupo titulo="Proporção">
@@ -1115,7 +914,7 @@ export default function EditorImagem() {
                       type="button"
                       aria-pressed={rascunho.prop === pr.id}
                       onClick={() => {
-                        if (!pr.valor) return setRascunho((r) => ({ ...r, proporcao: null, prop: pr.id }))
+                        if (!pr.valor) return setRascunho({ x: 0, y: 0, w: p.w, h: p.h, proporcao: null, prop: 'livre' })
                         const w = Math.min(p.w, p.h * pr.valor)
                         const h = w / pr.valor
                         return setRascunho({ x: (p.w - w) / 2, y: (p.h - h) / 2, w, h, proporcao: pr.valor, prop: pr.id })
@@ -1128,9 +927,9 @@ export default function EditorImagem() {
                 </div>
               </Grupo>
               <p className="text-xs text-fraca tabular-nums">
-                Arraste a área clara; as alças mudam o tamanho. {Math.round(rascunho.w)} × {Math.round(rascunho.h)} px
+                Arraste as alças ou a área para escolher o que fica. {Math.round(rascunho.w)} × {Math.round(rascunho.h)} px
               </p>
-              <Acoes rotulo="Aplicar recorte" aplicar={aplicarRecorte} cancelar={() => escolher('ajustes')} />
+              <Acoes rotulo="Aplicar recorte" aplicar={aplicarRecorte} cancelar={() => setRascunho(rascunhoInicial('recortar'))} desativado={Math.round(rascunho.w) === p.w && Math.round(rascunho.h) === p.h} />
             </>
           ) : ferramenta === 'tamanho' && rascunho ? (
             <>
@@ -1160,7 +959,7 @@ export default function EditorImagem() {
                   />
                 </div>
                 <Caixa rotulo="Manter a proporção" marcado={rascunho.trava} aoMudar={(v) => setRascunho((r) => ({ ...r, trava: v, h: v ? Math.round((r.w * p.h) / p.w) : r.h }))} />
-                <p className="text-xs text-fraca">Desmarque e arraste as alças da imagem para esticar ou achatar.</p>
+                <p className="text-xs text-fraca">A prévia mostra o tamanho novo na mesma escala do atual (o tracejado). Desmarque a proporção e arraste as alças para esticar ou achatar.</p>
                 <div className="flex flex-wrap gap-1.5">
                   {[25, 50, 75, 150, 200].map((pc) => (
                     <button key={pc} type="button" onClick={() => setRascunho((r) => ({ ...r, w: Math.round((p.w * pc) / 100), h: Math.round((p.h * pc) / 100) }))} className="h-8 rounded-lg border border-borda px-2.5 text-xs font-semibold text-suave tabular-nums hover:text-tinta">
@@ -1186,26 +985,53 @@ export default function EditorImagem() {
             <>
               <Grupo titulo="Girar e espelhar">
                 <div className="grid grid-cols-2 gap-2">
-                  <Botao variante="secundario" icone="girar" className="[&>svg]:-scale-x-100" onClick={() => girar90(-1)}>
+                  <Botao variante="secundario" icone="girar" className="[&>svg]:-scale-x-100" onClick={() => girar90(-1)} disabled={ocupado}>
                     Anti-horário
                   </Botao>
-                  <Botao variante="secundario" icone="girar" onClick={() => girar90(1)}>
+                  <Botao variante="secundario" icone="girar" onClick={() => girar90(1)} disabled={ocupado}>
                     Horário
                   </Botao>
-                  <Botao variante="secundario" icone="espelhar" onClick={() => espelhar(true)}>
+                  <Botao variante="secundario" icone="espelhar" onClick={() => espelhar(true)} disabled={ocupado}>
                     Espelhar ↔
                   </Botao>
-                  <Botao variante="secundario" icone="espelhar" className="[&>svg]:rotate-90" onClick={() => espelhar(false)}>
+                  <Botao variante="secundario" icone="espelhar" className="[&>svg]:rotate-90" onClick={() => espelhar(false)} disabled={ocupado}>
                     Espelhar ↕
                   </Botao>
                 </div>
               </Grupo>
               <Grupo titulo="Endireitar">
-                <Deslizante rotulo="Ângulo" valor={rascunho.angulo} aoMudar={(v) => setRascunho({ angulo: v })} min={-45} max={45} passo={0.5} formatar={(v) => `${v.toLocaleString('pt-BR')}°`} />
-                <p className="text-xs text-fraca">Gira um pouco e corta as bordas para a imagem continuar retangular.</p>
-                <Acoes rotulo="Aplicar" aplicar={aplicarEndireitar} cancelar={() => setRascunho({ angulo: 0 })} desativado={!rascunho.angulo} />
+                <p className="text-sm text-suave">Desenhe uma linha na imagem por cima de algo que deveria estar reto (horizonte, parede, poste): ela gira para alinhar. Ou ajuste o ângulo.</p>
+                <Deslizante rotulo="Ângulo" valor={rascunho.angulo} aoMudar={(v) => setRascunho((r) => ({ ...r, angulo: v }))} min={-45} max={45} passo={0.1} formatar={(v) => `${v.toLocaleString('pt-BR')}°`} />
+                <Escolhas
+                  rotulo="Bordas"
+                  atributo="data-bordas"
+                  valor={rascunho.bordas}
+                  aoMudar={(v) => setRascunho((r) => ({ ...r, bordas: v }))}
+                  opcoes={[
+                    ['recortar', 'Recortar as bordas'],
+                    ['expandir', 'Expandir a tela'],
+                  ]}
+                />
+                <p className="text-xs text-fraca">{rascunho.bordas === 'expandir' ? 'Mantém a imagem inteira; os cantos ficam transparentes.' : 'Corta o necessário para a imagem continuar retangular (a área clara).'}</p>
+                <Acoes rotulo="Aplicar" aplicar={aplicarEndireitar} cancelar={() => setRascunho((r) => ({ ...r, angulo: 0 }))} desativado={!rascunho.angulo || ocupado} />
               </Grupo>
             </>
+          ) : ferramenta === 'fundo' && p.fundoRemovido ? (
+            <Grupo titulo="Remover fundo">
+              <p className="rounded-lg border border-borda bg-superficie-2 p-3 text-sm text-suave" data-fundo-removido="">
+                A máscara já foi aplicada nesta imagem.
+              </p>
+              {p.fundoEdicao ? (
+                <>
+                  <Botao tamanho="g" icone="ajustar" onClick={editarFundo} disabled={ocupado} data-editar-fundo="">
+                    Editar o fundo
+                  </Botao>
+                  <p className="text-xs text-fraca">Volta à máscara com as opções e os retoques que você deixou, para mudar o que quiser.</p>
+                </>
+              ) : (
+                <p className="text-xs text-fraca">Você mexeu na imagem depois (recorte, tamanho, apagar…). Para editar o fundo, desfaça até antes disso (Ctrl+Z).</p>
+              )}
+            </Grupo>
           ) : ferramenta === 'fundo' && rascunho?.mascara ? (
             <PainelFundo
               r={rascunho}
@@ -1217,56 +1043,20 @@ export default function EditorImagem() {
               tamanhoMax={Math.max(20, Math.round(Math.max(p.w, p.h) / 4))}
               carregandoImagem={Boolean(rascunho.imagem) && !imagemFundo}
               desativado={ocupado}
+              segmentar={<BotaoSegmentar tarefa={tarefaIa} aoClicar={() => executarIa('fundo')} desativado={ocupado} feito={Boolean(rascunho.automatico)} />}
             />
-          ) : ferramenta === 'fundo' && p.fundoRemovido ? (
-            <Grupo titulo="Remover fundo">
-              <p className="rounded-lg border border-borda bg-superficie-2 p-3 text-sm text-suave" data-fundo-removido="">
-                O fundo desta imagem já foi removido.
-              </p>
-              {p.fundoEdicao ? (
-                <>
-                  <Botao tamanho="g" icone="ajustar" onClick={editarFundo} disabled={ocupado} data-editar-fundo="">
-                    Editar o fundo
-                  </Botao>
-                  <p className="text-xs text-fraca">Volta ao recorte com as opções e os retoques que você deixou, para mudar o que quiser — sem rodar a IA de novo.</p>
-                </>
-              ) : (
-                <p className="text-xs text-fraca">Você mexeu na imagem depois (recorte, tamanho, pincel…). Para editar o fundo, desfaça até antes disso (Ctrl+Z).</p>
-              )}
-            </Grupo>
-          ) : ferramenta === 'fundo' ? (
-            <Grupo titulo="Remover fundo">
-              <OpcoesCartoes
-                rotulo="O que tem na foto?"
-                valor={modoFundo}
-                aoMudar={setModoFundo}
-                colunas="grid-cols-1"
-                opcoes={[
-                  { valor: 'pessoas', rotulo: 'Pessoas · rápido', dica: 'Retratos, selfies e fotos de corpo.', desativado: ocupado },
-                  { valor: 'fundo', rotulo: 'Qualquer coisa · preciso', dica: 'Produtos, animais, objetos, cabelo e detalhes finos.', desativado: ocupado },
-                ]}
-              />
-              <BotaoIa chave={modoFundo} rotulo="Remover fundo" aoClicar={() => executarIa('fundo')} tarefa={tarefaIa} desativado={ocupado} />
-              <p className="text-xs text-fraca">Depois você retoca, ajusta a borda e escolhe o novo fundo (transparente, cor, desfocado ou outra imagem) antes de aplicar.</p>
-              {tarefaIa.fase === 'processando' ? null : (
-                <>
-                  <div className="flex items-center gap-3 text-xs text-fraca">
-                    <span className="h-px flex-1 bg-borda" />
-                    ou
-                    <span className="h-px flex-1 bg-borda" />
-                  </div>
-                  <Botao variante="secundario" icone="magica" onClick={removerAMao} disabled={ocupado} data-fundo-manual="">
-                    Remover à mão (sem IA)
-                  </Botao>
-                  <p className="text-xs text-fraca">Clique no fundo com a varinha para tirar áreas da mesma cor; o pincel cuida dos detalhes. Ótimo para fundos lisos.</p>
-                </>
-              )}
-            </Grupo>
           ) : ferramenta === 'apagar' ? (
             <Grupo titulo="Apagar objeto">
-              <p className="text-sm text-suave">Pinte por cima do que quer apagar (pessoa, texto, sujeira…) e clique em Apagar. A IA preenche o lugar com o que estaria atrás.</p>
-              <Deslizante rotulo="Tamanho do pincel" valor={pincel.tamanho} aoMudar={(v) => setPincel((x) => ({ ...x, tamanho: v }))} min={4} max={300} formatar={(v) => `${v} px`} />
-              <BotaoIa chave="apagar" rotulo="Apagar o que foi pintado" aoClicar={() => executarIa('apagar')} tarefa={tarefaIa} desativado={ocupado} />
+              <p className="text-sm text-suave">Pinte por cima do que quer apagar (pessoa, texto, sujeira…) e clique em Preencher. O preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás.</p>
+              <Deslizante rotulo="Tamanho do pincel" valor={tamanhoApagar} aoMudar={setTamanhoApagar} min={4} max={300} formatar={(v) => `${v} px`} />
+              {tarefaIa.fase === 'processando' ? (
+                <Progresso valor={tarefaIa.progresso} rotulo={tarefaIa.rotulo} aoCancelar={tarefaIa.cancelar} />
+              ) : (
+                <Botao tamanho="g" icone="magica" onClick={() => executarIa('apagar')} disabled={ocupado} data-ia="apagar">
+                  Preencher a área pintada
+                </Botao>
+              )}
+              {tarefaIa.fase === 'erro' ? <Aviso tom="erro">{tarefaIa.mensagem}</Aviso> : null}
               <Botao
                 variante="fantasma"
                 tamanho="p"
@@ -1282,36 +1072,40 @@ export default function EditorImagem() {
               </Botao>
             </Grupo>
           ) : ferramenta === 'pincel' ? (
-            <Grupo titulo="Pincel">
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  [false, 'Pincel'],
-                  [true, 'Borracha'],
-                ].map(([b, r]) => (
-                  <button key={r} type="button" aria-pressed={pincel.borracha === b} onClick={() => setPincel((x) => ({ ...x, borracha: b }))} className={`h-9 rounded-lg border text-xs font-semibold ${pincel.borracha === b ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}>
-                    {r}
-                  </button>
-                ))}
-              </div>
-              {pincel.borracha ? <p className="text-xs text-fraca">A borracha deixa transparente (baixe em PNG ou WebP para manter).</p> : <CorDeFundo valor={pincel.cor} aoMudar={(v) => setPincel((x) => ({ ...x, cor: v }))} rotulo="Cor" />}
-              <Deslizante rotulo="Tamanho" valor={pincel.tamanho} aoMudar={(v) => setPincel((x) => ({ ...x, tamanho: v }))} min={1} max={300} formatar={(v) => `${v} px`} />
-              {pincel.borracha ? null : <Deslizante rotulo="Opacidade" valor={pincel.opacidade} aoMudar={(v) => setPincel((x) => ({ ...x, opacidade: v }))} min={5} max={100} formatar={(v) => `${v}%`} />}
-            </Grupo>
+            <PainelPincel
+              pincel={pincel}
+              mudar={(d) => setPincel((x) => ({ ...x, ...d }))}
+              camada={camadaSel?.tipo === 'desenho' ? camadaSel : ([...camadas].reverse().find((c) => c.tipo === 'desenho' && c.visivel !== false) ?? null)}
+              aoNovaCamada={adicionarDesenho}
+            />
           ) : ferramenta === 'texto' ? (
-            textoSel ? (
-              <Grupo titulo="Texto selecionado">
-                <AreaTexto rotulo="Texto" valor={textoSel.texto} aoMudar={(v) => mudarTexto(textoSel.id, { texto: v })} rows={3} className="[&_textarea]:min-h-20 [&_textarea]:font-sans" />
-                <EstiloTexto t={textoSel} mudar={(d) => mudarTexto(textoSel.id, d)} />
-                <Botao variante="perigo" tamanho="p" icone="apagar" onClick={() => removerTexto(textoSel.id)}>
-                  Excluir texto
-                </Botao>
-              </Grupo>
+            camadaSel?.tipo === 'texto' ? (
+              <PainelCamada camada={camadaSel} mudar={mudarCamada} acoes={acoesCamada} focarTexto={focarTexto === camadaSel.id} />
             ) : (
               <Grupo titulo="Texto">
-                <p className="text-sm text-suave">Clique na imagem onde quer escrever. Arraste para mover; Delete apaga.</p>
-                <EstiloTexto t={estiloTexto} mudar={(d) => setEstiloTexto((s) => ({ ...s, ...d }))} />
+                <Botao tamanho="g" icone="tipo" onClick={() => adicionarTexto()} data-add-texto="">
+                  Adicionar texto
+                </Botao>
+                <p className="text-sm text-suave">Ou clique na imagem onde quer escrever. Clique num texto para editar; arraste para mover; as alças mudam o tamanho e giram.</p>
               </Grupo>
             )
+          ) : ferramenta === 'camadas' ? (
+            <>
+              <ListaCamadas
+                camadas={camadas}
+                selecionada={selecionada}
+                aoSelecionar={setSelecionada}
+                aoMudar={mudarCamada}
+                aoAdicionarImagem={() => entradaCamada.current?.click()}
+                aoAdicionarTexto={() => adicionarTexto()}
+                aoAdicionarDesenho={adicionarDesenho}
+              />
+              {camadaSel ? (
+                <PainelCamada camada={camadaSel} mudar={mudarCamada} acoes={acoesCamada} focarTexto={focarTexto === camadaSel.id} />
+              ) : (
+                <p className="text-xs text-fraca">Clique numa camada (na lista ou na imagem) para editar. Arraste para mover; as alças mudam o tamanho e giram.</p>
+              )}
+            </>
           ) : null}
           {aplicando ? <p className="text-xs text-fraca">Aplicando…</p> : null}
         </aside>
@@ -1353,161 +1147,6 @@ export default function EditorImagem() {
           </>
         ) : null}
       </DialogoBaixar>
-    </div>
-  )
-}
-
-/** Opções do fundo removido: tudo ao vivo, sem rodar a IA de novo. */
-function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, tamanhoPadrao, tamanhoMax, carregandoImagem, desativado }) {
-  const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
-  const tracos = r.tracos?.length ?? 0
-  const entradaImagem = useRef(null)
-  const botaoModo = (ativo) => `h-9 rounded-lg border text-xs font-semibold transition-colors ${ativo ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`
-  const DICAS = {
-    varinha: r.varinhaAcao === 'recuperar' ? 'Clique numa área para trazer de volta tudo da mesma cor.' : 'Clique no fundo: tira tudo da mesma cor. Clique de novo em outras partes.',
-    apagar: 'Pinte o que sobrou do fundo: some.',
-    recuperar: 'Pinte onde sumiu o que não devia: volta a aparecer.',
-  }
-  return (
-    <>
-      <Grupo titulo={r.manual ? 'Remover à mão' : 'Retocar à mão'}>
-        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Ferramenta de retoque">
-          {[
-            ['varinha', 'Varinha'],
-            ['apagar', 'Pincel: apagar'],
-            ['recuperar', 'Pincel: recuperar'],
-            [null, 'Desligado'],
-          ].map(([v, rot]) => (
-            <button key={rot} type="button" role="radio" aria-checked={r.pincel === v} data-retoque={v ?? 'desligado'} onClick={() => mudar({ pincel: v })} className={botaoModo(r.pincel === v)}>
-              {rot}
-            </button>
-          ))}
-        </div>
-        {r.pincel === 'varinha' ? (
-          <>
-            <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="O que a varinha faz">
-              {[
-                ['apagar', 'Tirar'],
-                ['recuperar', 'Trazer de volta'],
-              ].map(([v, rot]) => (
-                <button key={v} type="button" role="radio" aria-checked={r.varinhaAcao === v} data-varinha={v} onClick={() => mudar({ varinhaAcao: v })} className={botaoModo(r.varinhaAcao === v)}>
-                  {rot}
-                </button>
-              ))}
-            </div>
-            <Deslizante rotulo="Tolerância" valor={r.tolerancia} aoMudar={(v) => mudar({ tolerancia: v })} min={1} max={100} dica="Maior: pega cores mais diferentes da que você clicou." />
-            <Caixa rotulo="Só a área ligada ao clique" marcado={r.contiguo} aoMudar={(v) => mudar({ contiguo: v })} />
-          </>
-        ) : r.pincel ? (
-          <Deslizante rotulo="Tamanho do pincel" valor={r.tamanhoPincel ?? tamanhoPadrao} aoMudar={(v) => mudar({ tamanhoPincel: v })} min={2} max={tamanhoMax} formatar={(v) => `${v} px`} />
-        ) : null}
-        <p className="text-xs text-fraca">
-          {r.pincel
-            ? `${DICAS[r.pincel]} O que foi removido aparece apagadinho. Roda do mouse: zoom · Espaço + arrastar: mover.`
-            : r.manual
-              ? 'Escolha a varinha ou o pincel e clique/pinte na imagem.'
-              : 'A IA errou em algum lugar? Use a varinha ou o pincel por cima.'}
-        </p>
-        {tracos ? (
-          <div className="flex flex-wrap gap-1.5">
-            <Botao variante="secundario" tamanho="p" icone="desfazer" onClick={desfazerTraco} data-desfazer-traco="">
-              Desfazer (Ctrl+Z)
-            </Botao>
-            <Botao variante="fantasma" tamanho="p" onClick={() => mudar({ tracos: [] })}>
-              Limpar retoques ({tracos})
-            </Botao>
-          </div>
-        ) : null}
-      </Grupo>
-      <Grupo titulo="Borda">
-        {r.manual ? null : <Deslizante rotulo="Encolher ou expandir" valor={r.contorno} aoMudar={(v) => mudar({ contorno: v })} min={-10} max={10} formatar={sinal} />}
-        <Deslizante rotulo="Suavizar" valor={r.borda} aoMudar={(v) => mudar({ borda: v })} min={0} max={10} />
-        {r.manual ? null : (
-          <>
-            <Deslizante rotulo="Limpar sobras do fundo" valor={r.limpar} aoMudar={(v) => mudar({ limpar: v })} formatar={(v) => `${v}%`} />
-            <p className="text-xs text-fraca">Sobrou fundo em volta? Encolha. Cortou um pedaço? Expanda. Ficou um véu claro? Limpe as sobras.</p>
-          </>
-        )}
-      </Grupo>
-      <Grupo titulo="Novo fundo">
-        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Novo fundo">
-          {[
-            ['transparente', 'Transparente'],
-            ['cor', 'Cor'],
-            ['desfocado', 'Desfocado'],
-            ['imagem', 'Imagem'],
-          ].map(([v, rot]) => (
-            <button
-              key={v}
-              type="button"
-              role="radio"
-              aria-checked={r.fundo === v}
-              data-novo-fundo={v}
-              onClick={() => {
-                mudar({ fundo: v })
-                if (v === 'imagem' && !r.imagem) entradaImagem.current?.click()
-              }}
-              className={botaoModo(r.fundo === v)}
-            >
-              {rot}
-            </button>
-          ))}
-        </div>
-        <input
-          ref={entradaImagem}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          tabIndex={-1}
-          aria-label="Imagem para o novo fundo"
-          data-imagem-fundo=""
-          onChange={(e) => {
-            const a = e.target.files?.[0]
-            e.target.value = ''
-            if (a) mudar({ imagem: a, fundo: 'imagem' })
-          }}
-        />
-        {r.fundo === 'cor' ? (
-          <CorDeFundo valor={r.cor} aoMudar={(v) => mudar({ cor: v })} rotulo="Cor do fundo" />
-        ) : r.fundo === 'desfocado' ? (
-          <Deslizante rotulo="Desfoque" valor={r.desfoque} aoMudar={(v) => mudar({ desfoque: v })} min={2} max={60} />
-        ) : r.fundo === 'imagem' ? (
-          <>
-            <Botao variante="secundario" tamanho="p" icone="imagemMais" onClick={() => entradaImagem.current?.click()}>
-              {r.imagem ? 'Trocar a imagem' : 'Escolher a imagem'}
-            </Botao>
-            {carregandoImagem ? <p className="text-xs text-fraca">Carregando a imagem…</p> : null}
-            {r.imagem ? (
-              <Deslizante rotulo="Desfoque da imagem" valor={r.desfoqueImagem} aoMudar={(v) => mudar({ desfoqueImagem: v })} min={0} max={60} />
-            ) : (
-              <p className="text-xs text-fraca">Escolha uma foto para ficar atrás. Ela cobre o quadro todo, sem esticar.</p>
-            )}
-          </>
-        ) : (
-          <p className="text-xs text-fraca">Para manter transparente, baixe em PNG ou WebP.</p>
-        )}
-      </Grupo>
-      <div className="flex gap-2">
-        <Botao variante="secundario" onClick={descartar} disabled={desativado}>
-          Descartar
-        </Botao>
-        <Botao className="flex-1" icone="check" onClick={aplicar} disabled={desativado} data-aplicar="">
-          Aplicar
-        </Botao>
-      </div>
-    </>
-  )
-}
-
-function EstiloTexto({ t, mudar }) {
-  return (
-    <div className="flex flex-col gap-4">
-      <Seletor rotulo="Fonte" valor={t.fonte} aoMudar={(v) => mudar({ fonte: v })} opcoes={FONTES.map((f) => ({ valor: f.id, rotulo: f.rotulo }))} />
-      <Deslizante rotulo="Tamanho" valor={t.tamanho} aoMudar={(v) => mudar({ tamanho: v })} min={8} max={600} formatar={(v) => `${v} px`} />
-      <CorDeFundo valor={t.cor} aoMudar={(v) => mudar({ cor: v })} rotulo="Cor" />
-      <Caixa rotulo="Negrito" marcado={t.negrito} aoMudar={(v) => mudar({ negrito: v })} />
-      <Caixa rotulo="Contorno" marcado={t.contorno} aoMudar={(v) => mudar({ contorno: v })} />
-      {t.contorno ? <CorDeFundo valor={t.corContorno} aoMudar={(v) => mudar({ corContorno: v })} rotulo="Cor do contorno" /> : null}
     </div>
   )
 }

@@ -243,55 +243,68 @@ const SECOES = [
     grupo: 'Editores',
     id: 'editor-imagem',
     titulo: 'Editor de imagem',
-    palavras: 'recortar girar redimensionar esticar filtros cores remover fundo apagar objeto pincel texto ia',
+    palavras: 'recortar girar endireitar redimensionar esticar filtros cores remover fundo máscara varinha segmentação apagar objeto pincel borracha formas texto camadas mesclagem zoom',
     conteudo: (
       <>
         <p>
-          Uma imagem por vez, em tela cheia. Recortar, Tamanho e Girar têm “Aplicar”: a edição continua sobre o resultado, e tudo tem desfazer. Formato, qualidade e o
-          tamanho estimado do arquivo aparecem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
+          Uma imagem por vez, em tela cheia, com camadas por cima. Recortar, Tamanho e Girar têm “Aplicar” (as camadas acompanham), e tudo tem desfazer. Formato,
+          qualidade e o tamanho estimado do arquivo aparecem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
         </p>
         <ul>
           <li>
-            <strong>Ajustes</strong>: exposição, brilho, contraste, saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque, vinheta e filtros prontos. Não estragam a
-            imagem: dá para mudar a qualquer hora.
+            <strong>Ajustes</strong>: exposição, brilho, contraste, saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque e vinheta. <strong>Filtros</strong>: cada
+            um com a prévia na sua própria foto e intensidade ajustável. Não estragam a imagem: dá para mudar a qualquer hora.
           </li>
           <li>
-            <strong>Tamanho</strong>: largura e altura com ou sem manter a proporção — desmarque e arraste as alças para esticar ou achatar. Tamanhos de rede social cortam as
-            sobras, sem esticar.
+            <strong>Recortar</strong> começa com a imagem inteira; arraste as alças ou escolha uma proporção. <strong>Tamanho</strong> mostra o tamanho novo na mesma escala
+            do atual (o tracejado), para comparar; tamanhos de rede social cortam as sobras, sem esticar.
           </li>
           <li>
-            <strong>Remover fundo</strong> e <strong>Apagar objeto</strong>: IA que roda no seu aparelho, sem travar a página (dá para cancelar a qualquer momento). Na
-            primeira vez, o navegador baixa o modelo e guarda para as próximas: 25 MB no modo <em>Pessoas · rápido</em>, 190 MB no <em>Qualquer coisa · preciso</em> e 35 MB
-            para apagar. A imagem nunca é enviada.
+            <strong>Girar</strong>: 90° e espelhar. Para <strong>endireitar</strong>, desenhe uma linha na imagem sobre algo que deveria estar reto — a prévia gira na hora,
+            com a grade e a área que fica. Escolha recortar as bordas ou expandir a tela (cantos transparentes).
           </li>
           <li>
-            Depois de remover o fundo, ajuste antes de aplicar: <strong>retoque à mão</strong> (a <em>varinha</em> tira ou traz de volta com um clique tudo da mesma
-            cor; o pincel <em>Recuperar</em> traz de volta o que a IA tirou sem querer e o <em>Apagar</em> tira o que sobrou — o que foi removido aparece apagadinho para
-            guiar, e Ctrl+Z desfaz o último retoque), <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o novo
-            fundo (<strong>transparente</strong>, <strong>cor</strong>, a própria foto <strong>desfocada</strong> ou <strong>outra imagem</strong>).
+            <strong>Remover fundo</strong>: ao abrir, já aparecem todas as ferramentas de máscara. <em>Selecionar assunto</em> faz a segmentação automática (modelo
+            BiRefNet, no seu aparelho; na primeira vez baixa 190 MB, que ficam guardados). A <em>varinha mágica</em> subtrai ou adiciona com um clique a área de cor parecida
+            (tolerância e contíguo), e os pincéis <em>Ocultar</em> e <em>Revelar</em> cuidam dos detalhes — o que está fora da máscara aparece apagadinho, e Ctrl+Z desfaz o
+            último retoque. Refine a borda (contrair/expandir, difusão, limiar de opacidade) e escolha o plano de fundo: transparente, cor sólida, desfoque ou outra imagem.
           </li>
           <li>
-            <strong>Sem IA</strong>: em <em>Remover à mão</em>, a varinha e o pincel fazem tudo — ótimo para fundos lisos (estúdio, parede, céu).
+            Depois de aplicar, <strong>Editar o fundo</strong> volta à máscara com as opções e os retoques (enquanto você não recortar, redimensionar ou apagar algo depois).
           </li>
           <li>
-            O fundo sai uma vez só. Para mudar depois de aplicar, clique em <strong>Editar o fundo</strong>: volta o recorte com as opções e os retoques, sem rodar a IA
-            de novo (vale enquanto você não recortar, redimensionar ou pintar a imagem depois).
+            <strong>Apagar objeto</strong>: pinte o que quer tirar e clique em Preencher; o preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás. Na
+            primeira vez baixa 35 MB.
           </li>
           <li>
-            <strong>Zoom</strong>: roda do mouse (ou pinça no trackpad) no ponto do cursor; Ctrl + / Ctrl − / Ctrl 0. Para mover a imagem ampliada, segure Espaço e
-            arraste (ou arraste com o botão do meio).
+            <strong>Pincel</strong>: pincel (com dureza), lápis, marca-texto, aerógrafo, caligrafia, linha, seta, retângulo e elipse (Shift trava em 45°/quadrado/círculo),
+            com cor, tamanho e opacidade. Tudo vai para uma <em>camada de desenho</em>; a <strong>borracha</strong> apaga só o desenho, nunca a foto.
           </li>
           <li>
-            <strong>Pincel</strong> (com borracha que deixa transparente) e <strong>Texto</strong> (fonte, cor, contorno; arraste para mover).
+            <strong>Texto</strong>: clique na imagem (ou em “Adicionar texto”). As mesmas opções do editor de vídeo: fonte, tamanho, cor, negrito, itálico, maiúsculas,
+            alinhamento, espaçamento, contorno, sombra e caixa de fundo; arraste para mover, as alças mudam o tamanho e giram.
+          </li>
+          <li>
+            <strong>Camadas</strong>: imagem, texto e desenho, com lista (mostrar/ocultar, ordem), opacidade, modo de mesclagem, rotação, espelhar, duplicar e excluir. Nas
+            imagens: caber/cobrir/tamanho original, recorte, correção de cor, chroma key e cantos arredondados.
+          </li>
+          <li>
+            <strong>Zoom</strong> até 3200% (vê os pixels): roda do mouse ou pinça no ponto do cursor, ou o seletor de zoom. Para mover: arraste com o botão esquerdo nas
+            ferramentas que não desenham, ligue a mão (✋ ou H), segure Espaço ou use o botão do meio.
           </li>
         </ul>
         <Tabela
           cabecalho={['Tecla', 'O que faz']}
           linhas={[
             [<><Tecla>Ctrl</Tecla> + <Tecla>Z</Tecla></>, 'Desfazer (com Shift, refazer)'],
+            [<><Tecla>Ctrl</Tecla> + <Tecla>+</Tecla> / <Tecla>−</Tecla></>, 'Zoom'],
+            [<><Tecla>Ctrl</Tecla> + <Tecla>0</Tecla> / <Tecla>1</Tecla></>, 'Ajustar à tela / 100%'],
+            [<Tecla key="h">H</Tecla>, 'Ligar/desligar a mão'],
+            [<Tecla key="esp">Espaço</Tecla>, 'Mão enquanto segura'],
             [<Tecla key="a">Enter</Tecla>, 'Aplicar o recorte'],
-            [<Tecla key="a">Delete</Tecla>, 'Apagar o texto selecionado'],
-            [<Tecla key="a">Esc</Tecla>, 'Tirar a seleção'],
+            [<Tecla key="d">Delete</Tecla>, 'Excluir a camada selecionada'],
+            [<Tecla key="s">Setas</Tecla>, 'Mover a camada (com Shift, 10 px)'],
+            [<Tecla key="e">Esc</Tecla>, 'Tirar a seleção'],
           ]}
         />
       </>

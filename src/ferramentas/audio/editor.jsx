@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { AvisoRecuperado } from '../../componentes/editor/AvisoRecuperado'
 import { Icone } from '../../componentes/Icone'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
 import { DialogoBaixar, NomeEditavel } from '../../componentes/ferramenta/Baixar'
@@ -13,7 +14,7 @@ import { analisarVarios, ganhoNormalizar, silencios } from './_analise'
 import { BotaoAcao, CampoTempo, Painel, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
 import { useEmEdicao } from '../../nucleo/edicao'
 import { receber } from '../../nucleo/entrega'
-import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
+import { apagarTudo, guardar, ler } from '../../nucleo/rascunho'
 
 
 /**
@@ -895,25 +896,14 @@ export default function EditorAudio() {
   return (
     <>
       {salvo && salvo.aviso !== false ? (
-        <Aviso
-          tom="info"
-          className="mb-3"
-          aoFechar={() => setSalvo((s) => ({ ...s, aviso: false }))}
-          acao={
-            <Botao
-              variante="secundario"
-              tamanho="p"
-              onClick={() => {
-                setSalvo(null)
-                mudarArquivos([])
-              }}
-            >
-              Começar do zero
-            </Botao>
-          }
-        >
-          Recuperamos a edição que você deixou aberta ({haQuanto(salvo.quando)}). Ela fica salva só neste navegador.
-        </Aviso>
+        <AvisoRecuperado
+          quando={salvo.quando}
+          aoFechar={() => setSalvo((s) => (s ? { ...s, aviso: false } : s))}
+          aoRecomecar={() => {
+            setSalvo(null)
+            mudarArquivos([])
+          }}
+        />
       ) : null}
       {pronto ? <Editor key={salvo ? 'salvo' : 'novo'} arquivos={arquivos} aoMudarArquivos={mudarArquivos} salvo={salvo} aoDescartarSalvo={() => setSalvo(null)} /> : <Editor arquivos={[]} aoMudarArquivos={mudarArquivos} />}
     </>

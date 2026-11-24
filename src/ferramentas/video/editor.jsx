@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AvisoRecuperado } from '../../componentes/editor/AvisoRecuperado'
 import { BotaoAcao, CampoTempo, Velocidade, tempo, useHistorico } from '../../componentes/editor/Comum'
 import { MenuContexto } from '../../componentes/editor/MenuContexto'
 import { Resultados } from '../../componentes/ferramenta/Resultados'
@@ -8,7 +9,7 @@ import { EXTENSOES_AUDIO, EXTENSOES_VIDEO, infoMidia, processarVideo } from '../
 import { EXTENSOES_IMAGEM } from '../../motores/imagem'
 import { extensaoDe } from '../../nucleo/arquivos'
 import { useEmEdicao } from '../../nucleo/edicao'
-import { apagarTudo, guardar, haQuanto, ler } from '../../nucleo/rascunho'
+import { apagarTudo, guardar, ler } from '../../nucleo/rascunho'
 import { useTarefa } from '../../nucleo/tarefa'
 import { DialogoExportar, limparNome } from './_exportar'
 import { LinhaDoTempo } from './_linha'
@@ -1640,19 +1641,7 @@ export default function EditorVideo() {
       {entradaArquivo('camada', aceitaVisual, 'camada')}
       {entradaArquivo('musica', [...EXTENSOES_AUDIO, ...EXTENSOES_VIDEO].map((e) => `.${e}`).join(','), 'musica')}
 
-      {recuperado ? (
-        <Aviso
-          tom="info"
-          aoFechar={() => setRecuperado(null)}
-          acao={
-            <Botao variante="secundario" tamanho="p" onClick={recomecar}>
-              Começar do zero
-            </Botao>
-          }
-        >
-          Recuperamos a edição que você deixou aberta ({haQuanto(recuperado)}). Ela fica salva só neste navegador.
-        </Aviso>
-      ) : null}
+      {recuperado ? <AvisoRecuperado quando={recuperado} aoFechar={() => setRecuperado(null)} aoRecomecar={recomecar} /> : null}
 
       <section aria-label="Player" className="cartao flex min-h-0 flex-col lg:flex-1">
         {/* Barra do topo */}
