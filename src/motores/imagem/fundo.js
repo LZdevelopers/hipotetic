@@ -9,9 +9,73 @@
  * arquivo final (tamanho real) saem iguais.
  */
 
-export const PADRAO_FUNDO = { contorno: 0, limpar: 0, borda: 0, fundo: 'transparente', cor: '#ffffff', desfoque: 20 }
+export const PADRAO_FUNDO = { contorno: 0, limpar: 0, borda: 0, fundo: 'transparente', cor: '#ffffff', desfoque: 20, pincel: null, tamanhoPincel: null, tracos: [] }
 
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
+
+/* ─── Retoque à mão ────────────────────────────────────────────────────── */
+
+/*
+ * Traços do pincel de retoque: { modo: 'recuperar' | 'apagar', tamanho, pontos: [[x, y]…] },
+ * em px da imagem. Ficam guardados como desenho (não como pixels): mudar
+ * contorno/limpeza refaz a máscara e os traços são redesenhados por cima, na ordem.
+ */
+const LADO_RETOQUE = 2048 // resolução máxima da máscara retocada
+
+/** Desenha um traço (a partir do ponto `desde`) numa máscara de escala `k` (px da máscara / px da imagem). */
+export function desenharTraco(ctx, t, k, desde = 0) {
+  const pts = t.pontos
+  if (!pts.length) return
+  ctx.save()
+  ctx.globalCompositeOperation = t.modo === 'apagar' ? 'destination-out' : 'source-over'
+  ctx.strokeStyle = '#000'
+  ctx.fillStyle = '#000'
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Math.max(1, t.tamanho * k)
+  if (pts.length === 1) {
+    ctx.beginPath()
+    ctx.arc(pts[0][0] * k, pts[0][1] * k, Math.max(0.5, (t.tamanho * k) / 2), 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    const i0 = Math.max(0, desde)
+    ctx.beginPath()
+    ctx.moveTo(pts[i0][0] * k, pts[i0][1] * k)
+    for (let i = i0 + 1; i < pts.length; i += 1) ctx.lineTo(pts[i][0] * k, pts[i][1] * k)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+/** Máscara final: a da IA (já refinada) ampliada, com os traços de retoque por cima. */
+export function mascaraRetocada(refinada, tracos, W, H) {
+  const k = Math.min(1, LADO_RETOQUE / Math.max(W, H))
+  const c = canvas(W * k, H * k)
+  const ctx = c.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(refinada, 0, 0, c.width, c.height)
+  for (const t of tracos) desenharTraco(ctx, t, c.width / W)
+  return c
+}
+
+/** Prévia do retoque: mostra, apagadinho, o que foi removido (para saber onde pintar). */
+export function mostrarRemovido(resultado, fonte, mascara, alfa = 0.35) {
+  const W = resultado.width
+  const H = resultado.height
+  const g = canvas(W, H)
+  const gctx = g.getContext('2d')
+  gctx.drawImage(fonte, 0, 0, W, H)
+  gctx.globalCompositeOperation = 'destination-out'
+  gctx.drawImage(mascara, 0, 0, W, H)
+  const ctx = resultado.getContext('2d')
+  ctx.save()
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.filter = 'none'
+  ctx.globalAlpha = alfa
+  ctx.drawImage(g, 0, 0)
+  ctx.restore()
+  return resultado
+}
 
 /** Máscara (alfa, na resolução do modelo) com contorno e limpeza aplicados. */
 export function refinarMascara(mascara, { contorno = 0, limpar = 0 } = {}) {
@@ -59,6 +123,9 @@ export function comporFundo(fonte, mascara, opcoes = PADRAO_FUNDO) {
   sctx.globalCompositeOperation = 'destination-in'
   if (borda) sctx.filter = `blur(${borda * escala * 0.6}px)`
   sctx.drawImage(mascara, 0, 0, W, H)
+  // Devolve o contexto no estado normal (quem usar o canvas depois desenha por cima).
+  sctx.globalCompositeOperation = 'source-over'
+  sctx.filter = 'none'
   if (fundo === 'transparente') return sujeito
 
   const r = canvas(W, H)

@@ -5,7 +5,7 @@ import { Icone } from '../../componentes/Icone'
 import { AreaTexto, Aviso, Botao, Caixa, Deslizante, Entrada, Progresso, SeloCategoria, Seletor } from '../../componentes/ui'
 import { DESCRICAO_IMAGEM, EXTENSOES_IMAGEM, LIMITE_IMAGEM, ehSvg, rasterizarSvg } from '../../motores/imagem'
 import { FILTROS, NEUTRO, ehNeutro, renderizarAjustes } from '../../motores/imagem/ajustes'
-import { PADRAO_FUNDO, comporFundo, refinarMascara } from '../../motores/imagem/fundo'
+import { PADRAO_FUNDO, comporFundo, desenharTraco, mascaraRetocada, mostrarRemovido, refinarMascara } from '../../motores/imagem/fundo'
 import { MODELOS, apagarObjeto, mascaraDoFundo, modeloNoCache, prepararModelo, tempoEstimado } from '../../motores/imagem/ia'
 import { codificar } from '../../motores/imagem/nucleo'
 import { baixarBlob, extensaoDe, formatarBytes, semExtensao } from '../../nucleo/arquivos'
@@ -122,6 +122,8 @@ function Tela({ previa, w, h, zoom, ferramenta, rascunho, setRascunho, textos, s
   const area = useRef(null)
   const visor = useRef(null)
   const [tamArea, setTamArea] = useState({ w: 800, h: 600 })
+  // Pincel na imagem: Pincel, Apagar objeto e o retoque do Remover fundo (quando ligado).
+  const pinta = ['apagar', 'pincel', 'fundo'].includes(ferramenta) && Boolean(pincel)
 
   useEffect(() => {
     if (!area.current) return undefined
@@ -172,12 +174,12 @@ function Tela({ previa, w, h, zoom, ferramenta, rascunho, setRascunho, textos, s
       <div className="m-auto p-6">
         <div
           data-folha=""
-          className={`xadrez relative shadow-[var(--shadow-cartao)] ${ferramenta === 'apagar' || ferramenta === 'pincel' ? 'cursor-crosshair' : ferramenta === 'texto' ? 'cursor-text' : ''}`}
+          className={`xadrez relative shadow-[var(--shadow-cartao)] ${pinta ? 'cursor-crosshair' : ferramenta === 'texto' ? 'cursor-text' : ''}`}
           style={{ width: wv * escala, height: hv * escala, touchAction: 'none' }}
           onPointerDown={(e) => {
             if (e.button !== 0) return
             if (ferramenta === 'texto' && e.target === e.currentTarget.querySelector('canvas')) aoClicarTexto(ponto(e))
-            else if ((ferramenta === 'apagar' || ferramenta === 'pincel') && pintura) {
+            else if (pinta && (pintura || ferramenta === 'fundo')) {
               const folha = e.currentTarget
               const r = folha.getBoundingClientRect()
               const p = (ev) => ({ x: ((ev.clientX - r.left) / r.width) * w, y: ((ev.clientY - r.top) / r.height) * h })
@@ -197,7 +199,7 @@ function Tela({ previa, w, h, zoom, ferramenta, rascunho, setRascunho, textos, s
 
           {/* Pintura (máscara do apagar, traço do pincel) */}
           {pintura ? <CanvasEspelho fonte={pintura} className={`pointer-events-none absolute inset-0 size-full ${ferramenta === 'apagar' ? 'opacity-55' : ''}`} /> : null}
-          {(ferramenta === 'apagar' || ferramenta === 'pincel') && pincel ? <CursorPincel tamanho={pincel.tamanho * escala} /> : null}
+          {pinta ? <CursorPincel tamanho={pincel.tamanho * escala} /> : null}
 
           {/* Textos */}
           {textos.map((t) => (
@@ -519,15 +521,34 @@ export default function EditorImagem() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mascaraFundo, rascunho?.contorno, rascunho?.limpar],
   )
+  // …e com os traços do pincel de retoque por cima (refeita só quando a máscara ou os traços mudam;
+  // durante o traço, ele é desenhado direto nela).
+  const retoque = useRef(null) // { refinada, tracos, canvas }
+  const tracoAtual = useRef(null)
+  const [versaoRetoque, setVersaoRetoque] = useState(0)
+  const mascaraFinal = () => {
+    if (!mascaraRefinada || !p) return null
+    const tracos = rascunho?.tracos ?? []
+    const r = retoque.current
+    if (!r || r.refinada !== mascaraRefinada || r.tracos !== tracos) {
+      retoque.current = { refinada: mascaraRefinada, tracos, canvas: mascaraRetocada(mascaraRefinada, tracos, p.w, p.h) }
+    }
+    return retoque.current.canvas
+  }
   useEffect(() => {
     if (!reduzida.current) return undefined
     const q = requestAnimationFrame(() => {
-      const fonte = mascaraRefinada ? comporFundo(reduzida.current, mascaraRefinada, rascunho) : reduzida.current
+      const m = mascaraFinal()
+      let fonte = reduzida.current
+      if (m) {
+        fonte = comporFundo(reduzida.current, m, rascunho)
+        if (rascunho.pincel) mostrarRemovido(fonte, reduzida.current, m)
+      }
       setPrevia(renderizarAjustes(fonte, p?.ajustes ?? NEUTRO))
     })
     return () => cancelAnimationFrame(q)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versaoReduzida, p?.ajustes, mascaraRefinada, rascunho?.borda, rascunho?.fundo, rascunho?.cor, rascunho?.desfoque])
+  }, [versaoReduzida, p?.ajustes, mascaraRefinada, rascunho?.borda, rascunho?.fundo, rascunho?.cor, rascunho?.desfoque, rascunho?.tracos, rascunho?.pincel, versaoRetoque])
 
   /* abrir */
   const abrir = async (lista) => {
@@ -576,7 +597,7 @@ export default function EditorImagem() {
     if (id === 'recortar') setRascunho({ x: p.w * 0.1, y: p.h * 0.1, w: p.w * 0.8, h: p.h * 0.8, proporcao: null, prop: 'livre' })
     else if (id === 'tamanho') setRascunho({ w: p.w, h: p.h, trava: true })
     else if (id === 'girar') setRascunho({ angulo: 0 })
-    else if (id === 'fundo' && ultimaMascara.current?.base === p.base && !p.fundoRemovido) setRascunho({ ...PADRAO_FUNDO, mascara: ultimaMascara.current.mascara })
+    else if (id === 'fundo' && ultimaMascara.current?.base === p.base && !p.fundoRemovido) setRascunho({ ...PADRAO_FUNDO, ...ultimaMascara.current.opcoes, mascara: ultimaMascara.current.mascara })
     else setRascunho(null)
     setPintura(id === 'apagar' || id === 'pincel' ? novaPintura(p.w, p.h) : null)
   }
@@ -669,7 +690,9 @@ export default function EditorImagem() {
   /** Grava o fundo removido (com as opções escolhidas) na imagem: depois disso, só desfazendo. */
   const aplicarFundo = () => {
     const r = rascunho
-    const final = comporFundo(bitmap, refinarMascara(r.mascara, r), r)
+    const final = comporFundo(bitmap, mascaraFinal(), r)
+    // Desfazer o "Aplicar" traz de volta as opções e os retoques.
+    if (ultimaMascara.current) ultimaMascara.current.opcoes = { ...r, pincel: null }
     setRascunho(null)
     comprometer(final, null, (x) => ({ fundoRemovido: true, tipo: r.fundo === 'transparente' && x.tipo === 'jpg' ? 'png' : x.tipo }))
   }
@@ -682,7 +705,7 @@ export default function EditorImagem() {
     if (ferramenta !== 'fundo' || !p) return
     const salva = ultimaMascara.current
     const vale = salva && salva.base === p.base && !p.fundoRemovido
-    if (vale && !rascunho?.mascara) setRascunho({ ...PADRAO_FUNDO, mascara: salva.mascara })
+    if (vale && !rascunho?.mascara) setRascunho({ ...PADRAO_FUNDO, ...salva.opcoes, mascara: salva.mascara })
     else if (!vale && rascunho?.mascara) setRascunho(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ferramenta, p?.base, p?.fundoRemovido])
@@ -702,8 +725,38 @@ export default function EditorImagem() {
     comprometer(c)
   }
 
+  /* retoque do fundo removido (pincel Recuperar / Apagar) */
+  const pincelFundoPadrao = p ? Math.max(4, Math.round(Math.max(p.w, p.h) / 30)) : 40
+  const pintarRetoque = ({ x, y }, comeco) => {
+    const m = mascaraFinal()
+    if (!m || !rascunho?.pincel) return
+    if (comeco) tracoAtual.current = { modo: rascunho.pincel, tamanho: rascunho.tamanhoPincel ?? pincelFundoPadrao, pontos: [] }
+    const t = tracoAtual.current
+    if (!t) return
+    t.pontos.push([Math.round(x * 10) / 10, Math.round(y * 10) / 10])
+    desenharTraco(m.getContext('2d'), t, m.width / p.w, t.pontos.length - 2)
+    // Uma prévia por quadro, no máximo.
+    if (!agendado.current) {
+      agendado.current = requestAnimationFrame(() => {
+        agendado.current = 0
+        setVersaoRetoque((v) => v + 1)
+      })
+    }
+  }
+  const agendado = useRef(0)
+  const soltarRetoque = () => {
+    const t = tracoAtual.current
+    tracoAtual.current = null
+    if (!t?.pontos.length) return
+    const tracos = [...(rascunho?.tracos ?? []), t]
+    if (retoque.current) retoque.current.tracos = tracos // já está desenhado: não refaz
+    setRascunho((x) => (x?.mascara ? { ...x, tracos } : x))
+  }
+  const desfazerTraco = () => setRascunho((x) => (x?.tracos?.length ? { ...x, tracos: x.tracos.slice(0, -1) } : x))
+
   /* pintura (pincel e máscara do apagar) */
   const aoPintar = ({ x, y }, comeco) => {
+    if (ferramenta === 'fundo') return pintarRetoque({ x, y }, comeco)
     const ctx = pintura.ctx
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -720,6 +773,7 @@ export default function EditorImagem() {
     pintura.ouvir?.()
   }
   const aoSoltarPintura = () => {
+    if (ferramenta === 'fundo') return soltarRetoque()
     if (ferramenta !== 'pincel' || !pintura.sujo) return
     // Cada traço do pincel entra na imagem (e no desfazer).
     const c = canvas(bitmap.width, bitmap.height)
@@ -787,7 +841,9 @@ export default function EditorImagem() {
       const k = e.key.toLowerCase()
       if (k === 'z' && !e.shiftKey) {
         e.preventDefault()
-        historico.desfazer()
+        // Retocando o fundo: desfaz o último traço (não a imagem).
+        if (ferramenta === 'fundo' && rascunho?.tracos?.length) desfazerTraco()
+        else historico.desfazer()
       } else if ((k === 'z' && e.shiftKey) || k === 'y') {
         e.preventDefault()
         historico.refazer()
@@ -893,7 +949,7 @@ export default function EditorImagem() {
               pintura={pintura}
               aoPintar={aoPintar}
               aoSoltarPintura={aoSoltarPintura}
-              pincel={ferramenta === 'pincel' || ferramenta === 'apagar' ? pincel : null}
+              pincel={ferramenta === 'pincel' || ferramenta === 'apagar' ? pincel : ferramenta === 'fundo' && rascunho?.pincel ? { tamanho: rascunho.tamanhoPincel ?? pincelFundoPadrao } : null}
               aoEscala={setEscalaAtual}
             />
           ) : (
@@ -1021,7 +1077,16 @@ export default function EditorImagem() {
               </Grupo>
             </>
           ) : ferramenta === 'fundo' && rascunho?.mascara ? (
-            <PainelFundo r={rascunho} mudar={(d) => setRascunho((x) => ({ ...x, ...d }))} aplicar={aplicarFundo} descartar={descartarFundo} desativado={ocupado} />
+            <PainelFundo
+              r={rascunho}
+              mudar={(d) => setRascunho((x) => ({ ...x, ...d }))}
+              aplicar={aplicarFundo}
+              descartar={descartarFundo}
+              desfazerTraco={desfazerTraco}
+              tamanhoPadrao={pincelFundoPadrao}
+              tamanhoMax={Math.max(20, Math.round(Math.max(p.w, p.h) / 4))}
+              desativado={ocupado}
+            />
           ) : ferramenta === 'fundo' && p.fundoRemovido ? (
             <>
               <Grupo titulo="Remover fundo">
@@ -1145,10 +1210,45 @@ export default function EditorImagem() {
 }
 
 /** Opções do fundo removido: tudo ao vivo, sem rodar a IA de novo. */
-function PainelFundo({ r, mudar, aplicar, descartar, desativado }) {
+function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, tamanhoPadrao, tamanhoMax, desativado }) {
   const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
+  const tracos = r.tracos?.length ?? 0
   return (
     <>
+      <Grupo titulo="Retocar à mão">
+        <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Pincel de retoque">
+          {[
+            [null, 'Desligado'],
+            ['recuperar', 'Recuperar'],
+            ['apagar', 'Apagar'],
+          ].map(([v, rot]) => (
+            <button key={rot} type="button" role="radio" aria-checked={r.pincel === v} data-retoque={v ?? 'desligado'} onClick={() => mudar({ pincel: v })} className={`h-9 rounded-lg border text-xs font-semibold transition-colors ${r.pincel === v ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}>
+              {rot}
+            </button>
+          ))}
+        </div>
+        {r.pincel ? (
+          <>
+            <Deslizante rotulo="Tamanho do pincel" valor={r.tamanhoPincel ?? tamanhoPadrao} aoMudar={(v) => mudar({ tamanhoPincel: v })} min={2} max={tamanhoMax} formatar={(v) => `${v} px`} />
+            <p className="text-xs text-fraca">
+              {r.pincel === 'recuperar' ? 'Pinte onde a IA tirou o que não devia: volta a aparecer.' : 'Pinte o que sobrou do fundo: some.'} O que foi removido aparece apagadinho para você ver
+              onde pintar. Use o zoom para os detalhes.
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-fraca">A IA errou em algum lugar? Ligue Recuperar ou Apagar e pinte por cima.</p>
+        )}
+        {tracos ? (
+          <div className="flex flex-wrap gap-1.5">
+            <Botao variante="secundario" tamanho="p" icone="desfazer" onClick={desfazerTraco} data-desfazer-traco="">
+              Desfazer traço
+            </Botao>
+            <Botao variante="fantasma" tamanho="p" onClick={() => mudar({ tracos: [] })}>
+              Limpar retoques ({tracos})
+            </Botao>
+          </div>
+        ) : null}
+      </Grupo>
       <Grupo titulo="Borda">
         <Deslizante rotulo="Encolher ou expandir" valor={r.contorno} aoMudar={(v) => mudar({ contorno: v })} min={-10} max={10} formatar={sinal} />
         <Deslizante rotulo="Suavizar" valor={r.borda} aoMudar={(v) => mudar({ borda: v })} min={0} max={10} />

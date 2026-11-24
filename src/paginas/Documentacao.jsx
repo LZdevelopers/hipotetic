@@ -265,7 +265,8 @@ const SECOES = [
             para apagar. A imagem nunca é enviada.
           </li>
           <li>
-            Depois de remover o fundo, ajuste antes de aplicar: <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o
+            Depois de remover o fundo, ajuste antes de aplicar: <strong>retoque à mão</strong> (pincel <em>Recuperar</em> traz de volta o que a IA tirou sem querer;
+            <em>Apagar</em> tira o que sobrou — o que foi removido aparece apagadinho para guiar, e Ctrl+Z desfaz o último traço), <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o
             novo fundo (<strong>transparente</strong>, <strong>cor</strong> ou a própria foto <strong>desfocada</strong>). O fundo sai uma vez só; para refazer com outras
             opções, use Desfazer — as opções voltam sem rodar a IA de novo.
           </li>
