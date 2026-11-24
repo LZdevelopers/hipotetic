@@ -160,9 +160,12 @@ export function Tela({
   /** Arrastar para mover a imagem (captura: vem antes das ferramentas). */
   const talvezMover = (e) => {
     // Nada de seleção de texto nem de "arrastar a imagem" do navegador por cima da mesa.
+    // Clicar na mesa tira o foco do campo do painel (senão o Delete apagaria letras em vez da camada).
+    const ativo = document.activeElement
+    if (ativo?.closest?.('input, textarea, select, [contenteditable]') && !area.current?.contains(ativo)) ativo.blur()
     try {
       const s = getSelection()
-      if (s && !s.isCollapsed && !document.activeElement?.closest?.('input, textarea, [contenteditable]')) s.removeAllRanges()
+      if (s && !s.isCollapsed) s.removeAllRanges()
     } catch {
       /* sem seleção */
     }

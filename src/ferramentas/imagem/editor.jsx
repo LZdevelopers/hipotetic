@@ -462,6 +462,16 @@ export default function EditorImagem() {
     ),
   }
   const camadaSel = camadas.find((c) => c.id === selecionada) ?? null
+  // Texto apagado até ficar vazio: ao sair dele, a camada sai junto (não fica "fantasma" na lista).
+  const selAnterior = useRef(null)
+  useEffect(() => {
+    const ant = selAnterior.current
+    selAnterior.current = selecionada
+    if (!ant || ant === selecionada) return
+    const c = camadas.find((x) => x.id === ant)
+    if (c?.tipo === 'texto' && !String(c.texto ?? '').trim()) mudar((x) => ({ camadas: (x.camadas ?? []).filter((k) => k.id !== ant) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selecionada])
 
   /* ─── Abrir ────────────────────────────────────────────────────────── */
   const abrir = async (lista) => {
@@ -884,6 +894,7 @@ export default function EditorImagem() {
       mudar={mudarCamada}
       acoes={acoesCamada}
       focarTexto={focarTexto === camadaSel.id}
+      aoFocado={() => setFocarTexto(null)}
       contaGotasAtivo={contaGotas?.alvo === 'camada' && contaGotas.id === camadaSel.id}
       segmentar={
         camadaSel.tipo === 'imagem' ? (

@@ -40,7 +40,8 @@ export function Acoes({ aplicar, cancelar, rotulo = 'Aplicar', desativado, rotul
 }
 
 /** Botões de escolha em grade (um ativo). */
-export function Escolhas({ valor, aoMudar, opcoes, colunas = 2, rotulo, atributo }) {
+/** `empilhado`: ícone em cima do rótulo (para rótulos que não cabem ao lado do ícone). */
+export function Escolhas({ valor, aoMudar, opcoes, colunas = 2, rotulo, atributo, empilhado = false }) {
   return (
     <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }} role="radiogroup" aria-label={rotulo}>
       {opcoes.map(([v, rot, icone]) => (
@@ -51,9 +52,9 @@ export function Escolhas({ valor, aoMudar, opcoes, colunas = 2, rotulo, atributo
           aria-checked={valor === v}
           {...(atributo ? { [atributo]: v ?? 'nenhum' } : {})}
           onClick={() => aoMudar(v)}
-          className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors ${valor === v ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}
+          className={`flex min-w-0 items-center justify-center rounded-lg border px-2 text-xs font-semibold transition-colors ${empilhado ? 'flex-col gap-1 py-2' : 'h-9 gap-1.5'} ${valor === v ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}
         >
-          {icone ? <Icone nome={icone} tamanho={14} className="shrink-0" /> : null}
+          {icone ? <Icone nome={icone} tamanho={empilhado ? 16 : 14} className="shrink-0" /> : null}
           <span className="truncate">{rot}</span>
         </button>
       ))}
@@ -403,6 +404,7 @@ export function PainelPincel({ pincel, mudar, camada, aoNovaCamada }) {
         atributo="data-grupo-pincel"
         valor={grupo}
         colunas={3}
+        empilhado
         aoMudar={(g) => escolher(g === 'borracha' ? 'borracha' : g === 'formas' ? (pincel.ultimaForma ?? 'retangulo') : (pincel.ultimoPincel ?? 'pincel'))}
         opcoes={[
           ['pinceis', 'Pincéis', 'pincel'],
@@ -537,14 +539,17 @@ export function BotaoSegmentarCamada({ tarefa, aoClicar, aoRestaurar, desativado
   )
 }
 
-export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto, segmentar, contaGotasAtivo }) {
+export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto, aoFocado, segmentar, contaGotasAtivo }) {
   const texto = useRef(null)
   useEffect(() => {
     if (focarTexto && texto.current) {
       const t = texto.current.querySelector('textarea')
       t?.focus()
       t?.select()
+      // Só uma vez (ao criar): selecionar o texto depois não rouba o foco — o Delete exclui a camada.
+      aoFocado?.()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focarTexto, bruta?.id])
   if (!bruta) return null
   const c = { ...PADRAO_CAMADA_IMAGEM, ...(bruta.tipo === 'texto' ? PADRAO_TEXTO : {}), ...bruta }
