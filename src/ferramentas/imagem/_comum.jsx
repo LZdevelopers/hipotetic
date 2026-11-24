@@ -1,4 +1,5 @@
-import { Campo, Deslizante, Segmentado, Seletor } from '../../componentes/ui'
+import { SeletorCor } from '../../componentes/SeletorCor'
+import { Deslizante, Segmentado, Seletor } from '../../componentes/ui'
 
 /** Controles repetidos nas ferramentas de imagem. */
 
@@ -36,22 +37,9 @@ export function Qualidade({ valor, aoMudar, formato }) {
   )
 }
 
-/** Cor de fundo para quem perde a transparência (JPG). */
+/** Cor (fundo de quem perde a transparência, texto, pincel…): o seletor de cor do site. */
 export function CorDeFundo({ valor, aoMudar, rotulo = 'Fundo (no lugar da transparência)' }) {
-  return (
-    <Campo rotulo={rotulo}>
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={valor}
-          onChange={(e) => aoMudar(e.target.value)}
-          className="h-10 w-12 cursor-pointer rounded-[var(--radius-controle)] border border-borda-forte bg-superficie p-1"
-          aria-label={rotulo}
-        />
-        <span className="font-mono text-sm text-suave uppercase">{valor}</span>
-      </div>
-    </Campo>
-  )
+  return <SeletorCor valor={valor} aoMudar={aoMudar} rotulo={rotulo} />
 }
 
 export function EscalaSvg({ valor, aoMudar }) {

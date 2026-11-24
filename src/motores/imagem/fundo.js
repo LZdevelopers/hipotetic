@@ -1,32 +1,147 @@
 /**
- * Acabamento do "Remover fundo": a IA devolve uma máscara (alfa) uma vez só;
- * daqui em diante tudo é ajuste ao vivo, sem rodar a IA de novo:
+ * Acabamento do "Remover fundo": a IA (ou a pessoa, à mão) define uma máscara
+ * (alfa) uma vez só; daqui em diante tudo é ajuste ao vivo:
  *   - contorno: encolhe (−) ou expande (+) a borda;
  *   - limpar: tira o "véu" semitransparente que sobra no fundo;
  *   - borda: suaviza (desfoca) a borda;
- *   - fundo: transparente, uma cor ou a própria foto desfocada.
+ *   - retoque: pincel Recuperar/Apagar e varinha (área de cor parecida);
+ *   - fundo: transparente, uma cor, a própria foto desfocada ou outra imagem.
  * As medidas são relativas ao tamanho da imagem: a prévia (reduzida) e o
  * arquivo final (tamanho real) saem iguais.
  */
 
-export const PADRAO_FUNDO = { contorno: 0, limpar: 0, borda: 0, fundo: 'transparente', cor: '#ffffff', desfoque: 20, pincel: null, tamanhoPincel: null, tracos: [] }
+export const PADRAO_FUNDO = {
+  contorno: 0,
+  limpar: 0,
+  borda: 0,
+  fundo: 'transparente',
+  cor: '#ffffff',
+  desfoque: 20,
+  imagem: null, // Blob da imagem de fundo
+  desfoqueImagem: 0,
+  pincel: null, // null | 'recuperar' | 'apagar' | 'varinha'
+  tamanhoPincel: null,
+  varinhaAcao: 'apagar',
+  tolerancia: 30,
+  contiguo: true,
+  tracos: [],
+}
 
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
+
+/** Máscara "tudo fica" — o ponto de partida de quem remove o fundo à mão. */
+export function mascaraCheia() {
+  const c = canvas(8, 8)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, 8, 8)
+  return c
+}
+
+/* ─── Varinha (área de cor parecida) ───────────────────────────────────── */
+
+const pixelsCache = new WeakMap() // fonte → { chave, dados }
+function pixelsDa(fonte, w, h) {
+  const salvo = pixelsCache.get(fonte)
+  if (salvo?.chave === `${w}x${h}`) return salvo.dados
+  const c = canvas(w, h)
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(fonte, 0, 0, w, h)
+  const dados = ctx.getImageData(0, 0, w, h).data
+  pixelsCache.set(fonte, { chave: `${w}x${h}`, dados })
+  return dados
+}
+
+/**
+ * Área de cor parecida com a do ponto clicado (alfa 255 onde pega), em w×h.
+ * `tolerancia` 0–100 (curva quadrática: fino controle nos valores baixos);
+ * `contiguo`: só a área ligada ao clique (senão, a cor em toda a imagem).
+ */
+export function areaDaVarinha(fonte, w, h, { x, y, tolerancia, contiguo }) {
+  const d = pixelsDa(fonte, w, h)
+  const sx = Math.min(w - 1, Math.max(0, Math.floor(x)))
+  const sy = Math.min(h - 1, Math.max(0, Math.floor(y)))
+  const i0 = (sy * w + sx) * 4
+  const [r0, g0, b0] = [d[i0], d[i0 + 1], d[i0 + 2]]
+  const limite = ((tolerancia * tolerancia) / 100) * 7.65 + 6
+  const parecido = (p) => {
+    const i = p * 4
+    return Math.abs(d[i] - r0) + Math.abs(d[i + 1] - g0) + Math.abs(d[i + 2] - b0) <= limite
+  }
+  const marcado = new Uint8Array(w * h)
+  if (!contiguo) {
+    for (let p = 0; p < w * h; p += 1) if (parecido(p)) marcado[p] = 1
+  } else {
+    // Preenchimento por linhas (scanline), com pilha.
+    const pilha = [sy * w + sx]
+    while (pilha.length) {
+      const p = pilha.pop()
+      const yy = Math.floor(p / w)
+      let xe = p - yy * w
+      while (xe > 0 && !marcado[yy * w + xe - 1] && parecido(yy * w + xe - 1)) xe -= 1
+      let acimaAberto = false
+      let abaixoAberto = false
+      for (let xx = xe; xx < w; xx += 1) {
+        const q = yy * w + xx
+        if (marcado[q] || !parecido(q)) break
+        marcado[q] = 1
+        if (yy > 0) {
+          const a = q - w
+          const ok = !marcado[a] && parecido(a)
+          if (ok && !acimaAberto) pilha.push(a)
+          acimaAberto = ok
+        }
+        if (yy < h - 1) {
+          const b = q + w
+          const ok = !marcado[b] && parecido(b)
+          if (ok && !abaixoAberto) pilha.push(b)
+          abaixoAberto = ok
+        }
+      }
+    }
+  }
+  const c = canvas(w, h)
+  const ctx = c.getContext('2d')
+  const img = ctx.createImageData(w, h)
+  for (let p = 0; p < w * h; p += 1) if (marcado[p]) img.data[p * 4 + 3] = 255
+  ctx.putImageData(img, 0, 0)
+  return c
+}
 
 /* ─── Retoque à mão ────────────────────────────────────────────────────── */
 
 /*
- * Traços do pincel de retoque: { modo: 'recuperar' | 'apagar', tamanho, pontos: [[x, y]…] },
- * em px da imagem. Ficam guardados como desenho (não como pixels): mudar
- * contorno/limpeza refaz a máscara e os traços são redesenhados por cima, na ordem.
+ * Traços do retoque, em px da imagem, guardados como desenho (não como pixels):
+ * mudar contorno/limpeza refaz a máscara e os traços são redesenhados por cima, na ordem.
+ *   pincel:  { modo: 'recuperar' | 'apagar', tamanho, pontos: [[x, y]…] }
+ *   varinha: { modo: 'varinha', acao: 'apagar' | 'recuperar', pontos: [[x, y]], tolerancia, contiguo }
  */
 const LADO_RETOQUE = 2048 // resolução máxima da máscara retocada
+const areasCache = new WeakMap() // traço da varinha → { chave, area }
 
-/** Desenha um traço (a partir do ponto `desde`) numa máscara de escala `k` (px da máscara / px da imagem). */
-export function desenharTraco(ctx, t, k, desde = 0) {
+/**
+ * Desenha um traço (a partir do ponto `desde`) numa máscara de escala `k`
+ * (px da máscara / px da imagem). A varinha precisa da `fonte` (a foto).
+ */
+export function desenharTraco(ctx, t, k, desde = 0, fonte = null) {
   const pts = t.pontos
   if (!pts.length) return
   ctx.save()
+  if (t.modo === 'varinha') {
+    if (!fonte) return ctx.restore()
+    const w = ctx.canvas.width
+    const h = ctx.canvas.height
+    let salvo = areasCache.get(t)
+    if (salvo?.chave !== `${w}x${h}` || salvo.fonte !== fonte) {
+      salvo = { chave: `${w}x${h}`, fonte, area: areaDaVarinha(fonte, w, h, { x: pts[0][0] * k, y: pts[0][1] * k, tolerancia: t.tolerancia, contiguo: t.contiguo }) }
+      areasCache.set(t, salvo)
+    }
+    ctx.globalCompositeOperation = t.acao === 'recuperar' ? 'source-over' : 'destination-out'
+    ctx.drawImage(salvo.area, 0, 0)
+    ctx.restore()
+    return
+  }
   ctx.globalCompositeOperation = t.modo === 'apagar' ? 'destination-out' : 'source-over'
   ctx.strokeStyle = '#000'
   ctx.fillStyle = '#000'
@@ -48,13 +163,13 @@ export function desenharTraco(ctx, t, k, desde = 0) {
 }
 
 /** Máscara final: a da IA (já refinada) ampliada, com os traços de retoque por cima. */
-export function mascaraRetocada(refinada, tracos, W, H) {
+export function mascaraRetocada(refinada, tracos, W, H, fonte) {
   const k = Math.min(1, LADO_RETOQUE / Math.max(W, H))
   const c = canvas(W * k, H * k)
   const ctx = c.getContext('2d')
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(refinada, 0, 0, c.width, c.height)
-  for (const t of tracos) desenharTraco(ctx, t, c.width / W)
+  for (const t of tracos) desenharTraco(ctx, t, c.width / W, 0, fonte)
   return c
 }
 
@@ -108,9 +223,10 @@ export function refinarMascara(mascara, { contorno = 0, limpar = 0 } = {}) {
 /**
  * Imagem `fonte` com o fundo trocado conforme as opções, no tamanho da fonte.
  * `mascara`: canvas cujo alfa diz o que fica (qualquer resolução).
+ * `imagemFundo`: ImageBitmap já decodificado (para o fundo "imagem").
  */
-export function comporFundo(fonte, mascara, opcoes = PADRAO_FUNDO) {
-  const { borda = 0, fundo = 'transparente', cor = '#ffffff', desfoque = 20 } = opcoes
+export function comporFundo(fonte, mascara, opcoes = PADRAO_FUNDO, imagemFundo = null) {
+  const { borda = 0, fundo = 'transparente', cor = '#ffffff', desfoque = 20, desfoqueImagem = 0 } = opcoes
   const W = fonte.width
   const H = fonte.height
   const escala = Math.max(W, H) / 1000
@@ -126,13 +242,23 @@ export function comporFundo(fonte, mascara, opcoes = PADRAO_FUNDO) {
   // Devolve o contexto no estado normal (quem usar o canvas depois desenha por cima).
   sctx.globalCompositeOperation = 'source-over'
   sctx.filter = 'none'
-  if (fundo === 'transparente') return sujeito
+  if (fundo === 'transparente' || (fundo === 'imagem' && !imagemFundo)) return sujeito
 
   const r = canvas(W, H)
   const ctx = r.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
   if (fundo === 'cor') {
     ctx.fillStyle = cor
     ctx.fillRect(0, 0, W, H)
+  } else if (fundo === 'imagem') {
+    // Cobre o quadro inteiro, centralizada, sem esticar.
+    const raio = desfoqueImagem * escala
+    const k = Math.max(W / imagemFundo.width, H / imagemFundo.height)
+    const w = imagemFundo.width * k + raio * 4
+    const h = imagemFundo.height * k + raio * 4
+    if (raio) ctx.filter = `blur(${raio}px)`
+    ctx.drawImage(imagemFundo, (W - w) / 2, (H - h) / 2, w, h)
+    ctx.filter = 'none'
   } else {
     // Foto desfocada atrás. Desfoca só o fundo (sem o recorte), senão a cor do
     // que ficou "vaza" em volta dele; por baixo, a foto inteira desfocada tapa

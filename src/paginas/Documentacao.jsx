@@ -265,10 +265,21 @@ const SECOES = [
             para apagar. A imagem nunca é enviada.
           </li>
           <li>
-            Depois de remover o fundo, ajuste antes de aplicar: <strong>retoque à mão</strong> (pincel <em>Recuperar</em> traz de volta o que a IA tirou sem querer;
-            <em>Apagar</em> tira o que sobrou — o que foi removido aparece apagadinho para guiar, e Ctrl+Z desfaz o último traço), <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o
-            novo fundo (<strong>transparente</strong>, <strong>cor</strong> ou a própria foto <strong>desfocada</strong>). O fundo sai uma vez só; para refazer com outras
-            opções, use Desfazer — as opções voltam sem rodar a IA de novo.
+            Depois de remover o fundo, ajuste antes de aplicar: <strong>retoque à mão</strong> (a <em>varinha</em> tira ou traz de volta com um clique tudo da mesma
+            cor; o pincel <em>Recuperar</em> traz de volta o que a IA tirou sem querer e o <em>Apagar</em> tira o que sobrou — o que foi removido aparece apagadinho para
+            guiar, e Ctrl+Z desfaz o último retoque), <strong>encolher ou expandir</strong> a borda, <strong>suavizar</strong>, <strong>limpar sobras</strong> e o novo
+            fundo (<strong>transparente</strong>, <strong>cor</strong>, a própria foto <strong>desfocada</strong> ou <strong>outra imagem</strong>).
+          </li>
+          <li>
+            <strong>Sem IA</strong>: em <em>Remover à mão</em>, a varinha e o pincel fazem tudo — ótimo para fundos lisos (estúdio, parede, céu).
+          </li>
+          <li>
+            O fundo sai uma vez só. Para mudar depois de aplicar, clique em <strong>Editar o fundo</strong>: volta o recorte com as opções e os retoques, sem rodar a IA
+            de novo (vale enquanto você não recortar, redimensionar ou pintar a imagem depois).
+          </li>
+          <li>
+            <strong>Zoom</strong>: roda do mouse (ou pinça no trackpad) no ponto do cursor; Ctrl + / Ctrl − / Ctrl 0. Para mover a imagem ampliada, segure Espaço e
+            arraste (ou arraste com o botão do meio).
           </li>
           <li>
             <strong>Pincel</strong> (com borracha que deixa transparente) e <strong>Texto</strong> (fonte, cor, contorno; arraste para mover).
