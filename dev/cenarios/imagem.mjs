@@ -157,7 +157,7 @@ export default [
     async executar(t) {
       await abrirNoEditor(t, 640, 480)
       await ferramenta(t, 'Tamanho')
-      await t.js("[...document.querySelectorAll('main label')].find((l) => l.textContent.trim() === 'Manter a proporção').click()")
+      // A proporção já vem destravada.
       await t.js("__t.digitar('Altura', '200')")
       await t.js("document.querySelector('main [data-aplicar]').click()")
       await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('640 × 200 px')", 10000)

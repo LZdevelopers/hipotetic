@@ -9,6 +9,7 @@
  * girar, espelhar, endireitar), que levam as camadas junto.
  */
 import { NEUTRO, renderizarAjustes } from '../../../motores/imagem/ajustes'
+import { rgbDaChave, tirarCor } from '../../../motores/imagem/fundo'
 import { FONTES, PADRAO_CAMADA, PADRAO_TEXTO, medirTexto, textoParaCanvas } from '../../video/_projeto'
 
 let seq = 0
@@ -109,21 +110,13 @@ export function bitmapDe(blob) {
   return bitmaps.get(blob)
 }
 
-/** Tira o fundo branco/preto da imagem da camada (mesma conta da prévia do vídeo). */
-function semFundo(bmp, modo, tolerancia) {
+/** Chroma key da camada: tira a cor (branco, preto ou a escolhida) — mesma conta da prévia. */
+function semFundo(bmp, c) {
   const cv = new OffscreenCanvas(bmp.width, bmp.height)
   const ctx = cv.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(bmp, 0, 0)
   const img = ctx.getImageData(0, 0, cv.width, cv.height)
-  const d = img.data
-  const alvo = modo === 'preto' ? 0 : 255
-  const limite = tolerancia * 441
-  const suave = 0.08 * 441
-  for (let i = 0; i < d.length; i += 4) {
-    const dist = Math.hypot(d[i] - alvo, d[i + 1] - alvo, d[i + 2] - alvo)
-    if (dist < limite) d[i + 3] = 0
-    else if (dist < limite + suave) d[i + 3] = Math.round((d[i + 3] * (dist - limite)) / suave)
-  }
+  tirarCor(img.data, rgbDaChave(c.semFundo, c.corChave), c.tolerancia, c.suavidade ?? 0.08)
   ctx.putImageData(img, 0, 0)
   return cv
 }
@@ -146,7 +139,7 @@ export async function desenharCamada(ctx, bruta, W, H, desenhos) {
     ctx.drawImage(cv, -largura / 2, -altura / 2)
   } else if (c.tipo === 'imagem' && c.arquivo) {
     let fonte = await bitmapDe(c.arquivo)
-    if (c.semFundo) fonte = semFundo(fonte, c.semFundo, c.tolerancia)
+    if (c.semFundo) fonte = semFundo(fonte, c)
     const L = c.w * W
     const A = c.h * H
     ctx.translate(c.x * W + L / 2, c.y * H + A / 2)

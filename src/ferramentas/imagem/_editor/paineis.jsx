@@ -6,7 +6,7 @@ import { FILTROS, NEUTRO, ehNeutro, misturarFiltro, renderizarAjustes } from '..
 import { MODELOS, modeloNoCache, tempoEstimado } from '../../../motores/imagem/ia'
 import { formatarBytes } from '../../../nucleo/arquivos'
 import { FONTES, MISTURAS, PADRAO_CAMADA_IMAGEM } from './documento'
-import { OPCOES_DO_PINCEL, PINCEIS } from './pinceis'
+import { FORMAS, OPCOES_DO_PINCEL, PINCEIS, grupoDo, infoDo } from './pinceis'
 import { PADRAO_TEXTO } from '../../video/_projeto'
 
 /* ─── Peças ────────────────────────────────────────────────────────────── */
@@ -84,23 +84,46 @@ export function Miniatura({ fonte, className }) {
 
 /* ─── Filtros (com a prévia de cada um na própria foto) ────────────────── */
 
-export function PainelFiltros({ reduzida, versao, filtro, aoEscolher }) {
-  const miniaturas = useMemo(() => {
-    if (!reduzida) return {}
+/**
+ * `personalizado`: os ajustes feitos à mão (aba Ajustes), guardados à parte —
+ * trocar de filtro não os perde; clicar em "Personalizado" volta neles.
+ */
+export function PainelFiltros({ reduzida, versao, filtro, personalizado, aoEscolher, aoPersonalizar }) {
+  const mini = useMemo(() => {
+    if (!reduzida) return null
     const k = Math.min(1, 180 / Math.max(reduzida.width, reduzida.height))
-    const mini = new OffscreenCanvas(Math.max(1, Math.round(reduzida.width * k)), Math.max(1, Math.round(reduzida.height * k)))
-    const ctx = mini.getContext('2d')
+    const c = new OffscreenCanvas(Math.max(1, Math.round(reduzida.width * k)), Math.max(1, Math.round(reduzida.height * k)))
+    const ctx = c.getContext('2d')
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(reduzida, 0, 0, mini.width, mini.height)
-    return Object.fromEntries(FILTROS.map((f) => [f.id, renderizarAjustes(mini, f.ajustes)]))
+    ctx.drawImage(reduzida, 0, 0, c.width, c.height)
+    return c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduzida, versao])
+  const miniaturas = useMemo(() => (mini ? Object.fromEntries(FILTROS.map((f) => [f.id, renderizarAjustes(mini, f.ajustes)])) : {}), [mini])
+  const miniPersonalizado = useMemo(() => (mini ? renderizarAjustes(mini, personalizado ?? NEUTRO) : null), [mini, personalizado])
   const ativo = filtro?.id ?? null
-  const intensidade = filtro?.k ?? 1
+  const intensidade = ativo === 'personalizado' ? 1 : (filtro?.k ?? 1)
+  const selP = ativo === 'personalizado'
   return (
     <div className="flex flex-col gap-4">
       <Grupo titulo="Filtros">
         <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            aria-pressed={selP}
+            data-filtro="personalizado"
+            onClick={aoPersonalizar}
+            title={personalizado ? 'Volta aos seus ajustes e abre a aba Ajustes' : 'Abre a aba Ajustes para você montar o seu'}
+            className={`group flex flex-col gap-1.5 rounded-lg border p-1.5 text-left transition-colors ${selP ? 'border-acento bg-acento/10' : 'border-dashed border-borda-forte hover:border-fraca'}`}
+          >
+            <span className="xadrez relative block aspect-[4/3] w-full overflow-hidden rounded-md">
+              <Miniatura fonte={miniPersonalizado} className="size-full object-cover" />
+              <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
+                <Icone nome="ajustar" tamanho={20} />
+              </span>
+            </span>
+            <span className={`px-0.5 text-xs font-semibold ${selP ? 'text-tinta' : 'text-suave group-hover:text-tinta'}`}>Personalizado</span>
+          </button>
           {FILTROS.map((f) => {
             const sel = ativo === f.id || (!ativo && f.id === 'original')
             return (
@@ -114,7 +137,10 @@ export function PainelFiltros({ reduzida, versao, filtro, aoEscolher }) {
           })}
         </div>
       </Grupo>
-      {ativo && ativo !== 'original' ? <Deslizante rotulo="Intensidade" valor={Math.round(intensidade * 100)} aoMudar={(v) => aoEscolher(ativo, v / 100)} min={0} max={100} formatar={(v) => `${v}%`} /> : null}
+      {ativo && ativo !== 'original' && !selP ? <Deslizante rotulo="Intensidade" valor={Math.round(intensidade * 100)} aoMudar={(v) => aoEscolher(ativo, v / 100)} min={0} max={100} formatar={(v) => `${v}%`} /> : null}
+      <p className="text-xs text-fraca">
+        {personalizado ? 'Seus ajustes ficam guardados no Personalizado: pode testar os filtros e voltar neles quando quiser.' : 'Personalizado abre a aba Ajustes para você montar o seu; ele fica guardado ao testar os outros filtros.'}
+      </p>
     </div>
   )
 }
@@ -122,12 +148,18 @@ export const ajustesDoFiltro = (id, k) => misturarFiltro((FILTROS.find((f) => f.
 
 /* ─── Ajustes ──────────────────────────────────────────────────────────── */
 
-export function PainelAjustes({ a, mudar }) {
+export function PainelAjustes({ a, mudar, filtro }) {
   const m = (k) => (v) => mudar({ ...a, [k]: v })
   const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
   const cem = (v) => sinal(v - 100)
+  const base = filtro && filtro.id !== 'personalizado' ? FILTROS.find((f) => f.id === filtro.id) : null
   return (
     <div className="flex flex-col gap-5">
+      {base ? (
+        <p className="rounded-lg border border-borda bg-superficie-2 p-2.5 text-xs text-suave">
+          Partindo do filtro <strong className="text-tinta">{base.nome}</strong>. O que você mudar aqui vira o seu filtro <strong className="text-tinta">Personalizado</strong>.
+        </p>
+      ) : null}
       <Grupo titulo="Luz">
         <Deslizante rotulo="Exposição" valor={a.exposicao} aoMudar={m('exposicao')} min={-100} max={100} formatar={sinal} />
         <Deslizante rotulo="Brilho" valor={a.brilho} aoMudar={m('brilho')} min={0} max={200} formatar={cem} />
@@ -182,7 +214,21 @@ export function BotaoSegmentar({ tarefa, aoClicar, desativado, feito }) {
   )
 }
 
-export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, tamanhoPadrao, tamanhoMax, carregandoImagem, desativado, segmentar }) {
+/** Chroma key (como no CapCut): a cor a tirar (com conta-gotas na imagem), intensidade e suavidade. */
+function ControlesChave({ cor, aoCor, tolerancia, aoTolerancia, suavidade, aoSuavidade, aoContaGotas, contaGotasAtivo }) {
+  return (
+    <>
+      <SeletorCor valor={cor} aoMudar={aoCor} rotulo="Cor a remover" />
+      <Botao variante={contaGotasAtivo ? 'primario' : 'secundario'} tamanho="p" icone="contaGotas" className="self-start" onClick={aoContaGotas} aria-pressed={contaGotasAtivo} title="Depois clique na imagem, na cor que quer tirar" data-conta-gotas-botao="">
+        {contaGotasAtivo ? 'Clique na imagem…' : 'Pegar a cor na imagem'}
+      </Botao>
+      <Deslizante rotulo="Intensidade" valor={Math.round(tolerancia * 200)} aoMudar={(v) => aoTolerancia(v / 200)} min={1} max={100} formatar={(v) => `${v}%`} dica="Quanto a cor pode variar e ainda sair. Aumente se sobrar fundo; diminua se sumir parte do que fica." />
+      <Deslizante rotulo="Suavidade da borda" valor={Math.round(suavidade * 400)} aoMudar={(v) => aoSuavidade(v / 400)} min={0} max={100} formatar={(v) => `${v}%`} />
+    </>
+  )
+}
+
+export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, tamanhoPadrao, tamanhoMax, carregandoImagem, desativado, segmentar, aoContaGotas, contaGotasAtivo }) {
   const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
   const tracos = r.tracos?.length ?? 0
   const entradaImagem = useRef(null)
@@ -191,7 +237,7 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
     apagar: 'Pinte o que deve sair (oculta).',
     recuperar: 'Pinte o que deve voltar (revela).',
   }
-  const alterado = r.automatico || tracos > 0
+  const alterado = r.automatico || tracos > 0 || r.chaveAtiva
   return (
     <>
       {segmentar}
@@ -239,6 +285,30 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
             </Botao>
           </div>
         ) : null}
+      </Grupo>
+      <Grupo titulo="Remover uma cor (chroma key)">
+        <Caixa
+          rotulo="Tirar uma cor da imagem inteira"
+          marcado={Boolean(r.chaveAtiva)}
+          aoMudar={(v) => {
+            mudar({ chaveAtiva: v })
+            if (v !== Boolean(contaGotasAtivo)) aoContaGotas?.() // ligar já pede a cor na imagem; desligar cancela
+          }}
+        />
+        {r.chaveAtiva ? (
+          <ControlesChave
+            cor={r.corChave}
+            aoCor={(v) => mudar({ corChave: v })}
+            tolerancia={r.toleranciaChave}
+            aoTolerancia={(v) => mudar({ toleranciaChave: v })}
+            suavidade={r.suavidadeChave}
+            aoSuavidade={(v) => mudar({ suavidadeChave: v })}
+            aoContaGotas={aoContaGotas}
+            contaGotasAtivo={contaGotasAtivo}
+          />
+        ) : (
+          <p className="text-xs text-fraca">Para fundos de uma cor só (tela verde, fundo branco ou preto): some tudo dessa cor, na intensidade que você escolher.</p>
+        )}
       </Grupo>
       <Grupo titulo="Refinar borda">
         {r.automatico ? <Deslizante rotulo="Contrair / expandir" valor={r.contorno} aoMudar={(v) => mudar({ contorno: v })} min={-10} max={10} formatar={sinal} /> : null}
@@ -298,37 +368,86 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
 
 /* ─── Pincel ───────────────────────────────────────────────────────────── */
 
+function GradeTipos({ itens, tipo, aoEscolher, rotulo, colunas = 2 }) {
+  return (
+    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }} role="radiogroup" aria-label={rotulo}>
+      {itens.map((x) => (
+        <button
+          key={x.id}
+          type="button"
+          role="radio"
+          aria-checked={tipo === x.id}
+          title={x.rotulo}
+          data-pincel={x.id}
+          onClick={() => aoEscolher(x.id)}
+          className={`flex h-9 min-w-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors ${tipo === x.id ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}
+        >
+          <Icone nome={x.icone} tamanho={14} className="shrink-0" />
+          <span className="truncate">{x.rotulo}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function PainelPincel({ pincel, mudar, camada, aoNovaCamada }) {
   const usa = OPCOES_DO_PINCEL[pincel.tipo] ?? []
-  const info = PINCEIS.find((x) => x.id === pincel.tipo)
+  const info = infoDo(pincel.tipo)
+  const grupo = grupoDo(pincel.tipo)
+  const escolher = (id) => mudar({ tipo: id, ...(grupoDo(id) === 'pinceis' ? { ultimoPincel: id } : grupoDo(id) === 'formas' ? { ultimaForma: id } : {}) })
+  const forma = grupo === 'formas'
   return (
     <div className="flex flex-col gap-5">
-      <Grupo titulo="Ferramenta">
-        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Pincel">
-          {PINCEIS.map((x) => (
-            <button
-              key={x.id}
-              type="button"
-              role="radio"
-              aria-checked={pincel.tipo === x.id}
-              data-pincel={x.id}
-              onClick={() => mudar({ tipo: x.id })}
-              className={`flex h-9 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors ${pincel.tipo === x.id ? 'border-marca bg-marca text-sobre-marca' : 'border-borda text-suave hover:text-tinta'}`}
-            >
-              <Icone nome={x.icone} tamanho={14} className="shrink-0" />
-              <span className="truncate">{x.rotulo}</span>
-            </button>
-          ))}
-        </div>
-        {info ? <p className="text-xs text-fraca">{info.dica}</p> : null}
-      </Grupo>
+      <Escolhas
+        rotulo="Tipo de ferramenta"
+        atributo="data-grupo-pincel"
+        valor={grupo}
+        colunas={3}
+        aoMudar={(g) => escolher(g === 'borracha' ? 'borracha' : g === 'formas' ? (pincel.ultimaForma ?? 'retangulo') : (pincel.ultimoPincel ?? 'pincel'))}
+        opcoes={[
+          ['pinceis', 'Pincéis', 'pincel'],
+          ['formas', 'Formas', 'formas'],
+          ['borracha', 'Borracha', 'borracha'],
+        ]}
+      />
+      {grupo === 'pinceis' ? (
+        <Grupo titulo="Pincéis">
+          <GradeTipos itens={PINCEIS} tipo={pincel.tipo} aoEscolher={escolher} rotulo="Pincel" />
+        </Grupo>
+      ) : grupo === 'formas' ? (
+        <Grupo titulo="Formas geométricas">
+          <GradeTipos itens={FORMAS} tipo={pincel.tipo} aoEscolher={escolher} rotulo="Forma" />
+        </Grupo>
+      ) : null}
+      {info ? <p className="-mt-2 text-xs text-fraca">{info.dica}</p> : null}
       <Grupo titulo="Opções">
-        {usa.includes('cor') ? <SeletorCor valor={pincel.cor} aoMudar={(v) => mudar({ cor: v })} rotulo="Cor" /> : null}
-        {usa.includes('tamanho') ? <Deslizante rotulo={pincel.tipo === 'retangulo' || pincel.tipo === 'elipse' ? 'Espessura' : 'Tamanho'} valor={pincel.tamanho} aoMudar={(v) => mudar({ tamanho: v })} min={1} max={400} formatar={(v) => `${v} px`} /> : null}
+        {usa.includes('estilo') ? (
+          <Escolhas
+            rotulo="Estilo da forma"
+            atributo="data-estilo-forma"
+            valor={pincel.estilo}
+            aoMudar={(v) => mudar({ estilo: v })}
+            colunas={3}
+            opcoes={[
+              ['contorno', 'Contorno'],
+              ['preenchido', 'Preenchida'],
+              ['ambos', 'Os dois'],
+            ]}
+          />
+        ) : null}
+        {usa.includes('cor') || usa.includes('estilo') ? <SeletorCor valor={pincel.cor} aoMudar={(v) => mudar({ cor: v })} rotulo={forma && pincel.estilo === 'ambos' ? 'Cor do contorno' : 'Cor'} /> : null}
+        {usa.includes('estilo') && pincel.estilo === 'ambos' ? <SeletorCor valor={pincel.corPreenchimento} aoMudar={(v) => mudar({ corPreenchimento: v })} rotulo="Cor do preenchimento" /> : null}
+        {usa.includes('lados') ? <Deslizante rotulo="Lados" valor={pincel.lados} aoMudar={(v) => mudar({ lados: v })} min={3} max={12} /> : null}
+        {usa.includes('pontas') ? <Deslizante rotulo="Pontas" valor={pincel.pontas} aoMudar={(v) => mudar({ pontas: v })} min={3} max={12} /> : null}
+        {usa.includes('raio') ? <Deslizante rotulo="Arredondamento" valor={pincel.raio} aoMudar={(v) => mudar({ raio: v })} min={0} max={100} formatar={(v) => `${v}%`} /> : null}
+        {usa.includes('tamanho') ? <Deslizante rotulo="Tamanho" valor={pincel.tamanho} aoMudar={(v) => mudar({ tamanho: v })} min={1} max={400} formatar={(v) => `${v} px`} /> : null}
+        {usa.includes('espessura') && !(usa.includes('estilo') && pincel.estilo === 'preenchido') ? (
+          <Deslizante rotulo="Espessura" valor={pincel.espessura} aoMudar={(v) => mudar({ espessura: v })} min={1} max={120} formatar={(v) => `${v} px`} />
+        ) : null}
         {usa.includes('opacidade') ? <Deslizante rotulo="Opacidade" valor={pincel.opacidade} aoMudar={(v) => mudar({ opacidade: v })} min={1} max={100} formatar={(v) => `${v}%`} /> : null}
         {usa.includes('dureza') ? <Deslizante rotulo="Dureza" valor={pincel.dureza} aoMudar={(v) => mudar({ dureza: v })} min={0} max={100} formatar={(v) => `${v}%`} dica="100% = borda dura; menos = borda macia." /> : null}
         {usa.includes('fluxo') ? <Deslizante rotulo="Fluxo" valor={pincel.fluxo} aoMudar={(v) => mudar({ fluxo: v })} min={5} max={100} formatar={(v) => `${v}%`} /> : null}
-        {usa.includes('preencher') ? <Caixa rotulo="Preenchido" marcado={pincel.preencher} aoMudar={(v) => mudar({ preencher: v })} /> : null}
+        {usa.includes('tracejado') && !(usa.includes('estilo') && pincel.estilo === 'preenchido') ? <Caixa rotulo="Linha tracejada" marcado={pincel.tracejado} aoMudar={(v) => mudar({ tracejado: v })} /> : null}
       </Grupo>
       <Grupo titulo="Camada">
         <p className="text-xs text-fraca">
@@ -397,7 +516,28 @@ export function ListaCamadas({ camadas, selecionada, aoSelecionar, aoMudar, aoAd
   )
 }
 
-export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto }) {
+/** Tirar o fundo de uma camada de imagem (a mesma segmentação do Remover fundo). */
+export function BotaoSegmentarCamada({ tarefa, aoClicar, aoRestaurar, desativado }) {
+  if (tarefa.fase === 'processando') return <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        <Botao variante="secundario" tamanho="p" icone="magica" onClick={aoClicar} disabled={desativado} data-segmentar-camada="">
+          {aoRestaurar ? 'Selecionar assunto de novo' : 'Selecionar assunto'}
+        </Botao>
+        {aoRestaurar ? (
+          <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={aoRestaurar} disabled={desativado}>
+            Restaurar original
+          </Botao>
+        ) : null}
+      </div>
+      <p className="text-xs text-fraca">{aoRestaurar ? 'Fundo removido. O original fica guardado.' : 'Segmentação automática: deixa só o objeto principal desta imagem.'}</p>
+      {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
+    </>
+  )
+}
+
+export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto, segmentar, contaGotasAtivo }) {
   const texto = useRef(null)
   useEffect(() => {
     if (focarTexto && texto.current) {
@@ -450,12 +590,12 @@ export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto }) {
               </Alternar>
               <span className="mx-1 h-6 w-px bg-borda" />
               {[
-                ['esquerda', 'Alinhar à esquerda', '⇤'],
-                ['centro', 'Centralizar', '↔'],
-                ['direita', 'Alinhar à direita', '⇥'],
+                ['esquerda', 'Alinhar à esquerda', 'alinharEsquerda'],
+                ['centro', 'Centralizar', 'alinharCentro'],
+                ['direita', 'Alinhar à direita', 'alinharDireita'],
               ].map(([v, rotulo, s]) => (
                 <Alternar key={v} rotulo={rotulo} ativo={c.alinhar === v} aoMudar={() => m({ alinhar: v })}>
-                  {s}
+                  <Icone nome={s} tamanho={16} />
                 </Alternar>
               ))}
             </div>
@@ -531,19 +671,42 @@ export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto }) {
             <Deslizante rotulo="Contraste" valor={Math.round(aj.contraste * 100)} aoMudar={(v) => m({ ajuste: { ...aj, contraste: v / 100 } })} min={50} max={150} formatar={(v) => `${v}%`} />
             <Deslizante rotulo="Saturação" valor={Math.round(aj.saturacao * 100)} aoMudar={(v) => m({ ajuste: { ...aj, saturacao: v / 100 } })} min={0} max={200} formatar={(v) => (v ? `${v}%` : 'P&B')} />
           </Grupo>
-          <Grupo titulo="Chroma key">
+          <Grupo titulo="Remover fundo">{segmentar}</Grupo>
+          <Grupo titulo="Remover uma cor (chroma key)">
             <Escolhas
               rotulo="Chroma key"
+              atributo="data-chave-camada"
               valor={c.semFundo ?? null}
-              aoMudar={(v) => m({ semFundo: v })}
-              colunas={3}
+              aoMudar={(v) => {
+                m({ semFundo: v, ...(v === 'cor' && !c.corChave ? { corChave: '#00b140' } : {}) })
+                // "Escolher cor" já pede a cor na imagem.
+                if ((v === 'cor') !== Boolean(contaGotasAtivo)) acoes.contaGotas?.(v === 'cor' ? c.id : null)
+              }}
+              colunas={2}
               opcoes={[
                 [null, 'Desligado'],
+                ['cor', 'Escolher cor', 'contaGotas'],
                 ['branco', 'Branco'],
                 ['preto', 'Preto'],
               ]}
             />
-            {c.semFundo ? <Deslizante rotulo="Similaridade (tolerância)" valor={Math.round(c.tolerancia * 100)} aoMudar={(v) => m({ tolerancia: v / 100 })} min={2} max={50} formatar={(v) => `${v}%`} /> : null}
+            {c.semFundo === 'cor' ? (
+              <ControlesChave
+                cor={c.corChave ?? '#00b140'}
+                aoCor={(v) => m({ corChave: v })}
+                tolerancia={c.tolerancia}
+                aoTolerancia={(v) => m({ tolerancia: v })}
+                suavidade={c.suavidade ?? 0.08}
+                aoSuavidade={(v) => m({ suavidade: v })}
+                aoContaGotas={() => acoes.contaGotas?.(contaGotasAtivo ? null : c.id)}
+                contaGotasAtivo={contaGotasAtivo}
+              />
+            ) : c.semFundo ? (
+              <>
+                <Deslizante rotulo="Intensidade" valor={Math.round(c.tolerancia * 200)} aoMudar={(v) => m({ tolerancia: v / 200 })} min={1} max={100} formatar={(v) => `${v}%`} />
+                <Deslizante rotulo="Suavidade da borda" valor={Math.round((c.suavidade ?? 0.08) * 400)} aoMudar={(v) => m({ suavidade: v / 400 })} min={0} max={100} formatar={(v) => `${v}%`} />
+              </>
+            ) : null}
           </Grupo>
           <Deslizante rotulo="Cantos arredondados" valor={Math.round((c.raio ?? 0) * 100)} aoMudar={(v) => m({ raio: v / 100 })} min={0} max={100} formatar={(v) => `${v}%`} />
         </>
@@ -552,25 +715,23 @@ export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto }) {
       {c.tipo !== 'desenho' ? (
         <Grupo titulo="Posição e rotação">
           <div className="grid grid-cols-2 gap-2">
-            <Botao variante="secundario" tamanho="p" onClick={() => m({ x: 0.5 - c.w / 2 })}>
-              Centro ↔
+            <Botao variante="secundario" tamanho="p" icone="centroH" onClick={() => m({ x: 0.5 - c.w / 2 })}>
+              Centro horizontal
             </Botao>
-            <Botao variante="secundario" tamanho="p" onClick={acoes.centroVertical}>
-              Centro ↕
+            <Botao variante="secundario" tamanho="p" icone="centroV" onClick={acoes.centroVertical}>
+              Centro vertical
             </Botao>
           </div>
           <Deslizante rotulo="Rotação" valor={c.girar} aoMudar={(v) => m({ girar: v })} min={-180} max={180} formatar={(v) => `${v}°`} />
           <div className="flex gap-2">
-            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((c.girar - 90 + 540) % 360) - 180 })}>
-              ↺ 90°
+            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girarAnti" onClick={() => m({ girar: ((c.girar - 90 + 540) % 360) - 180 })}>
+              90°
             </Botao>
-            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((c.girar + 90 + 540) % 360) - 180 })}>
-              ↻ 90°
+            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girar" onClick={() => m({ girar: ((c.girar + 90 + 540) % 360) - 180 })}>
+              90°
             </Botao>
             <Botao variante={c.espelharH ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" aria-pressed={c.espelharH} aria-label="Espelhar na horizontal" title="Espelhar na horizontal" onClick={() => m({ espelharH: !c.espelharH })} />
-            <Botao variante={c.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={c.espelharV} aria-label="Espelhar na vertical" title="Espelhar na vertical" onClick={() => m({ espelharV: !c.espelharV })}>
-              ⇵
-            </Botao>
+            <Botao variante={c.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={c.espelharV} icone="espelharV" aria-label="Espelhar na vertical" title="Espelhar na vertical" onClick={() => m({ espelharV: !c.espelharV })} />
           </div>
         </Grupo>
       ) : null}

@@ -47,8 +47,11 @@ export function Tela({
   pincel,
   pintando,
   aoEndireitar,
+  contaGotas,
+  aoContaGotas,
 }) {
   const area = useRef(null)
+  const deslocado = useRef(null)
   const visor = useRef(null)
   const [tamArea, setTamArea] = useState({ w: 800, h: 600 })
   const [vista, setVista] = useState(null) // { tx, ty } da folha na área; null = centralizada
@@ -156,8 +159,28 @@ export function Tela({
 
   /** Arrastar para mover a imagem (captura: vem antes das ferramentas). */
   const talvezMover = (e) => {
-    const fundo = e.target === area.current || e.target === visor.current || e.target.dataset?.folha !== undefined || e.target.closest?.('[data-mesa]') === e.target
-    const pode = e.button === 1 || (e.button === 0 && (maoAtiva || (maoNoFundo && fundo)))
+    // Nada de seleção de texto nem de "arrastar a imagem" do navegador por cima da mesa.
+    try {
+      const s = getSelection()
+      if (s && !s.isCollapsed && !document.activeElement?.closest?.('input, textarea, [contenteditable]')) s.removeAllRanges()
+    } catch {
+      /* sem seleção */
+    }
+    const folha = area.current?.querySelector('[data-folha]')
+    if (contaGotas) {
+      // Conta-gotas: o clique pega a cor do ponto (fora da imagem, cancela).
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      const r = folha.getBoundingClientRect()
+      const dentro = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+      aoContaGotas?.(dentro ? pontoDa(folha, e) : null)
+      return
+    }
+    // Fora da imagem (a mesa em volta): arrastar move; clicar tira a seleção.
+    const fora = e.target === area.current || e.target === deslocado.current
+    const fundo = fora || e.target === visor.current || e.target === folha
+    const pode = e.button === 1 || (e.button === 0 && (maoAtiva || fora || (maoNoFundo && fundo)))
     if (!pode) return
     e.preventDefault()
     e.stopPropagation()
@@ -175,12 +198,14 @@ export function Tela({
     const soltar = () => {
       removeEventListener('pointermove', mover)
       removeEventListener('pointerup', soltar)
+      removeEventListener('pointercancel', soltar)
       setMovendo(false)
-      // Clique sem arrastar no fundo (camadas): tira a seleção.
-      if (!andou && e.button === 0 && !maoAtiva && ferramenta === 'camadas') aoSelecionar?.(null)
+      // Clique sem arrastar ao lado da imagem (ou no fundo, em Camadas): tira a seleção.
+      if (!andou && e.button === 0 && !maoAtiva && (fora ? camadasInterativas : ferramenta === 'camadas')) aoSelecionar?.(null)
     }
     addEventListener('pointermove', mover)
     addEventListener('pointerup', soltar)
+    addEventListener('pointercancel', soltar)
   }
 
   // Desenha a prévia no canvas visível (a de alta resolução quando o zoom pede).
@@ -243,16 +268,22 @@ export function Tela({
       return
     }
     if (pintando) {
+      e.preventDefault()
       const ponto = (ev) => pontoDa(folha, ev)
       aoPintar(ponto(e), true, e)
       const mover = (ev) => aoPintar(ponto(ev), false, ev)
       const soltar = () => {
         removeEventListener('pointermove', mover)
         removeEventListener('pointerup', soltar)
+        removeEventListener('pointercancel', soltar)
+        removeEventListener('blur', soltar)
         aoSoltarPintura()
       }
       addEventListener('pointermove', mover)
       addEventListener('pointerup', soltar)
+      // Se o navegador cancelar o ponteiro (ou a janela perder o foco), o traço termina.
+      addEventListener('pointercancel', soltar)
+      addEventListener('blur', soltar)
       return
     }
     if (e.target === visor.current || e.target === folha) aoClicarVazio?.(pontoDa(folha, e))
@@ -262,7 +293,7 @@ export function Tela({
   const angulo = ferramenta === 'girar' ? (rascunho?.angulo ?? 0) : 0
   const quadroGirado = ferramenta === 'girar' && rascunho ? (rascunho.bordas === 'expandir' ? caixaGirada(w, h, angulo) : maiorDentroGirado(w, h, angulo)) : null
 
-  const cursor = movendo ? 'grabbing' : maoAtiva ? 'grab' : pintando || ferramenta === 'girar' ? 'crosshair' : ferramenta === 'texto' ? 'text' : maoNoFundo ? 'grab' : undefined
+  const cursor = contaGotas ? 'crosshair' : movendo ? 'grabbing' : maoAtiva ? 'grab' : pintando || ferramenta === 'girar' ? 'crosshair' : ferramenta === 'texto' ? 'text' : maoNoFundo ? 'grab' : undefined
   const palco = { w: FW, h: FH }
 
   return (
@@ -270,11 +301,18 @@ export function Tela({
       ref={area}
       data-mesa=""
       onPointerDownCapture={talvezMover}
+      // O navegador não pode "pegar" a imagem para arrastar (isso travava o pincel).
+      onDragStartCapture={(e) => e.preventDefault()}
       onAuxClick={(e) => e.button === 1 && e.preventDefault()}
-      className={`relative min-h-[22rem] flex-1 touch-none overflow-hidden rounded-[var(--radius-cartao)] bg-superficie-2 select-none ${movendo ? '[&_*]:!cursor-grabbing' : maoAtiva ? '[&_*]:!cursor-grab' : ''}`}
+      className={`relative min-h-[22rem] flex-1 touch-none overflow-hidden rounded-[var(--radius-cartao)] bg-superficie-2 select-none ${contaGotas ? '[&_*]:!cursor-crosshair' : movendo ? '[&_*]:!cursor-grabbing' : maoAtiva ? '[&_*]:!cursor-grab' : ''}`}
       style={{ cursor }}
     >
-      <div className="absolute top-0 left-0" style={{ transform: `translate(${pos.tx}px, ${pos.ty}px)` }}>
+      {contaGotas ? (
+        <p className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded-full bg-black/75 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow" data-conta-gotas="">
+          Clique na imagem para pegar a cor · Esc cancela
+        </p>
+      ) : null}
+      <div ref={deslocado} className="absolute top-0 left-0" style={{ transform: `translate(${pos.tx}px, ${pos.ty}px)` }}>
         {/* Tamanho: contorno do tamanho atual, para comparar com o novo */}
         {naTamanho ? (
           <div className="pointer-events-none absolute top-0 left-0 z-10 border-2 border-dashed border-fraca/70" style={{ width: w * escala, height: h * escala }}>
@@ -290,7 +328,7 @@ export function Tela({
           onPointerDown={aoApertarFolha}
         >
           <div className="absolute inset-0" style={{ transform: angulo ? `rotate(${angulo}deg)` : undefined }}>
-            <canvas ref={visor} className="absolute inset-0 size-full" style={{ imageRendering: pixelado ? 'pixelated' : 'auto' }} aria-label="Imagem" />
+            <canvas ref={visor} draggable={false} className="absolute inset-0 size-full" style={{ imageRendering: pixelado ? 'pixelated' : 'auto' }} aria-label="Imagem" />
 
             {/* Camadas (texto, imagem, desenho) — as mesmas do editor de vídeo */}
             <div className={camadasInterativas ? '' : 'pointer-events-none'}>

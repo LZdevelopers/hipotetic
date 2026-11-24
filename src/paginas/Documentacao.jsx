@@ -243,7 +243,7 @@ const SECOES = [
     grupo: 'Editores',
     id: 'editor-imagem',
     titulo: 'Editor de imagem',
-    palavras: 'recortar girar endireitar redimensionar esticar filtros cores remover fundo máscara varinha segmentação apagar objeto pincel borracha formas texto camadas mesclagem zoom',
+    palavras: 'recortar girar endireitar redimensionar esticar filtros cores remover fundo máscara varinha segmentação chroma key conta-gotas apagar objeto pincel borracha formas seta estrela texto camadas colar mesclagem zoom',
     conteudo: (
       <>
         <p>
@@ -253,7 +253,7 @@ const SECOES = [
         <ul>
           <li>
             <strong>Ajustes</strong>: exposição, brilho, contraste, saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque e vinheta. <strong>Filtros</strong>: cada
-            um com a prévia na sua própria foto e intensidade ajustável. Não estragam a imagem: dá para mudar a qualquer hora.
+            um com a prévia na sua própria foto e intensidade ajustável. O que você monta em Ajustes fica guardado no filtro <em>Personalizado</em>: dá para testar os outros e voltar nele com um clique.
           </li>
           <li>
             <strong>Recortar</strong> começa com a imagem inteira; arraste as alças ou escolha uma proporção. <strong>Tamanho</strong> mostra o tamanho novo na mesma escala
@@ -267,18 +267,19 @@ const SECOES = [
             <strong>Remover fundo</strong>: ao abrir, já aparecem todas as ferramentas de máscara. <em>Selecionar assunto</em> faz a segmentação automática (modelo
             BiRefNet, no seu aparelho; na primeira vez baixa 190 MB, que ficam guardados). A <em>varinha mágica</em> subtrai ou adiciona com um clique a área de cor parecida
             (tolerância e contíguo), e os pincéis <em>Ocultar</em> e <em>Revelar</em> cuidam dos detalhes — o que está fora da máscara aparece apagadinho, e Ctrl+Z desfaz o
-            último retoque. Refine a borda (contrair/expandir, difusão, limiar de opacidade) e escolha o plano de fundo: transparente, cor sólida, desfoque ou outra imagem.
+            último retoque. Para fundos de uma cor só (tela verde, branco, preto), o <em>chroma key</em> tira a cor escolhida (conta-gotas na imagem) com intensidade e suavidade. Refine a borda (contrair/expandir, difusão, limiar de opacidade) e escolha o plano de fundo: transparente, cor sólida, desfoque ou outra imagem.
           </li>
           <li>
             Depois de aplicar, <strong>Editar o fundo</strong> volta à máscara com as opções e os retoques (enquanto você não recortar, redimensionar ou apagar algo depois).
           </li>
           <li>
-            <strong>Apagar objeto</strong>: pinte o que quer tirar e clique em Preencher; o preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás. Na
-            primeira vez baixa 35 MB.
+            <strong>Apagar objeto</strong>: pinte o que quer tirar e clique em Preencher; o preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás. Ctrl+Z
+            desfaz o último traço. Na primeira vez baixa 35 MB.
           </li>
           <li>
-            <strong>Pincel</strong>: pincel (com dureza), lápis, marca-texto, aerógrafo, caligrafia, linha, seta, retângulo e elipse (Shift trava em 45°/quadrado/círculo),
-            com cor, tamanho e opacidade. Tudo vai para uma <em>camada de desenho</em>; a <strong>borracha</strong> apaga só o desenho, nunca a foto.
+            <strong>Pincel</strong>, em três grupos: <em>pincéis</em> (pincel com dureza, lápis, marca-texto, aerógrafo, caligrafia), <em>formas</em> (linha, seta, seta dupla,
+            retângulo, arredondado, elipse, triângulo, losango, polígono, estrela, balão de fala e coração — contorno, preenchida ou as duas, com tracejado; Shift trava em
+            45° ou deixa regular) e a <em>borracha</em>. Tudo vai para uma <em>camada de desenho</em>; a <strong>borracha</strong> apaga só o desenho, nunca a foto.
           </li>
           <li>
             <strong>Texto</strong>: clique na imagem (ou em “Adicionar texto”). As mesmas opções do editor de vídeo: fonte, tamanho, cor, negrito, itálico, maiúsculas,
@@ -286,11 +287,12 @@ const SECOES = [
           </li>
           <li>
             <strong>Camadas</strong>: imagem, texto e desenho, com lista (mostrar/ocultar, ordem), opacidade, modo de mesclagem, rotação, espelhar, duplicar e excluir. Nas
-            imagens: caber/cobrir/tamanho original, recorte, correção de cor, chroma key e cantos arredondados.
+            imagens: caber/cobrir/tamanho original, recorte, correção de cor, <em>selecionar assunto</em> (tira o fundo da camada; o original fica guardado), chroma key
+            com conta-gotas e cantos arredondados. Cole (Ctrl+V) ou arraste uma imagem para o editor e ela vira uma camada. Clicar ao lado da imagem tira a seleção.
           </li>
           <li>
             <strong>Zoom</strong> até 3200% (vê os pixels): roda do mouse ou pinça no ponto do cursor, ou o seletor de zoom. Para mover: arraste com o botão esquerdo nas
-            ferramentas que não desenham, ligue a mão (✋ ou H), segure Espaço ou use o botão do meio.
+            ferramentas que não desenham ou em volta da imagem; nas que desenham, ligue a mão (botão da mão ou H), segure Espaço ou use o botão do meio.
           </li>
         </ul>
         <Tabela
@@ -302,9 +304,10 @@ const SECOES = [
             [<Tecla key="h">H</Tecla>, 'Ligar/desligar a mão'],
             [<Tecla key="esp">Espaço</Tecla>, 'Mão enquanto segura'],
             [<Tecla key="a">Enter</Tecla>, 'Aplicar o recorte'],
+            [<><Tecla>Ctrl</Tecla> + <Tecla>V</Tecla></>, 'Colar uma imagem como camada'],
             [<Tecla key="d">Delete</Tecla>, 'Excluir a camada selecionada'],
             [<Tecla key="s">Setas</Tecla>, 'Mover a camada (com Shift, 10 px)'],
-            [<Tecla key="e">Esc</Tecla>, 'Tirar a seleção'],
+            [<Tecla key="e">Esc</Tecla>, 'Tirar a seleção (ou cancelar o conta-gotas)'],
           ]}
         />
       </>

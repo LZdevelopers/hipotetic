@@ -25,6 +25,11 @@ export const PADRAO_FUNDO = {
   tolerancia: 30,
   contiguo: true,
   tracos: [],
+  // Remover uma cor (chroma key): some tudo que for parecido com corChave.
+  chaveAtiva: false,
+  corChave: '#00b140',
+  toleranciaChave: 0.15,
+  suavidadeChave: 0.08,
 }
 
 const canvas = (w, h) => new OffscreenCanvas(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
@@ -36,6 +41,67 @@ export function mascaraCheia() {
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, 8, 8)
   return c
+}
+
+/* ─── Chroma key (remover uma cor) ─────────────────────────────────────── */
+
+/** Cor da chave em [r, g, b]: 'branco', 'preto' ou um hex (#rrggbb). */
+export function rgbDaChave(modo, cor) {
+  if (modo === 'preto') return [0, 0, 0]
+  if (modo === 'branco' || !cor) return [255, 255, 255]
+  const n = parseInt(String(cor).slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * Tira (alfa → 0) dos pixels RGBA `d` tudo o que for parecido com `rgb`.
+ * `tolerancia` e `suavidade`: 0–1 da maior distância de cor (a suavidade é a
+ * faixa de transição, para a borda não ficar serrilhada).
+ */
+export function tirarCor(d, rgb, tolerancia, suavidade = 0.08) {
+  const [r0, g0, b0] = rgb
+  const limite = tolerancia * 441
+  const suave = Math.max(1, suavidade * 441)
+  const l2 = limite * limite
+  const s2 = (limite + suave) * (limite + suave)
+  for (let i = 0; i < d.length; i += 4) {
+    const dr = d[i] - r0
+    const dg = d[i + 1] - g0
+    const db = d[i + 2] - b0
+    const q = dr * dr + dg * dg + db * db
+    if (q < l2) d[i + 3] = 0
+    else if (q < s2) d[i + 3] = Math.round((d[i + 3] * (Math.sqrt(q) - limite)) / suave)
+  }
+}
+
+/** Cor (hex) da `fonte` no ponto (x, y), em px da fonte. */
+export function corNoPonto(fonte, x, y) {
+  const c = canvas(1, 1)
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  const sx = Math.min(fonte.width - 1, Math.max(0, Math.floor(x)))
+  const sy = Math.min(fonte.height - 1, Math.max(0, Math.floor(y)))
+  ctx.drawImage(fonte, sx, sy, 1, 1, 0, 0, 1, 1)
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
+}
+
+const chaveCache = new WeakMap() // fonte → { chave, area }
+/** Área (alfa) que o chroma key tira da `fonte`, em w×h. */
+function areaDaCor(fonte, w, h, { cor, tolerancia, suavidade }) {
+  const chave = `${w}x${h}|${cor}|${tolerancia}|${suavidade}`
+  const salvo = chaveCache.get(fonte)
+  if (salvo?.chave === chave) return salvo.area
+  const d = pixelsDa(fonte, w, h)
+  const img = new ImageData(w, h)
+  const a = img.data
+  a.set(d)
+  for (let i = 3; i < a.length; i += 4) a[i] = 255
+  tirarCor(a, rgbDaChave('cor', cor), tolerancia, suavidade)
+  for (let i = 3; i < a.length; i += 4) a[i] = 255 - a[i] // o que sai
+  const area = canvas(w, h)
+  area.getContext('2d').putImageData(img, 0, 0)
+  chaveCache.set(fonte, { chave, area })
+  return area
 }
 
 /* ─── Varinha (área de cor parecida) ───────────────────────────────────── */
@@ -162,13 +228,21 @@ export function desenharTraco(ctx, t, k, desde = 0, fonte = null) {
   ctx.restore()
 }
 
-/** Máscara final: a da IA (já refinada) ampliada, com os traços de retoque por cima. */
-export function mascaraRetocada(refinada, tracos, W, H, fonte) {
+/**
+ * Máscara final: a automática (já refinada) ampliada, menos a cor do chroma key
+ * (`chave`: { cor, tolerancia, suavidade } ou null), com os traços de retoque por cima.
+ */
+export function mascaraRetocada(refinada, tracos, W, H, fonte, chave = null) {
   const k = Math.min(1, LADO_RETOQUE / Math.max(W, H))
   const c = canvas(W * k, H * k)
   const ctx = c.getContext('2d')
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(refinada, 0, 0, c.width, c.height)
+  if (chave && fonte) {
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.drawImage(areaDaCor(fonte, c.width, c.height, chave), 0, 0)
+    ctx.globalCompositeOperation = 'source-over'
+  }
   for (const t of tracos) desenharTraco(ctx, t, c.width / W, 0, fonte)
   return c
 }

@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Icone } from '../../componentes/Icone'
+import { rgbDaChave, tirarCor } from '../../motores/imagem/fundo'
 import { PADRAO_BLUR, PADRAO_CAMADA, blocosMosaico, estiloTexto } from './_projeto'
 
 const IMA_CENTRO = 7 // px: distância para grudar no centro do vídeo
@@ -35,7 +37,7 @@ function arrastar(e, mover, fim) {
  * Imagem sem fundo branco/preto para a prévia (a exportação faz o mesmo
  * com o colorkey do ffmpeg). Devolve a URL da imagem tratada, ou null.
  */
-function useSemFundo(fonte, modo, tolerancia) {
+function useSemFundo(fonte, modo, tolerancia, corChave, suavidade = 0.08) {
   const [url, setUrl] = useState(null)
   useEffect(() => {
     if (!fonte?.arquivo || !modo) {
@@ -52,15 +54,7 @@ function useSemFundo(fonte, modo, tolerancia) {
       ctx.drawImage(bmp, 0, 0, cv.width, cv.height)
       bmp.close()
       const img = ctx.getImageData(0, 0, cv.width, cv.height)
-      const d = img.data
-      const alvo = modo === 'preto' ? 0 : 255
-      const limite = tolerancia * 441
-      const suave = 0.08 * 441
-      for (let i = 0; i < d.length; i += 4) {
-        const dist = Math.hypot(d[i] - alvo, d[i + 1] - alvo, d[i + 2] - alvo)
-        if (dist < limite) d[i + 3] = 0
-        else if (dist < limite + suave) d[i + 3] = Math.round((d[i + 3] * (dist - limite)) / suave)
-      }
+      tirarCor(img.data, rgbDaChave(modo, corChave), tolerancia, suavidade)
       ctx.putImageData(img, 0, 0)
       const blob = await cv.convertToBlob({ type: 'image/png' })
       if (!vivo) return
@@ -71,7 +65,7 @@ function useSemFundo(fonte, modo, tolerancia) {
       vivo = false
       if (criada) URL.revokeObjectURL(criada)
     }
-  }, [fonte, modo, tolerancia])
+  }, [fonte, modo, tolerancia, corChave, suavidade])
   return url
 }
 
@@ -87,7 +81,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
   const c = { ...PADRAO_CAMADA, ...cam }
   const caixa = useRef(null)
   const [alturaTexto, setAlturaTexto] = useState(0)
-  const semFundoUrl = useSemFundo(c.tipo === 'imagem' ? fonte : null, c.semFundo, c.tolerancia)
+  const semFundoUrl = useSemFundo(c.tipo === 'imagem' ? fonte : null, c.semFundo, c.tolerancia, c.corChave, c.suavidade)
 
   // Altura do texto: depende da quebra de linhas, então é medida.
   useLayoutEffect(() => {
@@ -298,7 +292,7 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
             <>
               <span className="absolute -top-6 left-1/2 h-6 w-px -translate-x-1/2 bg-acento" />
               <span onPointerDown={girar} className="pointer-events-auto absolute -top-9 left-1/2 grid size-6 -translate-x-1/2 cursor-grab place-items-center rounded-full border-2 border-acento bg-white text-[0.625rem] font-bold text-acento shadow active:cursor-grabbing" aria-label="Girar" title="Arraste para girar">
-                ↻
+                <Icone nome="girar" tamanho={12} className="pointer-events-none" />
               </span>
               {c.girar ? <span className="absolute -top-9 left-[calc(50%+1.25rem)] rounded bg-black/70 px-1 text-[0.625rem] font-semibold text-white tabular-nums">{c.girar}°</span> : null}
             </>

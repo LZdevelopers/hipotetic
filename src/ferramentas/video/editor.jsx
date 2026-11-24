@@ -405,12 +405,12 @@ function PainelCamada({ camada: bruta, mudarCamada, acoes, total }) {
               </Alternar>
               <span className="mx-1 h-6 w-px bg-borda" />
               {[
-                ['esquerda', 'Alinhar à esquerda', '⇤'],
-                ['centro', 'Centralizar', '↔'],
-                ['direita', 'Alinhar à direita', '⇥'],
+                ['esquerda', 'Alinhar à esquerda', 'alinharEsquerda'],
+                ['centro', 'Centralizar', 'alinharCentro'],
+                ['direita', 'Alinhar à direita', 'alinharDireita'],
               ].map(([v, rotulo, s]) => (
                 <Alternar key={v} rotulo={rotulo} ativo={camada.alinhar === v} aoMudar={() => m({ alinhar: v })}>
-                  {s}
+                  <Icone nome={s} tamanho={16} />
                 </Alternar>
               ))}
             </div>
@@ -460,28 +460,26 @@ function PainelCamada({ camada: bruta, mudarCamada, acoes, total }) {
       ) : null}
       <Bloco titulo="Posição">
         <div className="grid grid-cols-2 gap-2">
-          <Botao variante="secundario" tamanho="p" onClick={() => m({ x: 0.5 - camada.w / 2 })}>
-            Centro ↔
-          </Botao>
-          <Botao variante="secundario" tamanho="p" onClick={() => m({ y: 0.5 - (camada.tipo === 'texto' ? 0.05 : camada.h / 2) })}>
-            Centro ↕
-          </Botao>
+          <Botao variante="secundario" tamanho="p" icone="centroH" onClick={() => m({ x: 0.5 - camada.w / 2 })}>
+              Centro horizontal
+            </Botao>
+          <Botao variante="secundario" tamanho="p" icone="centroV" onClick={() => m({ y: 0.5 - (camada.tipo === 'texto' ? 0.05 : camada.h / 2) })}>
+              Centro vertical
+            </Botao>
         </div>
       </Bloco>
       {camada.tipo !== 'desfoque' ? (
         <Bloco titulo="Rotação e flip">
           <Deslizante rotulo="Rotação" valor={camada.girar} aoMudar={(v) => m({ girar: v })} min={-180} max={180} formatar={(v) => `${v}°`} />
           <div className="flex gap-2">
-            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((camada.girar - 90 + 540) % 360) - 180 })}>
-              ↺ 90°
+            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girarAnti" onClick={() => m({ girar: ((camada.girar - 90 + 540) % 360) - 180 })}>
+              90°
             </Botao>
-            <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => m({ girar: ((camada.girar + 90 + 540) % 360) - 180 })}>
-              ↻ 90°
+            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girar" onClick={() => m({ girar: ((camada.girar + 90 + 540) % 360) - 180 })}>
+              90°
             </Botao>
             <Botao variante={camada.espelharH ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" aria-pressed={camada.espelharH} aria-label="Flip horizontal" title="Flip horizontal" onClick={() => m({ espelharH: !camada.espelharH })} />
-            <Botao variante={camada.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={camada.espelharV} aria-label="Flip vertical" title="Flip vertical" onClick={() => m({ espelharV: !camada.espelharV })}>
-              ⇵
-            </Botao>
+            <Botao variante={camada.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={camada.espelharV} icone="espelharV" aria-label="Flip vertical" title="Flip vertical" onClick={() => m({ espelharV: !camada.espelharV })} />
           </div>
         </Bloco>
       ) : null}
@@ -806,11 +804,11 @@ function PainelQuadro({ p, mudar, recorte, acoesRecorte, final, original }) {
       </Bloco>
       <Bloco titulo="Rotação e flip">
         <div className="flex gap-2">
-          <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => mudar((x) => ({ girar: (x.girar + 270) % 360, recorte: null }))} aria-label="Rotacionar 90° anti-horário">
-            ↺ 90°
+          <Botao variante="secundario" tamanho="p" className="flex-1" icone="girarAnti" onClick={() => mudar((x) => ({ girar: (x.girar + 270) % 360, recorte: null }))} aria-label="Rotacionar 90° anti-horário">
+              90°
           </Botao>
-          <Botao variante="secundario" tamanho="p" className="flex-1" onClick={() => mudar((x) => ({ girar: (x.girar + 90) % 360, recorte: null }))} aria-label="Rotacionar 90° horário">
-            ↻ 90°
+          <Botao variante="secundario" tamanho="p" className="flex-1" icone="girar" onClick={() => mudar((x) => ({ girar: (x.girar + 90) % 360, recorte: null }))} aria-label="Rotacionar 90° horário">
+              90°
           </Botao>
           <Botao variante={p.espelhar ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" onClick={() => mudar((x) => ({ espelhar: !x.espelhar }))} aria-pressed={p.espelhar} aria-label="Flip horizontal" title="Flip horizontal" />
         </div>
