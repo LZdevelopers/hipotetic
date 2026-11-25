@@ -239,7 +239,7 @@ const TODAS = [
     titulo: 'Editor de imagem online: remover fundo, apagar objetos, recortar e filtros',
     resumo: 'Remova o fundo, apague objetos, recorte, ajuste cores e escreva.',
     descricao: 'Edite fotos no navegador: remova o fundo e apague objetos com IA, recorte, estique, gire, ajuste luz e cor, desenhe e escreva. Nada é enviado.',
-    termos: ['editar', 'editor', 'photopea', 'photoshop', 'remover fundo', 'tirar fundo', 'remove bg', 'fundo transparente', 'apagar objeto', 'remover objeto', 'apagar pessoa', 'recortar', 'cortar', 'crop', 'girar', 'endireitar', 'espelhar', 'redimensionar', 'resize', 'esticar', 'tamanho', 'instagram', 'redes sociais', 'brilho', 'contraste', 'exposição', 'temperatura', 'nitidez', 'vinheta', 'filtro', 'preto e branco', 'pincel', 'desenhar', 'texto', 'escrever na foto'],
+    termos: ['editar', 'editor', 'photopea', 'photoshop', 'remover fundo', 'tirar fundo', 'remove bg', 'fundo transparente', 'apagar objeto', 'remover objeto', 'apagar pessoa', 'recortar', 'cortar', 'crop', 'girar', 'endireitar', 'espelhar', 'redimensionar', 'resize', 'esticar', 'tamanho', 'instagram', 'redes sociais', 'brilho', 'contraste', 'exposição', 'temperatura', 'nitidez', 'vinheta', 'filtro', 'preto e branco', 'pincel', 'desenhar', 'texto', 'escrever na foto', 'perspectiva', 'distorcer', 'inclinar', 'logo na camiseta', 'mockup', 'camadas'],
     icone: 'ajustar',
     popular: true,
   },

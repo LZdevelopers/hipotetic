@@ -41,13 +41,13 @@ export function Ferramentas() {
   const contagem = (id) => (id === 'todas' ? cats.reduce((s, c) => s + ferramentasDaCategoria(c.id).length, 1) : ferramentasDaCategoria(id).length)
 
   return (
-    <div className="mx-auto w-full max-w-[118rem] px-4 pt-12 sm:px-8 sm:pt-16">
+    <div className="mx-auto w-full max-w-[118rem] px-4 pt-8 sm:px-8 sm:pt-10">
       <header className="mx-auto max-w-4xl text-center">
         <h1 className="text-[clamp(2.2rem,4.2vw,3.5rem)] leading-[1.06] font-extrabold tracking-[-0.03em]">Todas as ferramentas para os seus arquivos</h1>
-        <p className="mt-5 text-lg text-suave sm:text-xl">Vídeo, áudio, imagens, PDF, documentos e compactados. Grátis, sem cadastro e, quase sempre, sem enviar nada para ninguém.</p>
+        <p className="mt-4 text-lg text-suave sm:text-xl">Vídeo, áudio, imagens, PDF, documentos e compactados. Grátis, sem cadastro e, quase sempre, sem enviar nada para ninguém.</p>
       </header>
 
-      <div className="mt-10 flex flex-col items-center gap-5">
+      <div className="mt-8 flex flex-col items-center gap-5">
         <div role="tablist" aria-label="Categorias" className="flex max-w-full flex-wrap justify-center gap-2">
           {[{ id: 'todas', nome: 'Todas' }, ...cats].map((c) => {
             const ativa = aba === c.id
@@ -80,7 +80,7 @@ export function Ferramentas() {
         </label>
       </div>
 
-      <div key={`${aba}|${termo}`} className="mt-12">
+      <div key={`${aba}|${termo}`} className="mt-10">
         {lista.length ? (
           <GradeCartoes lista={lista} rotulo="Ferramentas" grande />
         ) : (

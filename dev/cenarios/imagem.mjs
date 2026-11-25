@@ -128,10 +128,11 @@ export default [
       await abrirNoEditor(t, 640, 480)
       await ferramenta(t, 'Recortar')
       await t.clicar('1:1')
-      await t.js("document.querySelector('main [data-aplicar]').click()")
+      // Sem "Aplicar": o recorte vale com Enter (ou ao trocar de ferramenta, ou ao baixar).
+      await t.js("dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))")
       await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('480 × 480 px')", 10000)
       // Continua editando: gira o recorte.
-      await ferramenta(t, 'Girar')
+      await ferramenta(t, 'Tamanho')
       await t.clicar('Horário')
       await t.esperar(400)
       assert.deepEqual(await baixarDimensoes(t), [480, 480])
@@ -142,7 +143,7 @@ export default [
     pagina: '/imagem/editor',
     async executar(t) {
       await abrirNoEditor(t, 640, 480)
-      await ferramenta(t, 'Girar')
+      await ferramenta(t, 'Tamanho')
       await t.clicar('Horário')
       await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('480 × 640 px')", 10000)
       assert.deepEqual(await baixarDimensoes(t), [480, 640])
@@ -159,7 +160,7 @@ export default [
       await ferramenta(t, 'Tamanho')
       // A proporção já vem destravada.
       await t.js("__t.digitar('Altura', '200')")
-      await t.js("document.querySelector('main [data-aplicar]').click()")
+      // Sem "Aplicar": vale sozinho quando para de digitar.
       await t.aguardar("document.querySelector('main section[aria-label=Imagem]').innerText.includes('640 × 200 px')", 10000)
       assert.deepEqual(await baixarDimensoes(t), [640, 200])
     },
@@ -198,6 +199,61 @@ export default [
         const [r, g, bl] = x.getImageData(20, 20, 1, 1).data; return [b.type, Math.max(Math.abs(r - g), Math.abs(g - bl)) <= 6]`)
       assert.equal(tipo, 'image/jpeg')
       assert.ok(cinza, 'deveria estar em preto e branco')
+    },
+  },
+  {
+    nome: 'imagem/editor: espelhar na horizontal e na vertical',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await abrirNoEditor(t, 640, 480)
+      await ferramenta(t, 'Tamanho')
+      await t.js("document.querySelector('main [data-espelhar=horizontal]').click()")
+      await t.esperar(600)
+      await t.js("document.querySelector('main [data-espelhar=vertical]').click()")
+      await t.esperar(600)
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
+      await t.aguardar('window.__baixados.length > 0', 30000)
+      // Espelhado nos dois sentidos: o canto de cima à esquerda é o de baixo à direita do original (o gradiente muda de canto a canto).
+      const [final, original] = await t.js(`const cor = async (blob, x, y) => { const b = await createImageBitmap(blob); const c = new OffscreenCanvas(b.width, b.height); const k = c.getContext('2d'); k.drawImage(b, 0, 0); return [...k.getImageData(x, y, 1, 1).data].slice(0, 3) }
+        return [await cor(window.__baixados.at(-1), 4, 4), await cor(await __t.imagem(640, 480), 635, 475)]`)
+      assert.ok(final.every((v, i) => Math.abs(v - original[i]) <= 12), `esperado ${original}, veio ${final}`)
+    },
+  },
+  {
+    nome: 'imagem/editor: remover fundo vale sem aplicar (no arquivo baixado) e desfaz até a foto original',
+    pagina: '/imagem/editor',
+    async executar(t) {
+      await abrirNoEditor(t, 640, 480)
+      await ferramenta(t, 'Remover fundo')
+      await t.aguardar("document.querySelector('main [data-retoque=apagar]')", 10000)
+      await t.js("document.querySelector('main [data-retoque=apagar]').click()")
+      await t.esperar(200)
+      // Pinta (oculta) uma faixa no meio da imagem.
+      await t.js(`const c = document.querySelector('main canvas[aria-label=Imagem]'); const r = c.getBoundingClientRect()
+        const ev = (tipo, alvo, fx) => alvo.dispatchEvent(new PointerEvent(tipo, { bubbles: true, button: 0, buttons: 1, pointerId: 1, clientX: r.left + r.width * fx, clientY: r.top + r.height * 0.5 }))
+        ev('pointerdown', c, 0.1); for (let i = 1; i <= 10; i += 1) ev('pointermove', window, 0.1 + i * 0.08); ev('pointerup', window, 0.9)`)
+      await t.esperar(400)
+      // Baixa direto (outra ferramenta aberta): o fundo removido já vai no arquivo.
+      await ferramenta(t, 'Texto')
+      await t.esperar(400)
+      await t.clicar('Baixar')
+      await t.confirmarBaixar()
+      await t.aguardar('window.__baixados.length > 0', 30000)
+      const removido = await t.js(`const b = await createImageBitmap(window.__baixados.at(-1)); const c = new OffscreenCanvas(b.width, b.height); const k = c.getContext('2d'); k.drawImage(b, 0, 0); return k.getImageData(320, 240, 1, 1).data[3]`)
+      assert.equal(removido, 0, 'a faixa pintada deveria sair transparente no arquivo')
+      // Volta à ferramenta: continua editável (nada de "já aplicado").
+      await ferramenta(t, 'Remover fundo')
+      await t.aguardar("document.querySelector('main [data-retoque=apagar]')", 10000)
+      await t.esperar(500)
+      // Desfaz: chega à foto sem nada removido.
+      for (let i = 0; i < 5; i += 1) {
+        if (await t.js(`return document.querySelector('main button[aria-label="Desfazer (Ctrl+Z)"]').disabled`)) break
+        await t.js(`document.querySelector('main button[aria-label="Desfazer (Ctrl+Z)"]').click()`)
+        await t.esperar(600)
+      }
+      const alfa = await t.js("const c = document.querySelector('main canvas[aria-label=Imagem]'); return c.getContext('2d').getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data[3]")
+      assert.equal(alfa, 255, 'depois de desfazer, a foto deveria estar inteira')
     },
   },
   {

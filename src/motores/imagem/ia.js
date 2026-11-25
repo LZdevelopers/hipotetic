@@ -5,7 +5,8 @@
  *
  *   - Remover fundo, "preciso": BiRefNet lite (MIT), 1024², qualquer objeto.
  *   - Remover fundo, "rápido":  MODNet (Apache-2.0), 512, pessoas e retratos.
- *   - Apagar objeto: LaMa big-lama (Apache-2.0), pesos int4/int8, 512².
+ *   - Apagar objeto: LaMa big-lama (Apache-2.0), pesos int4/int8, 512²;
+ *     a seleção inteligente do que apagar: SlimSAM (Segment Anything, Apache-2.0).
  *
  * O modelo roda num worker (ia.worker.js): a página não trava e cancelar
  * encerra o worker na hora. Um vigia troca a placa de vídeo pelo processador
@@ -17,17 +18,35 @@ const CACHE = 'hipotetic-modelos-v1'
 
 export const MODELOS = {
   fundo: {
-    nome: 'modelo de segmentação',
+    nome: 'modelo de remover fundo',
     url: 'https://huggingface.co/CoderViking/birefnet-lite-onnx/resolve/main/birefnet-lite-1024.onnx',
     tamanho: 199_681_624,
     // Segundos para rodar: placa de vídeo dedicada; processador com 4 threads (de 2017).
     tempo: { webgpu: 2, wasm: 22 },
   },
   pessoas: {
-    nome: 'modelo de segmentação de pessoas',
+    nome: 'modelo de remover fundo (pessoas)',
     url: 'https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx',
     tamanho: 25_888_640,
     tempo: { webgpu: 1, wasm: 2 },
+  },
+  // Seleção de objeto (SlimSAM, Apache-2.0): as duas metades do Segment Anything, leves.
+  // A primeira "lê" a imagem uma vez; a segunda acha o objeto em cada traço (décimos de segundo).
+  selecaoImagem: {
+    nome: 'modelo de seleção inteligente',
+    url: 'https://huggingface.co/Xenova/slimsam-77-uniform/resolve/main/onnx/vision_encoder_quantized.onnx',
+    tamanho: 8_882_165,
+    tempo: { webgpu: 2, wasm: 4 },
+    leve: true,
+    soProcessador: true, // quantizado: no processador é estável e rápido o bastante
+  },
+  selecaoObjeto: {
+    nome: 'modelo de seleção inteligente',
+    url: 'https://huggingface.co/Xenova/slimsam-77-uniform/resolve/main/onnx/prompt_encoder_mask_decoder_quantized.onnx',
+    tamanho: 4_903_810,
+    tempo: { webgpu: 1, wasm: 1 },
+    leve: true,
+    soProcessador: true,
   },
   apagar: {
     nome: 'modelo de preenchimento',
@@ -179,12 +198,14 @@ function pedir(msg, { sinal, aoProgresso, limites } = {}) {
   })
 }
 
-const descritor = (chave) => ({ chave, url: MODELOS[chave].url, tamanho: MODELOS[chave].tamanho, opcoes: MODELOS[chave].opcoes ?? {} })
+const descritor = (chave) => ({ chave, url: MODELOS[chave].url, tamanho: MODELOS[chave].tamanho, opcoes: MODELOS[chave].opcoes ?? {}, leve: Boolean(MODELOS[chave].leve) })
+/** Onde o modelo roda: os marcados `soProcessador` nunca vão para a placa de vídeo. */
+const epDo = async (chave) => (MODELOS[chave].soProcessador ? 'wasm' : escolherEp())
 
 /** Deixa o modelo pronto em segundo plano (só se já estiver baixado). */
 export async function prepararModelo(chave) {
   if (!(await modeloNoCache(chave))) return
-  const ep = await escolherEp()
+  const ep = await epDo(chave)
   try {
     await pedir({ tipo: 'preparar', modelo: descritor(chave), ep }, { limites: ep === 'webgpu' ? LIMITES_GPU : null })
   } catch (e) {
@@ -223,7 +244,7 @@ async function rodar(chave, entradas, { progresso, sinal, rotulo }) {
         },
       },
     )
-  const ep = await escolherEp()
+  const ep = await epDo(chave)
   try {
     return await tentar(ep)
   } catch (e) {
@@ -293,7 +314,7 @@ export async function mascaraDoFundo(fonte, { modo = 'fundo', progresso, sinal }
     const w = Math.max(32, Math.round((fonte.width * k) / 32) * 32)
     const h = Math.max(32, Math.round((fonte.height * k) / 32) * 32)
     const dados = tensorDaImagem(fonte, w, h, (v) => (v - 0.5) / 0.5)
-    const r = await rodar('pessoas', { '*': { dados, dims: [1, 3, h, w] } }, { progresso, sinal, rotulo: 'Segmentando' })
+    const r = await rodar('pessoas', { '*': { dados, dims: [1, 3, h, w] } }, { progresso, sinal, rotulo: 'Removendo o fundo' })
     progresso?.(1)
     return canvasDaMascara(r.saidas[r.primeira].dados, w, h)
   }
@@ -301,7 +322,7 @@ export async function mascaraDoFundo(fonte, { modo = 'fundo', progresso, sinal }
   const media = [0.485, 0.456, 0.406]
   const desvio = [0.229, 0.224, 0.225]
   const dados = tensorDaImagem(fonte, L, L, (v, k) => (v - media[k]) / desvio[k])
-  const r = await rodar('fundo', { input_image: { dados, dims: [1, 3, L, L] } }, { progresso, sinal, rotulo: 'Segmentando o assunto' })
+  const r = await rodar('fundo', { input_image: { dados, dims: [1, 3, L, L] } }, { progresso, sinal, rotulo: 'Removendo o fundo' })
   progresso?.(1)
   return canvasDaMascara(r.saidas.output_image?.dados ?? r.saidas[r.primeira].dados, L, L, (x) => 1 / (1 + Math.exp(-x)))
 }
@@ -403,4 +424,98 @@ export async function apagarObjeto(fonte, mascara, { progresso, sinal } = {}) {
   ctx.drawImage(remendo, qx, qy)
   progresso?.(1)
   return res
+}
+
+/* ─── Seleção inteligente (Segment Anything) ───────────────────────────── */
+
+/*
+ * A pessoa pinta por cima do que quer apagar; os pontos do traço viram o
+ * "clique" do SAM, que devolve o contorno do objeto inteiro. A leitura da
+ * imagem (encoder, alguns segundos) é feita uma vez por imagem e guardada;
+ * cada traço depois só roda o decodificador (décimos de segundo).
+ */
+const LADO_SAM = 1024
+const leituras = new WeakMap() // fonte → Promise<{ k, rw, rh, emb, pos }>
+
+/** Lê a imagem para a seleção (uma vez por imagem). Chame cedo para o primeiro traço já sair rápido. */
+export function prepararSelecao(fonte, { progresso, sinal } = {}) {
+  if (!leituras.has(fonte)) {
+    const k = LADO_SAM / Math.max(fonte.width, fonte.height)
+    const rw = Math.max(1, Math.round(fonte.width * k))
+    const rh = Math.max(1, Math.round(fonte.height * k))
+    // Redimensiona pelo lado maior e completa com zeros (embaixo e à direita), como o SamProcessor.
+    const media = [0.485, 0.456, 0.406]
+    const desvio = [0.229, 0.224, 0.225]
+    const menor = tensorDaImagem(fonte, rw, rh, (v, c) => (v - media[c]) / desvio[c])
+    const n = LADO_SAM * LADO_SAM
+    const dados = new Float32Array(3 * n)
+    for (let c = 0; c < 3; c += 1) for (let y = 0; y < rh; y += 1) dados.set(menor.subarray(c * rw * rh + y * rw, c * rw * rh + (y + 1) * rw), c * n + y * LADO_SAM)
+    const p = rodar('selecaoImagem', { pixel_values: { dados, dims: [1, 3, LADO_SAM, LADO_SAM] } }, { progresso, sinal, rotulo: 'Preparando a seleção inteligente' }).then((r) => ({
+      k,
+      rw,
+      rh,
+      emb: r.saidas.image_embeddings,
+      pos: r.saidas.image_positional_embeddings,
+    }))
+    leituras.set(fonte, p)
+    p.catch(() => leituras.delete(fonte))
+  }
+  return leituras.get(fonte)
+}
+
+/**
+ * Objeto sob os `pontos` ([[x, y]…], em px da `fonte`): { mascara, fracao } —
+ * canvas do tamanho da fonte cujo alfa é o objeto, e quanto da imagem ele
+ * ocupa (0–1) —, ou null se a IA não achou nada razoável.
+ */
+export async function selecionarObjeto(fonte, pontos, { sinal } = {}) {
+  if (!pontos.length) return null
+  const { k, rw, rh, emb, pos } = await prepararSelecao(fonte, { sinal })
+  const coords = new Float32Array(pontos.flatMap(([x, y]) => [x * k, y * k]))
+  const r = await rodar(
+    'selecaoObjeto',
+    {
+      input_points: { dados: coords, dims: [1, 1, pontos.length, 2] },
+      input_labels: { dados: new BigInt64Array(pontos.length).fill(1n), dims: [1, 1, pontos.length], tipo: 'int64' },
+      // Cópias: o que vai para o worker é transferido, e a leitura fica guardada para os próximos traços.
+      image_embeddings: { dados: emb.dados.slice(), dims: emb.dims },
+      image_positional_embeddings: { dados: pos.dados.slice(), dims: pos.dims },
+    },
+    { sinal, rotulo: 'Selecionando o objeto' },
+  )
+  const notas = r.saidas.iou_scores.dados
+  const mascaras = r.saidas.pred_masks.dados // 3 × 256 × 256 (logits, no quadro de 1024 completado)
+  const L = 256
+  // Das 3 máscaras, as de nota quase igual à melhor são "a mesma resposta": fica a menor —
+  // a maior costuma juntar objetos vizinhos (medido: um risco num objeto pegava o do lado junto).
+  const areas = [0, 1, 2].map((m) => {
+    let n = 0
+    for (let i = 0; i < L * L; i += 1) if (mascaras[m * L * L + i] > 0) n += 1
+    return n
+  })
+  const topo = Math.max(...notas)
+  let melhor = -1
+  for (let m = 0; m < notas.length; m += 1) if (notas[m] >= topo - 0.03 && areas[m] && (melhor < 0 || areas[m] < areas[melhor])) melhor = m
+  if (melhor < 0) return null
+  const peq = canvas(L, L)
+  const pctx = peq.getContext('2d')
+  const img = pctx.createImageData(L, L)
+  let marcados = 0
+  for (let i = 0; i < L * L; i += 1) {
+    const v = mascaras[melhor * L * L + i]
+    if (v > 0) {
+      img.data[i * 4 + 3] = 255
+      marcados += 1
+    }
+  }
+  pctx.putImageData(img, 0, 0)
+  // Só a parte que é imagem (o resto do quadro de 1024 era completado com zeros).
+  const vw = (rw / LADO_SAM) * L
+  const vh = (rh / LADO_SAM) * L
+  if (!marcados || notas[melhor] < 0.5) return null
+  const saida = canvas(fonte.width, fonte.height)
+  const sctx = saida.getContext('2d')
+  sctx.imageSmoothingQuality = 'high'
+  sctx.drawImage(peq, 0, 0, vw, vh, 0, 0, saida.width, saida.height)
+  return { mascara: saida, fracao: marcados / (vw * vh) }
 }

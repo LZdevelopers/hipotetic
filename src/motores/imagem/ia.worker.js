@@ -4,9 +4,9 @@
  * não trava enquanto a IA pensa, e cancelar é só encerrar este worker.
  *
  * Mensagens recebidas: { id, tipo: 'preparar' | 'rodar', modelo, ep, entradas? }
- *   - modelo: { chave, url, tamanho, opcoes }
+ *   - modelo: { chave, url, tamanho, opcoes, leve }
  *   - ep: 'webgpu' | 'wasm'
- *   - entradas: { nome: { dados: Float32Array, dims } }
+ *   - entradas: { nome: { dados: Float32Array | BigInt64Array, dims, tipo? } }
  * Enviadas: { id, tipo: 'progresso', fase: 'baixando'|'preparando'|'rodando', valor? }
  *           { id, tipo: 'pronto', saidas? } | { id, tipo: 'erro', fase, mensagem }
  */
@@ -83,40 +83,50 @@ function bytesDo(modelo, avisar) {
   return bytesEmAndamento.get(modelo.chave)
 }
 
-/* ─── Sessão (uma por vez: os modelos são grandes) ─────────────────────── */
+/*
+ * ─── Sessões ─────────────────────────────────────────────────────────────
+ * Os modelos grandes (centenas de MB) abrem um por vez. Os leves (`leve`: as
+ * duas metades da seleção de objeto, ~14 MB) ficam abertos juntos, e junto de
+ * um grande: a seleção roda a cada traço, entre um preenchimento e outro.
+ */
 
-let atual = null // { chave, ep, promessa, pronta }
+const sessoes = new Map() // chave → { chave, ep, leve, promessa, pronta }
+
+function fechar(registro) {
+  sessoes.delete(registro.chave)
+  registro.promessa.then((s) => s.release()).catch(() => {})
+}
 
 async function sessao(modelo, ep, avisar) {
-  if (atual && atual.chave === modelo.chave && atual.ep === ep) {
-    if (!atual.pronta) avisar('preparando')
-    return atual.promessa
+  const aberta = sessoes.get(modelo.chave)
+  if (aberta && aberta.ep === ep) {
+    if (!aberta.pronta) avisar('preparando')
+    return aberta.promessa
   }
-  if (atual) {
-    const velha = atual
-    atual = null
-    velha.promessa.then((s) => s.release()).catch(() => {})
-  }
+  if (aberta) fechar(aberta)
+  // Um grande por vez: abrir um grande fecha o outro grande.
+  if (!modelo.leve) for (const r of [...sessoes.values()]) if (!r.leve) fechar(r)
   let bytes
   try {
     bytes = await bytesDo(modelo, avisar)
   } catch (e) {
     throw new ErroFase('baixando', e)
   }
-  if (atual && atual.chave === modelo.chave && atual.ep === ep) return atual.promessa
+  const outra = sessoes.get(modelo.chave)
+  if (outra && outra.ep === ep) return outra.promessa
   avisar('preparando')
-  const registro = { chave: modelo.chave, ep, pronta: false }
+  const registro = { chave: modelo.chave, ep, leve: Boolean(modelo.leve), pronta: false }
   registro.promessa = ort.InferenceSession.create(bytes, { executionProviders: [ep], graphOptimizationLevel: 'all', ...modelo.opcoes }).then(
     (s) => {
       registro.pronta = true
       return s
     },
     (e) => {
-      if (atual === registro) atual = null
+      if (sessoes.get(modelo.chave) === registro) sessoes.delete(modelo.chave)
       throw new ErroFase('preparando', e)
     },
   )
-  atual = registro
+  sessoes.set(modelo.chave, registro)
   return registro.promessa
 }
 
@@ -134,7 +144,8 @@ self.onmessage = async ({ data: m }) => {
     avisar('rodando')
     const feeds = {}
     for (const [nome, t] of Object.entries(m.entradas)) {
-      feeds[nome === '*' ? s.inputNames[0] : nome] = new ort.Tensor('float32', t.dados, t.dims)
+      // `tipo`: 'float32' (padrão) ou 'int64' (os dados vêm como BigInt64Array).
+      feeds[nome === '*' ? s.inputNames[0] : nome] = new ort.Tensor(t.tipo ?? 'float32', t.dados, t.dims)
     }
     let saida
     try {

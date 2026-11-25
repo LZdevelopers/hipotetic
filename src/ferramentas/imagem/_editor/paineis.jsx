@@ -25,20 +25,6 @@ export function Grupo({ titulo, children, direita }) {
   )
 }
 
-/** Botões Aplicar / Cancelar das ferramentas com rascunho. */
-export function Acoes({ aplicar, cancelar, rotulo = 'Aplicar', desativado, rotuloCancelar = 'Cancelar' }) {
-  return (
-    <div className="flex gap-2">
-      <Botao variante="secundario" onClick={cancelar}>
-        {rotuloCancelar}
-      </Botao>
-      <Botao className="flex-1" icone="check" onClick={aplicar} disabled={desativado} data-aplicar="">
-        {rotulo}
-      </Botao>
-    </div>
-  )
-}
-
 /** Botões de escolha em grade (um ativo). */
 /** `empilhado`: ícone em cima do rótulo (para rótulos que não cabem ao lado do ícone). */
 export function Escolhas({ valor, aoMudar, opcoes, colunas = 2, rotulo, atributo, empilhado = false }) {
@@ -190,7 +176,7 @@ export function PainelAjustes({ a, mudar, filtro }) {
 
 /* ─── Remover fundo ────────────────────────────────────────────────────── */
 
-/** Detecção automática do assunto (segmentação): mostra download, tempo e progresso. */
+/** Remover fundo automático (IA): mostra download, tempo e progresso. */
 export function BotaoSegmentar({ tarefa, aoClicar, desativado, feito }) {
   const [noCache, setNoCache] = useState(true)
   useEffect(() => {
@@ -201,12 +187,12 @@ export function BotaoSegmentar({ tarefa, aoClicar, desativado, feito }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-acento/40 bg-acento/8 p-3">
       <Botao tamanho="g" icone="magica" onClick={aoClicar} disabled={desativado || feito} data-ia="fundo">
-        {feito ? 'Assunto já selecionado' : 'Selecionar assunto'}
+        {feito ? 'Fundo removido' : 'Remover fundo'}
       </Botao>
       <p className="text-xs text-fraca">
         {feito
-          ? 'Refine com as ferramentas de máscara abaixo. Para detectar de novo, descarte a máscara.'
-          : `Segmentação automática (BiRefNet): separa o objeto principal do plano de fundo. ${segundos <= 3 ? 'Leva poucos segundos.' : `Leva uns ${segundos} s neste aparelho.`} ${
+          ? 'Ajuste com as ferramentas de máscara abaixo. Para desfazer, Ctrl+Z.'
+          : `Reconhece sozinho a pessoa ou o objeto principal da foto e tira o resto. ${segundos <= 3 ? 'Leva poucos segundos.' : `Leva uns ${segundos} s neste aparelho.`} ${
               noCache ? 'Processado no seu aparelho.' : `Na primeira vez, baixa o modelo (${formatarBytes(MODELOS.fundo.tamanho)}), que fica guardado no navegador.`
             }`}
       </p>
@@ -229,7 +215,11 @@ function ControlesChave({ cor, aoCor, tolerancia, aoTolerancia, suavidade, aoSua
   )
 }
 
-export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, tamanhoPadrao, tamanhoMax, carregandoImagem, desativado, segmentar, aoContaGotas, contaGotasAtivo }) {
+/**
+ * Remover fundo: tudo vale na hora (aparece em todas as ferramentas e no
+ * arquivo baixado) e cada mudança entra no Ctrl+Z — não há "Aplicar".
+ */
+export function PainelFundo({ r, mudar, restaurar, desfazerTraco, tamanhoPadrao, tamanhoMax, carregandoImagem, segmentar, aoContaGotas, contaGotasAtivo }) {
   const sinal = (v) => `${v > 0 ? '+' : ''}${v}`
   const tracos = r.tracos?.length ?? 0
   const entradaImagem = useRef(null)
@@ -274,7 +264,7 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
           <Deslizante rotulo="Tamanho do pincel" valor={r.tamanhoPincel ?? tamanhoPadrao} aoMudar={(v) => mudar({ tamanhoPincel: v })} min={2} max={tamanhoMax} formatar={(v) => `${v} px`} />
         ) : null}
         <p className="text-xs text-fraca">
-          {r.pincel ? `${DICAS[r.pincel]} O que está fora da máscara aparece apagadinho.` : 'Escolha a varinha ou um pincel de máscara para tirar o fundo à mão, ou use a seleção de assunto acima.'}
+          {r.pincel ? `${DICAS[r.pincel]} O que está fora da máscara aparece apagadinho.` : 'Escolha a varinha ou um pincel de máscara para tirar o fundo à mão, ou use o botão Remover fundo acima.'}
         </p>
         {tracos ? (
           <div className="flex flex-wrap gap-1.5">
@@ -314,7 +304,7 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
       <Grupo titulo="Refinar borda">
         {r.automatico ? <Deslizante rotulo="Contrair / expandir" valor={r.contorno} aoMudar={(v) => mudar({ contorno: v })} min={-10} max={10} formatar={sinal} /> : null}
         <Deslizante rotulo="Difusão (feather)" valor={r.borda} aoMudar={(v) => mudar({ borda: v })} min={0} max={10} />
-        {r.automatico ? <Deslizante rotulo="Limiar de opacidade" valor={r.limpar} aoMudar={(v) => mudar({ limpar: v })} formatar={(v) => `${v}%`} dica="Remove o halo semitransparente que sobra em volta do assunto." /> : null}
+        {r.automatico ? <Deslizante rotulo="Limiar de opacidade" valor={r.limpar} aoMudar={(v) => mudar({ limpar: v })} formatar={(v) => `${v}%`} dica="Remove o halo semitransparente que sobra em volta do que ficou." /> : null}
       </Grupo>
       <Grupo titulo="Plano de fundo">
         <Escolhas
@@ -362,7 +352,12 @@ export function PainelFundo({ r, mudar, aplicar, descartar, desfazerTraco, taman
           <p className="text-xs text-fraca">Para manter a transparência, baixe em PNG ou WebP.</p>
         )}
       </Grupo>
-      <Acoes rotulo="Aplicar máscara" aplicar={aplicar} cancelar={descartar} rotuloCancelar="Descartar" desativado={desativado || !alterado} />
+      {alterado ? (
+        <Botao variante="secundario" icone="redefinir" onClick={restaurar} data-restaurar-fundo="">
+          Voltar à foto original
+        </Botao>
+      ) : null}
+      <p className="text-xs text-fraca">O que você faz aqui já vale para a imagem e para o arquivo baixado. Não gostou? Ctrl+Z.</p>
     </>
   )
 }
@@ -469,63 +464,16 @@ export function PainelPincel({ pincel, mudar, camada, aoNovaCamada }) {
   )
 }
 
-/* ─── Camadas ──────────────────────────────────────────────────────────── */
+/* ─── Camadas (opções; a lista fica em Camadas.jsx) ───────────────────── */
 
-const ICONE_CAMADA = { texto: 'tipo', imagem: 'imagem', desenho: 'caneta' }
-
-export function ListaCamadas({ camadas, selecionada, aoSelecionar, aoMudar, aoAdicionarImagem, aoAdicionarTexto, aoAdicionarDesenho }) {
-  return (
-    <Grupo titulo="Camadas">
-      <div className="grid grid-cols-3 gap-1.5">
-        <Botao variante="secundario" tamanho="p" icone="imagemMais" onClick={aoAdicionarImagem} data-add-imagem="">
-          Imagem
-        </Botao>
-        <Botao variante="secundario" tamanho="p" icone="tipo" onClick={aoAdicionarTexto}>
-          Texto
-        </Botao>
-        <Botao variante="secundario" tamanho="p" icone="caneta" onClick={aoAdicionarDesenho}>
-          Desenho
-        </Botao>
-      </div>
-      <ul className="flex flex-col gap-1" aria-label="Lista de camadas (a de cima fica na frente)">
-        {[...camadas].reverse().map((c) => (
-          <li key={c.id}>
-            <div className={`flex items-center gap-1 rounded-lg border px-1.5 py-1 ${selecionada === c.id ? 'border-acento bg-acento/10' : 'border-borda'}`}>
-              <button
-                type="button"
-                aria-label={c.visivel === false ? 'Mostrar camada' : 'Ocultar camada'}
-                title={c.visivel === false ? 'Mostrar' : 'Ocultar'}
-                onClick={() => aoMudar(c.id, { visivel: c.visivel === false })}
-                className={`grid size-7 shrink-0 place-items-center rounded-md hover:bg-superficie-2 ${c.visivel === false ? 'text-fraca' : 'text-suave'}`}
-              >
-                <Icone nome={c.visivel === false ? 'fechar' : 'ver'} tamanho={14} />
-              </button>
-              <button type="button" onClick={() => aoSelecionar(c.id)} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left text-sm" data-camada-item={c.tipo}>
-                <Icone nome={ICONE_CAMADA[c.tipo]} tamanho={14} className="shrink-0 text-fraca" />
-                <span className={`truncate ${c.visivel === false ? 'text-fraca line-through' : 'text-tinta'}`}>{c.tipo === 'texto' ? c.texto?.split('\n')[0] || 'Texto' : c.nome}</span>
-              </button>
-            </div>
-          </li>
-        ))}
-        <li>
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-borda px-3 py-2 text-sm text-fraca">
-            <Icone nome="bloquear" tamanho={14} />
-            Imagem de fundo (base)
-          </div>
-        </li>
-      </ul>
-    </Grupo>
-  )
-}
-
-/** Tirar o fundo de uma camada de imagem (a mesma segmentação do Remover fundo). */
+/** Tirar o fundo de uma camada de imagem (a mesma IA do Remover fundo). */
 export function BotaoSegmentarCamada({ tarefa, aoClicar, aoRestaurar, desativado }) {
   if (tarefa.fase === 'processando') return <Progresso valor={tarefa.progresso} rotulo={tarefa.rotulo} aoCancelar={tarefa.cancelar} />
   return (
     <>
       <div className="flex flex-wrap gap-1.5">
         <Botao variante="secundario" tamanho="p" icone="magica" onClick={aoClicar} disabled={desativado} data-segmentar-camada="">
-          {aoRestaurar ? 'Selecionar assunto de novo' : 'Selecionar assunto'}
+          {aoRestaurar ? 'Remover fundo de novo' : 'Remover fundo'}
         </Botao>
         {aoRestaurar ? (
           <Botao variante="fantasma" tamanho="p" icone="redefinir" onClick={aoRestaurar} disabled={desativado}>
@@ -533,7 +481,7 @@ export function BotaoSegmentarCamada({ tarefa, aoClicar, aoRestaurar, desativado
           </Botao>
         ) : null}
       </div>
-      <p className="text-xs text-fraca">{aoRestaurar ? 'Fundo removido. O original fica guardado.' : 'Segmentação automática: deixa só o objeto principal desta imagem.'}</p>
+      <p className="text-xs text-fraca">{aoRestaurar ? 'Fundo removido. O original fica guardado.' : 'Deixa só a pessoa ou o objeto principal desta imagem.'}</p>
       {tarefa.fase === 'erro' ? <Aviso tom="erro">{tarefa.mensagem}</Aviso> : null}
     </>
   )
@@ -720,24 +668,63 @@ export function PainelCamada({ camada: bruta, mudar, acoes, focarTexto, aoFocado
       {c.tipo !== 'desenho' ? (
         <Grupo titulo="Posição e rotação">
           <div className="grid grid-cols-2 gap-2">
-            <Botao variante="secundario" tamanho="p" icone="centroH" onClick={() => m({ x: 0.5 - c.w / 2 })}>
+            <Botao variante="secundario" tamanho="p" icone="centroH" onClick={acoes.centroHorizontal}>
               Centro horizontal
             </Botao>
             <Botao variante="secundario" tamanho="p" icone="centroV" onClick={acoes.centroVertical}>
               Centro vertical
             </Botao>
           </div>
-          <Deslizante rotulo="Rotação" valor={c.girar} aoMudar={(v) => m({ girar: v })} min={-180} max={180} formatar={(v) => `${v}°`} />
+          {c.cantos ? null : <Deslizante rotulo="Rotação" valor={c.girar} aoMudar={(v) => m({ girar: v })} min={-180} max={180} formatar={(v) => `${v}°`} />}
           <div className="flex gap-2">
-            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girarAnti" onClick={() => m({ girar: ((c.girar - 90 + 540) % 360) - 180 })}>
-              90°
-            </Botao>
-            <Botao variante="secundario" tamanho="p" className="flex-1" icone="girar" onClick={() => m({ girar: ((c.girar + 90 + 540) % 360) - 180 })}>
-              90°
-            </Botao>
+            {c.cantos ? null : (
+              <>
+                <Botao variante="secundario" tamanho="p" className="flex-1" icone="girarAnti" onClick={() => m({ girar: ((c.girar - 90 + 540) % 360) - 180 })}>
+                  90°
+                </Botao>
+                <Botao variante="secundario" tamanho="p" className="flex-1" icone="girar" onClick={() => m({ girar: ((c.girar + 90 + 540) % 360) - 180 })}>
+                  90°
+                </Botao>
+              </>
+            )}
             <Botao variante={c.espelharH ? 'primario' : 'secundario'} tamanho="p" icone="espelhar" aria-pressed={c.espelharH} aria-label="Espelhar na horizontal" title="Espelhar na horizontal" onClick={() => m({ espelharH: !c.espelharH })} />
             <Botao variante={c.espelharV ? 'primario' : 'secundario'} tamanho="p" aria-pressed={c.espelharV} icone="espelharV" aria-label="Espelhar na vertical" title="Espelhar na vertical" onClick={() => m({ espelharV: !c.espelharV })} />
           </div>
+        </Grupo>
+      ) : null}
+
+      {c.tipo !== 'desenho' ? (
+        <Grupo titulo="Perspectiva e distorção">
+          {c.cantos ? (
+            <>
+              <Escolhas
+                rotulo="Como os cantos se movem"
+                atributo="data-modo-cantos"
+                valor={c.modoCantos ?? 'livre'}
+                aoMudar={(v) => m({ modoCantos: v })}
+                opcoes={[
+                  ['livre', 'Distorcer (livre)'],
+                  ['perspectiva', 'Perspectiva'],
+                ]}
+              />
+              <p className="text-xs text-fraca">
+                {(c.modoCantos ?? 'livre') === 'livre'
+                  ? 'Arraste cada canto até onde ele deve ficar — por exemplo, nos cantos da estampa de uma camiseta.'
+                  : 'Arrastar um canto move o vizinho do mesmo lado ao contrário: a camada inclina como se estivesse mais longe.'}{' '}
+                Segure Shift para alternar o modo enquanto arrasta.
+              </p>
+              <Botao variante="secundario" tamanho="p" icone="redefinir" className="self-start" onClick={acoes.semDistorcao} data-sem-distorcao="">
+                Tirar a distorção
+              </Botao>
+            </>
+          ) : (
+            <>
+              <Botao variante="secundario" tamanho="p" icone="perspectiva" className="self-start" onClick={acoes.distorcer} data-distorcer="">
+                Distorcer / perspectiva
+              </Botao>
+              <p className="text-xs text-fraca">Aparece um ponto em cada canto da camada: arraste para inclinar e encaixar (uma logo numa camiseta, numa parede, numa tela).</p>
+            </>
+          )}
         </Grupo>
       ) : null}
 

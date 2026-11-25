@@ -11,6 +11,7 @@
 import { NEUTRO, renderizarAjustes } from '../../../motores/imagem/ajustes'
 import { rgbDaChave, tirarCor } from '../../../motores/imagem/fundo'
 import { FONTES, PADRAO_CAMADA, PADRAO_TEXTO, medirTexto, textoParaCanvas } from '../../video/_projeto'
+import { cantosPx, desenharDistorcido } from './perspectiva'
 
 let seq = 0
 export const novaId = () => `c${Date.now().toString(36)}${(seq += 1)}`
@@ -121,47 +122,74 @@ function semFundo(bmp, c) {
   return cv
 }
 
+/**
+ * O conteúdo "reto" de uma camada de texto ou imagem (sem posição nem giro,
+ * com espelho, recorte, cantos, cores e chroma key): { cv, L, A } em px do quadro.
+ */
+async function conteudoDaCamada(c, W, H) {
+  if (c.tipo === 'texto') {
+    const { cv, largura, altura } = await textoParaCanvas(c, { w: W, h: H })
+    if (!c.espelharH && !c.espelharV) return { cv, L: largura, A: altura }
+    const e = new OffscreenCanvas(Math.max(1, cv.width), Math.max(1, cv.height))
+    const ectx = e.getContext('2d')
+    ectx.translate(c.espelharH ? e.width : 0, c.espelharV ? e.height : 0)
+    ectx.scale(c.espelharH ? -1 : 1, c.espelharV ? -1 : 1)
+    ectx.drawImage(cv, 0, 0)
+    return { cv: e, L: largura, A: altura }
+  }
+  let fonte = await bitmapDe(c.arquivo)
+  if (c.semFundo) fonte = semFundo(fonte, c)
+  const L = c.w * W
+  const A = c.h * H
+  const cv = new OffscreenCanvas(Math.max(1, Math.round(L)), Math.max(1, Math.round(A)))
+  const ctx = cv.getContext('2d')
+  const kx = cv.width / L
+  const ky = cv.height / A
+  ctx.setTransform(kx, 0, 0, ky, 0, 0)
+  ctx.translate(L / 2, A / 2)
+  ctx.scale(c.espelharH ? -1 : 1, c.espelharV ? -1 : 1)
+  ctx.beginPath()
+  ctx.roundRect(-L / 2, -A / 2, L, A, c.raio ? (c.raio * Math.min(L, A)) / 2 : 0)
+  ctx.clip()
+  const aj = { brilho: 0, contraste: 1, saturacao: 1, ...c.ajuste }
+  ctx.filter = `brightness(${1 + aj.brilho}) contrast(${aj.contraste}) saturate(${aj.saturacao})`
+  const r = c.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(fonte, -L / 2 - (r.x * L) / r.w, -A / 2 - (r.y * A) / r.h, L / r.w, A / r.h)
+  return { cv, L, A }
+}
+
 /** Desenha uma camada (imagem, texto ou desenho) no contexto do quadro W×H. */
 export async function desenharCamada(ctx, bruta, W, H, desenhos) {
   const c = { ...PADRAO_CAMADA_IMAGEM, ...bruta }
   if (c.visivel === false) return
+  if (c.tipo === 'imagem' && !c.arquivo) return
   ctx.save()
   ctx.globalAlpha = c.opacidade ?? 1
   ctx.globalCompositeOperation = gco(c.mistura)
   if (c.tipo === 'desenho') {
     const cv = desenhos?.get(c.id)?.canvas
     if (cv) ctx.drawImage(cv, 0, 0, W, H)
-  } else if (c.tipo === 'texto') {
-    const { cv, largura, altura } = await textoParaCanvas(c, { w: W, h: H })
-    ctx.translate(c.x * W + largura / 2, c.y * H + altura / 2)
-    ctx.rotate(((c.girar ?? 0) * Math.PI) / 180)
-    ctx.scale(c.espelharH ? -1 : 1, c.espelharV ? -1 : 1)
-    ctx.drawImage(cv, -largura / 2, -altura / 2)
-  } else if (c.tipo === 'imagem' && c.arquivo) {
-    let fonte = await bitmapDe(c.arquivo)
-    if (c.semFundo) fonte = semFundo(fonte, c)
-    const L = c.w * W
-    const A = c.h * H
-    ctx.translate(c.x * W + L / 2, c.y * H + A / 2)
-    ctx.rotate(((c.girar ?? 0) * Math.PI) / 180)
-    ctx.scale(c.espelharH ? -1 : 1, c.espelharV ? -1 : 1)
-    ctx.beginPath()
-    ctx.roundRect(-L / 2, -A / 2, L, A, c.raio ? (c.raio * Math.min(L, A)) / 2 : 0)
-    ctx.clip()
-    const aj = { brilho: 0, contraste: 1, saturacao: 1, ...c.ajuste }
-    ctx.filter = `brightness(${1 + aj.brilho}) contrast(${aj.contraste}) saturate(${aj.saturacao})`
-    const r = c.recorte ?? { x: 0, y: 0, w: 1, h: 1 }
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(fonte, -L / 2 - (r.x * L) / r.w, -A / 2 - (r.y * A) / r.h, L / r.w, A / r.h)
+  } else if (c.tipo === 'texto' || c.tipo === 'imagem') {
+    const { cv, L, A } = await conteudoDaCamada(c, W, H)
+    if (c.cantos) {
+      // Distorcida: o conteúdo reto vai para os 4 cantos (malha), e só então entra com opacidade e mesclagem.
+      ctx.drawImage(desenharDistorcido(cv, cantosPx(c.cantos, W, H), W, H), 0, 0)
+    } else {
+      ctx.translate(c.x * W + L / 2, c.y * H + A / 2)
+      ctx.rotate(((c.girar ?? 0) * Math.PI) / 180)
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(cv, -L / 2, -A / 2, L, A)
+    }
   }
   ctx.restore()
 }
 
 /** A imagem final no tamanho real: base com ajustes e as camadas por cima, na ordem. */
-export async function renderizarDocumento({ base, ajustes, camadas = [], W, H, desenhos }) {
+export async function renderizarDocumento({ base, ajustes, camadas = [], W, H, desenhos, baseOculta = false }) {
   const cv = new OffscreenCanvas(W, H)
   const ctx = cv.getContext('2d')
-  ctx.drawImage(renderizarAjustes(base, ajustes ?? NEUTRO), 0, 0, W, H)
+  if (!baseOculta) ctx.drawImage(renderizarAjustes(base, ajustes ?? NEUTRO), 0, 0, W, H)
   for (const c of camadas) await desenharCamada(ctx, c, W, H, desenhos)
   return cv
 }
@@ -253,6 +281,12 @@ export function transformarCamada(c, { m, W2, H2 }, W, H) {
   const patch = { girar, espelharH, espelharV, x: (ncx - L2 / 2) / W2, y: (ncy - A2 / 2) / H2, w: L2 / W2 }
   if (c.tipo === 'texto') patch.tamanho = (c.tamanho * H * Math.sqrt(sx * sy)) / H2
   else patch.h = A2 / H2
+  // Distorcida: os cantos vão junto, ponto a ponto (o espelho já está nos cantos: não troca o do conteúdo).
+  if (c.cantos) {
+    patch.espelharH = c.espelharH
+    patch.espelharV = c.espelharV
+    patch.cantos = c.cantos.map(([px, py]) => [(a * px * W + cc * py * H + e) / W2, (b * px * W + d * py * H + f) / H2])
+  }
   return { ...c, ...patch }
 }
 

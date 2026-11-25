@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 
 const API = fileURLToPath(new URL('./api', import.meta.url))
 const DIST = fileURLToPath(new URL('./dist', import.meta.url))
@@ -185,7 +185,17 @@ function arquivosEstaticos() {
 const PACOTE_LO = fileURLToPath(new URL('./servicos/libreoffice/saida/lo.tar.br', import.meta.url))
 if (process.env.VITE_DOCUMENTOS == null && existsSync(PACOTE_LO)) process.env.VITE_DOCUMENTOS = '1'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // O .env (e .env.local) também vale para as funções de /api no dev e no
+  // preview — o Vite sozinho só repassa as VITE_* ao navegador. O que já está
+  // no ambiente tem prioridade. Na Vercel, as variáveis vêm do painel.
+  for (const [chave, valor] of Object.entries(loadEnv(mode, process.cwd(), ''))) {
+    if (process.env[chave] === undefined) process.env[chave] = valor
+  }
+  return CONFIG
+})
+
+const CONFIG = {
   plugins: [react(), tailwindcss(), vercelFunctions(), arquivosEstaticos()],
   build: {
     // O manifesto diz qual arquivo é o código de cada ferramenta: a
@@ -200,4 +210,4 @@ export default defineConfig({
   // O mesmo vale para os codecs do jSquash: pré-empacotados, perdem o caminho do .wasm.
   optimizeDeps: { exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@jsquash/jpeg', '@jsquash/webp', '@jsquash/avif', '@jsquash/oxipng'] },
   worker: { format: 'es' },
-})
+}

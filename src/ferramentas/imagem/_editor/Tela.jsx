@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Icone } from '../../../componentes/Icone'
 import { CamadaNoPalco } from '../../video/_camada'
 import { caixaGirada, maiorDentroGirado } from './documento'
 
@@ -17,8 +18,8 @@ const limitar = (v, a, b) => Math.min(b, Math.max(a, v))
 export const zoomMaximo = (W, H) => Math.max(1, Math.min(32, 60000 / Math.max(W, H)))
 export const ZOOM_MINIMO = 0.02
 
-/** Ferramentas em que arrastar com o botão esquerdo move a imagem. */
-const MAO_PADRAO = ['ajustes', 'filtros', 'camadas', 'tamanho']
+/** Ferramentas em que arrastar com o botão esquerdo (no vazio da imagem) move a imagem. */
+const MAO_PADRAO = ['filtros']
 
 export function Tela({
   previa,
@@ -49,6 +50,10 @@ export function Tela({
   aoEndireitar,
   contaGotas,
   aoContaGotas,
+  aoFimTamanho,
+  aoEditarCamada,
+  aoExcluirCamada,
+  baseOculta = false,
 }) {
   const area = useRef(null)
   const deslocado = useRef(null)
@@ -67,8 +72,9 @@ export function Tela({
     return () => obs.disconnect()
   }, [])
 
-  // Tamanho: a prévia mostra o novo tamanho na mesma escala do original (dá para comparar).
-  const naTamanho = ferramenta === 'tamanho' && rascunho
+  // Tamanho: enquanto arrasta as alças (ou digita), a prévia mostra o novo tamanho na mesma escala do atual.
+  const naTamanho = ferramenta === 'tamanho' && rascunho && (rascunho.w !== w || rascunho.h !== h)
+  const alcasTamanho = ferramenta === 'tamanho' && rascunho
   const wv = naTamanho ? rascunho.w : w
   const hv = naTamanho ? rascunho.h : h
   const refW = naTamanho ? Math.max(w, rascunho.w) : w
@@ -204,7 +210,7 @@ export function Tela({
       removeEventListener('pointercancel', soltar)
       setMovendo(false)
       // Clique sem arrastar ao lado da imagem (ou no fundo, em Camadas): tira a seleção.
-      if (!andou && e.button === 0 && !maoAtiva && (fora ? camadasInterativas : ferramenta === 'camadas')) aoSelecionar?.(null)
+      if (!andou && e.button === 0 && !maoAtiva && camadasInterativas) aoSelecionar?.(null)
     }
     addEventListener('pointermove', mover)
     addEventListener('pointerup', soltar)
@@ -246,7 +252,7 @@ export function Tela({
   const aoApertarFolha = (e) => {
     if (e.button !== 0) return
     const folha = e.currentTarget
-    if (ferramenta === 'girar' && rascunho) {
+    if (ferramenta === 'tamanho' && rascunho) {
       // Endireitar: desenhe uma linha sobre algo que deveria estar reto.
       const r = area.current.getBoundingClientRect()
       const x0 = e.clientX - r.left
@@ -259,7 +265,8 @@ export function Tela({
         setLinha(null)
         const dx = ev.clientX - r.left - x0
         const dy = ev.clientY - r.top - y0
-        if (Math.hypot(dx, dy) < 12) return
+        // Só um clique (sem linha): tira a seleção da camada.
+        if (Math.hypot(dx, dy) < 12) return aoClicarVazio?.(pontoDa(folha, ev))
         let ang = (Math.atan2(dy, dx) * 180) / Math.PI // na tela (já girada)
         if (ang > 90) ang -= 180
         if (ang < -90) ang += 180
@@ -293,10 +300,10 @@ export function Tela({
   }
 
   // Endireitar: prévia girada, com o recorte (ou a caixa expandida) e a grade.
-  const angulo = ferramenta === 'girar' ? (rascunho?.angulo ?? 0) : 0
-  const quadroGirado = ferramenta === 'girar' && rascunho ? (rascunho.bordas === 'expandir' ? caixaGirada(w, h, angulo) : maiorDentroGirado(w, h, angulo)) : null
+  const angulo = ferramenta === 'tamanho' ? (rascunho?.angulo ?? 0) : 0
+  const quadroGirado = ferramenta === 'tamanho' && rascunho && angulo ? (rascunho.bordas === 'expandir' ? caixaGirada(w, h, angulo) : maiorDentroGirado(w, h, angulo)) : null
 
-  const cursor = contaGotas ? 'crosshair' : movendo ? 'grabbing' : maoAtiva ? 'grab' : pintando || ferramenta === 'girar' ? 'crosshair' : ferramenta === 'texto' ? 'text' : maoNoFundo ? 'grab' : undefined
+  const cursor = contaGotas ? 'crosshair' : movendo ? 'grabbing' : maoAtiva ? 'grab' : pintando || ferramenta === 'tamanho' ? 'crosshair' : ferramenta === 'texto' ? 'text' : maoNoFundo ? 'grab' : undefined
   const palco = { w: FW, h: FH }
 
   return (
@@ -331,7 +338,7 @@ export function Tela({
           onPointerDown={aoApertarFolha}
         >
           <div className="absolute inset-0" style={{ transform: angulo ? `rotate(${angulo}deg)` : undefined }}>
-            <canvas ref={visor} draggable={false} className="absolute inset-0 size-full" style={{ imageRendering: pixelado ? 'pixelated' : 'auto' }} aria-label="Imagem" />
+            <canvas ref={visor} draggable={false} className="absolute inset-0 size-full" style={{ imageRendering: pixelado ? 'pixelated' : 'auto', opacity: baseOculta ? 0 : 1 }} aria-label="Imagem" />
 
             {/* Camadas (texto, imagem, desenho) — as mesmas do editor de vídeo */}
             <div className={camadasInterativas ? '' : 'pointer-events-none'}>
@@ -356,6 +363,8 @@ export function Tela({
               )}
             </div>
           </div>
+
+          {camadasInterativas && selecionada ? <BarraCamada id={selecionada} versao={camadas} escala={escala} angulo={angulo} aoEditar={aoEditarCamada} aoExcluir={aoExcluirCamada} /> : null}
 
           {guias?.v ? <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px -translate-x-1/2 bg-[#ff3d8b]" /> : null}
           {guias?.h ? <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px -translate-y-1/2 bg-[#ff3d8b]" /> : null}
@@ -389,8 +398,8 @@ export function Tela({
             </div>
           ) : null}
 
-          {/* Tamanho: alças para esticar/achatar */}
-          {naTamanho ? (
+          {/* Tamanho: alças para esticar/achatar (aplica ao soltar) */}
+          {alcasTamanho ? (
             <>
               {[
                 ['direita', 'top-1/2 -right-2 h-10 w-3 -translate-y-1/2 cursor-ew-resize'],
@@ -410,14 +419,16 @@ export function Tela({
                         else nh = Math.round((nw * r0.h) / r0.w)
                       }
                       setRascunho({ ...r0, w: nw, h: nh })
-                    })
+                    }, () => aoFimTamanho?.())
                   })()}
                   className={`absolute z-20 rounded-sm border-2 border-white bg-acento shadow ${classe}`}
                 />
               ))}
-              <span className="pointer-events-none absolute -bottom-7 left-0 rounded bg-acento px-1.5 py-0.5 text-[0.625rem] font-semibold whitespace-nowrap text-white tabular-nums">
-                Novo: {rascunho.w} × {rascunho.h}
-              </span>
+              {naTamanho ? (
+                <span className="pointer-events-none absolute -bottom-7 left-0 rounded bg-acento px-1.5 py-0.5 text-[0.625rem] font-semibold whitespace-nowrap text-white tabular-nums">
+                  Novo: {rascunho.w} × {rascunho.h}
+                </span>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -564,6 +575,38 @@ function CaixaRecorte({ r, w, h, escala, mudar, arrastar }) {
       {ALCAS.map(([lado, classe]) => (
         <span key={lado} onPointerDown={alca(lado)} className={`absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-acento bg-white shadow ${classe}`} />
       ))}
+    </div>
+  )
+}
+
+/** Barrinha em cima da camada selecionada: editar (abre as opções dela) e excluir. */
+function BarraCamada({ id, versao, aoEditar, aoExcluir }) {
+  const el = useRef(null)
+  const [pos, setPos] = useState(null)
+  useLayoutEffect(() => {
+    const folha = el.current?.closest('[data-folha]')
+    const alvo = folha?.querySelector(`[data-camada="${CSS.escape(id)}"]`)
+    if (!folha || !alvo) return setPos(null)
+    const f = folha.getBoundingClientRect()
+    const r = alvo.getBoundingClientRect()
+    const novo = { x: r.left + r.width / 2 - f.left, y: r.top - f.top }
+    if (!pos || Math.abs(pos.x - novo.x) > 0.5 || Math.abs(pos.y - novo.y) > 0.5) setPos(novo)
+  })
+  void versao
+  return (
+    <div
+      ref={el}
+      className="absolute z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-borda bg-superficie p-0.5 shadow-[var(--shadow-flutuante)]"
+      style={{ left: pos?.x ?? -9999, top: Math.max(4, (pos?.y ?? 0) - 52), visibility: pos ? 'visible' : 'hidden' }}
+      onPointerDown={(e) => e.stopPropagation()}
+      data-barra-camada=""
+    >
+      <button type="button" onClick={() => aoEditar?.(id)} aria-label="Editar a camada" title="Editar a camada" className="grid size-7 place-items-center rounded-md text-suave hover:bg-superficie-2 hover:text-tinta">
+        <Icone nome="lapis" tamanho={14} />
+      </button>
+      <button type="button" onClick={() => aoExcluir?.(id)} aria-label="Excluir a camada (Delete)" title="Excluir a camada (Delete)" className="grid size-7 place-items-center rounded-md text-suave hover:bg-superficie-2 hover:text-perigo">
+        <Icone nome="apagar" tamanho={14} />
+      </button>
     </div>
   )
 }

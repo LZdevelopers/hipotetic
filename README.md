@@ -117,6 +117,10 @@ DOCUMENTOS_URL=http://localhost:8090 SO=documentos npm run test:ferramentas
 | `YOUTUBE_MAX_MINUTOS` | duração máxima para download do YouTube (padrão 120). |
 | `TIKTOK_DOWNLOAD` | `off` desliga o download do TikTok. |
 
+Localmente, ficam num `.env` (modelo em `.env.example`; fora do Git). O
+`vite.config.js` carrega o `.env` também para as funções de `/api` no `npm run
+dev` e no `npm run preview`; na Vercel, elas vêm do painel do projeto.
+
 ## Segurança e privacidade
 
 - Arquivos processados no navegador nunca saem do aparelho.

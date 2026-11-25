@@ -243,38 +243,35 @@ const SECOES = [
     grupo: 'Editores',
     id: 'editor-imagem',
     titulo: 'Editor de imagem',
-    palavras: 'recortar girar endireitar redimensionar esticar filtros cores remover fundo máscara varinha segmentação chroma key conta-gotas apagar objeto pincel borracha formas seta estrela texto camadas colar mesclagem zoom',
+    palavras: 'recortar girar endireitar redimensionar esticar filtros cores remover fundo máscara varinha chroma key conta-gotas apagar objeto seleção inteligente pincel borracha formas seta estrela texto camadas perspectiva distorcer inclinar bloquear colar mesclagem zoom',
     conteudo: (
       <>
         <p>
-          Uma imagem por vez, em tela cheia, com camadas por cima. Recortar, Tamanho e Girar têm “Aplicar” (as camadas acompanham), e tudo tem desfazer. Formato,
-          qualidade e o tamanho estimado do arquivo aparecem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
+          Uma imagem por vez, ocupando a janela, com camadas por cima. Não há botão “Aplicar”: o que você faz já vale — na tela, nas outras ferramentas e no arquivo
+          baixado — e o Ctrl+Z desfaz. Recorte e endireitar mostram a prévia e valem ao trocar de ferramenta, ao baixar ou com Enter (Esc volta). Girar, recortar e mudar
+          o tamanho se acumulam sem perder qualidade (a foto é reamostrada uma vez só). Formato, qualidade e o tamanho estimado do arquivo aparecem ao baixar. <LinkFerramenta slug="imagem/editor">Abrir o editor de imagem</LinkFerramenta>.
         </p>
         <ul>
           <li>
-            <strong>Ajustes</strong>: exposição, brilho, contraste, saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque e vinheta. <strong>Filtros</strong>: cada
-            um com a prévia na sua própria foto e intensidade ajustável. O que você monta em Ajustes fica guardado no filtro <em>Personalizado</em>: dá para testar os outros e voltar nele com um clique.
+            <strong>Filtros</strong>: cada um com a prévia na sua própria foto e intensidade ajustável. <em>Personalizado</em> abre os ajustes — exposição, brilho, contraste,
+            saturação, temperatura, matiz, P&B, sépia, nitidez, desfoque e vinheta — e fica guardado: dá para testar os outros filtros e voltar nele com um clique.
           </li>
           <li>
-            <strong>Recortar</strong> começa com a imagem inteira; arraste as alças ou escolha uma proporção. <strong>Tamanho</strong> mostra o tamanho novo na mesma escala
-            do atual (o tracejado), para comparar; tamanhos de rede social cortam as sobras, sem esticar.
+            <strong>Recortar</strong> começa com a imagem inteira; arraste as alças ou escolha uma proporção. <strong>Tamanho e girar</strong>: digite a largura ou a altura (vale
+            quando você para de digitar), use as porcentagens ou arraste as alças da imagem; tamanhos de rede social cortam as sobras, sem esticar. Ali também: girar 90°,
+            espelhar e <strong>endireitar</strong> — desenhe uma linha na imagem sobre algo que deveria estar reto e a prévia gira na hora, com a grade e a área que fica
+            (recortar as bordas ou expandir a tela, com cantos transparentes).
           </li>
           <li>
-            <strong>Girar</strong>: 90° e espelhar. Para <strong>endireitar</strong>, desenhe uma linha na imagem sobre algo que deveria estar reto — a prévia gira na hora,
-            com a grade e a área que fica. Escolha recortar as bordas ou expandir a tela (cantos transparentes).
-          </li>
-          <li>
-            <strong>Remover fundo</strong>: ao abrir, já aparecem todas as ferramentas de máscara. <em>Selecionar assunto</em> faz a segmentação automática (modelo
+            <strong>Remover fundo</strong>: ao abrir, já aparecem todas as ferramentas de máscara. O botão <em>Remover fundo</em> usa IA (modelo
             BiRefNet, no seu aparelho; na primeira vez baixa 190 MB, que ficam guardados). A <em>varinha mágica</em> subtrai ou adiciona com um clique a área de cor parecida
             (tolerância e contíguo), e os pincéis <em>Ocultar</em> e <em>Revelar</em> cuidam dos detalhes — o que está fora da máscara aparece apagadinho, e Ctrl+Z desfaz o
-            último retoque. Para fundos de uma cor só (tela verde, branco, preto), o <em>chroma key</em> tira a cor escolhida (conta-gotas na imagem) com intensidade e suavidade. Refine a borda (contrair/expandir, difusão, limiar de opacidade) e escolha o plano de fundo: transparente, cor sólida, desfoque ou outra imagem.
+            último retoque. Tudo vale na hora — dá para baixar direto, sair e voltar para mexer de novo; <em>Voltar à foto original</em> desfaz tudo. Para fundos de uma cor só (tela verde, branco, preto), o <em>chroma key</em> tira a cor escolhida (conta-gotas na imagem) com intensidade e suavidade. Refine a borda (contrair/expandir, difusão, limiar de opacidade) e escolha o plano de fundo: transparente, cor sólida, desfoque ou outra imagem.
           </li>
           <li>
-            Depois de aplicar, <strong>Editar o fundo</strong> volta à máscara com as opções e os retoques (enquanto você não recortar, redimensionar ou apagar algo depois).
-          </li>
-          <li>
-            <strong>Apagar objeto</strong>: pinte o que quer tirar e clique em Preencher; o preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás. Ctrl+Z
-            desfaz o último traço. Na primeira vez baixa 35 MB.
+            <strong>Apagar objeto</strong>: pinte o que quer tirar e clique em Apagar; o preenchimento sensível ao conteúdo (inpainting) reconstrói o que estaria atrás. Com a
+            <em> seleção inteligente</em> (Segment Anything, no seu aparelho; ~14 MB na primeira vez), basta um risco no objeto: a IA acha o contorno dele e pinta o resto.
+            Ctrl+Z desfaz o que ela completou e depois o traço. O preenchimento baixa 35 MB na primeira vez.
           </li>
           <li>
             <strong>Pincel</strong>, em três grupos: <em>pincéis</em> (pincel com dureza, lápis, marca-texto, aerógrafo, caligrafia), <em>formas</em> (linha, seta, seta dupla,
@@ -286,8 +283,12 @@ const SECOES = [
             alinhamento, espaçamento, contorno, sombra e caixa de fundo; arraste para mover, as alças mudam o tamanho e giram.
           </li>
           <li>
-            <strong>Camadas</strong>: imagem, texto e desenho, com lista (mostrar/ocultar, ordem), opacidade, modo de mesclagem, rotação, espelhar, duplicar e excluir. Nas
-            imagens: caber/cobrir/tamanho original, recorte, correção de cor, <em>selecionar assunto</em> (tira o fundo da camada; o original fica guardado), chroma key
+            <strong>Camadas</strong>: o painel fica sempre embaixo, à direita (dá para soltar e arrastar pela tela, ou fechar e abrir de novo pelo botão Camadas). Em qualquer
+            ferramenta, clique numa camada na imagem para mover, mudar o tamanho ou girar; o lápis (na lista ou na barrinha em cima dela) abre as opções. Na lista:
+            mostrar/ocultar, bloquear (não seleciona nem arrasta na imagem) e arrastar para mudar a ordem — a imagem de fundo também pode ser ocultada ou bloqueada.
+            Imagem, texto e desenho, com opacidade, modo de mesclagem, rotação, espelhar, duplicar e excluir. <strong>Distorcer / perspectiva</strong>: um ponto em cada
+            canto para inclinar a camada e encaixar uma logo numa camiseta, parede ou tela (no modo Perspectiva, o canto vizinho anda junto; Shift alterna). Nas
+            imagens: caber/cobrir/tamanho original, recorte, correção de cor, <em>remover fundo</em> (tira o fundo da camada; o original fica guardado), chroma key
             com conta-gotas e cantos arredondados. Cole (Ctrl+V) ou arraste uma imagem para o editor e ela vira uma camada. Clicar ao lado da imagem tira a seleção.
           </li>
           <li>
@@ -303,7 +304,7 @@ const SECOES = [
             [<><Tecla>Ctrl</Tecla> + <Tecla>0</Tecla> / <Tecla>1</Tecla></>, 'Ajustar à tela / 100%'],
             [<Tecla key="h">H</Tecla>, 'Ligar/desligar a mão'],
             [<Tecla key="esp">Espaço</Tecla>, 'Mão enquanto segura'],
-            [<Tecla key="a">Enter</Tecla>, 'Aplicar o recorte'],
+            [<Tecla key="a">Enter</Tecla>, 'Fazer valer o recorte, o endireitar ou o tamanho digitado (Esc volta)'],
             [<><Tecla>Ctrl</Tecla> + <Tecla>V</Tecla></>, 'Colar uma imagem como camada'],
             [<Tecla key="d">Delete</Tecla>, 'Excluir a camada selecionada'],
             [<Tecla key="s">Setas</Tecla>, 'Mover a camada (com Shift, 10 px)'],

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icone } from '../../componentes/Icone'
 import { rgbDaChave, tirarCor } from '../../motores/imagem/fundo'
 import { PADRAO_BLUR, PADRAO_CAMADA, blocosMosaico, estiloTexto } from './_projeto'
+import { cantosPx, matrix3d, moverCanto } from '../imagem/_editor/perspectiva'
 
 const IMA_CENTRO = 7 // px: distância para grudar no centro do vídeo
 
@@ -95,7 +96,11 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
   const largura = c.w * W
   const altura = c.tipo === 'texto' ? alturaTexto : c.h * H
   const giro = c.girar ? `rotate(${c.girar}deg)` : undefined
-  const geometria = { left: c.x * W, top: c.y * H, width: largura, height: c.tipo === 'texto' ? undefined : altura, transform: giro }
+  // Distorcida (editor de imagem): o conteúdo reto vai para os 4 cantos por um matrix3d.
+  const quad = c.cantos ? cantosPx(c.cantos, W, H) : null
+  const geometria = quad
+    ? { left: 0, top: 0, width: largura, height: c.tipo === 'texto' ? undefined : altura, transform: matrix3d(largura || 1, altura || 1, quad), transformOrigin: '0 0' }
+    : { left: c.x * W, top: c.y * H, width: largura, height: c.tipo === 'texto' ? undefined : altura, transform: giro }
 
   // Deltas do mouse levados para dentro da camada girada.
   const paraDentro = (dx, dy) => {
@@ -107,6 +112,11 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
     aoSelecionar()
     if (e.button !== 0) return
     const c0 = { ...c }
+    if (c0.cantos) {
+      // Distorcida: arrastar leva os 4 cantos juntos.
+      arrastar(e, (dx, dy) => aoMudar({ cantos: c0.cantos.map(([x, y]) => [x + dx / W, y + dy / H]) }))
+      return
+    }
     const alt0 = altura / H
     arrastar(
       e,
@@ -269,14 +279,38 @@ export function CamadaNoPalco({ cam, fonte, palco, sel, registrar, registrarVide
           aoMenu?.(e)
         }}
         className={`absolute cursor-move ${sel ? '' : 'hover:outline-1 hover:outline-white/60'}`}
-        style={{ ...geometria, visibility: sempreVisivel ? 'visible' : 'hidden', mixBlendMode: c.mistura && c.mistura !== 'normal' ? c.mistura : mistura, opacity: sempreVisivel ? c.opacidade : undefined }}
+        style={{ ...geometria, visibility: sempreVisivel ? 'visible' : 'hidden', mixBlendMode: c.mistura && c.mistura !== 'normal' ? c.mistura : mistura, opacity: sempreVisivel ? c.opacidade : undefined, pointerEvents: c.bloqueada ? 'none' : undefined }}
         aria-label={`Camada: ${c.tipo}`}
+        data-camada={c.id}
       >
         {conteudo}
       </div>
 
+      {/* Distorcida: contorno do quadrilátero e um canto para arrastar em cada ponta */}
+      {sel && quad ? (
+        <>
+          <svg className="pointer-events-none absolute top-0 left-0 z-20 overflow-visible" width="1" height="1" aria-hidden="true">
+            <polygon points={quad.map((p) => p.join(',')).join(' ')} fill="none" stroke="var(--color-acento)" strokeWidth="2" />
+          </svg>
+          {quad.map(([x, y], i) => (
+            <span
+              key={i}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                const c0 = c.cantos
+                arrastar(e, (dx, dy, ev) => aoMudar({ cantos: moverCanto(c0, i, dx / W, dy / H, ev.shiftKey ? (c.modoCantos === 'perspectiva' ? 'livre' : 'perspectiva') : (c.modoCantos ?? 'livre')) }))
+              }}
+              className="absolute z-20 size-4 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-sm border-2 border-acento bg-white shadow"
+              style={{ left: x, top: y }}
+              aria-label={`Canto ${i + 1} (arraste para distorcer)`}
+              data-canto={i}
+            />
+          ))}
+        </>
+      ) : null}
+
       {/* Moldura e alças (fora da camada, para não herdarem a mistura) */}
-      {sel ? (
+      {sel && !quad ? (
         <div className="pointer-events-none absolute z-20" style={{ ...geometria, height: altura }} onDoubleClick={(e) => e.stopPropagation()}>
           <div className="absolute -inset-px border-2 border-acento" />
           {ALCAS.map(([sx, sy, cursor]) => (
